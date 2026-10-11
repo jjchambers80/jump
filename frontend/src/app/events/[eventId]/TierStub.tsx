@@ -9,12 +9,15 @@
 import React, { useState } from 'react';
 import { Info, Minus, Plus } from 'lucide-react';
 import { computeTierAllInPrice, formatPrice } from '@/lib/fees';
+import Placeholder from './Placeholder';
+import { offProps, OFF_CLASS } from './PreviewOff';
 
 export interface TierStubTier {
   id: string;
   name: string;
   description?: string | null;
-  price: number;
+  /** Null only in a wizard preview (spec 050): the stub shows "$ –". */
+  price: number | null;
   quantityAvailable: number;
   minPerOrder: number | null;
   maxPerOrder: number | null;
@@ -27,10 +30,16 @@ interface TierStubProps {
   taxRate: number;
   taxInclusive: boolean;
   onChange: (direction: 1 | -1) => void;
-  onShowDetails: () => void;
+  /** Omitted in preview mode: no dialog, so no details button. */
+  onShowDetails?: () => void;
+  /** Steppers are off (no handler, spec 050 preview): id of the note saying why. */
+  offReasonId?: string;
 }
 
-export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChange, onShowDetails }: TierStubProps) {
+export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChange, onShowDetails, offReasonId }: TierStubProps) {
+  const step = (direction: 1 | -1) => {
+    if (!offReasonId) onChange(direction);
+  };
   const [showPolicy, setShowPolicy] = useState(false);
   const soldOut = tier.quantityAvailable === 0;
   const selected = quantity > 0;
@@ -38,7 +47,8 @@ export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChan
   const maxQuantity = Math.min(tier.quantityAvailable, tier.maxPerOrder ?? 10, 10);
   // Only surface the remaining count once it's low enough to mean something.
   const low = !soldOut && tier.quantityAvailable < 10;
-  const fees = computeTierAllInPrice(tier.price, taxRate, taxInclusive);
+  const unpriced = tier.price == null;
+  const fees = computeTierAllInPrice(tier.price ?? 0, taxRate, taxInclusive);
 
   return (
     <div className="tier-stub-shadow" data-testid={`tier-${tier.id}`} data-selected={selected}>
@@ -67,14 +77,16 @@ export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChan
               <p className="line-clamp-2 min-w-0 text-sm leading-relaxed text-gray-600 dark:text-slate-400">
                 {tier.description}
               </p>
-              <button
-                type="button"
-                onClick={onShowDetails}
-                className="mt-0.5 shrink-0 rounded text-gray-400 transition-colors hover:text-brand-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link dark:text-slate-500"
-                aria-label={`${tier.name} details`}
-              >
-                <Info className="h-4 w-4" aria-hidden />
-              </button>
+              {onShowDetails && (
+                <button
+                  type="button"
+                  onClick={onShowDetails}
+                  className="mt-0.5 shrink-0 rounded text-gray-400 transition-colors hover:text-brand-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link dark:text-slate-500"
+                  aria-label={`${tier.name} details`}
+                >
+                  <Info className="h-4 w-4" aria-hidden />
+                </button>
+              )}
             </div>
           )}
 
@@ -116,18 +128,20 @@ export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChan
             </p>
           )}
 
-          <p className="mt-2.5 text-xs tabular-nums text-gray-500 dark:text-slate-400">
-            {fees.taxInclusive ? (
-              <>
-                {formatPrice(fees.listedPrice)}
-                {fees.tax > 0 && <> incl. {formatPrice(fees.tax)} tax</>}
-              </>
-            ) : (
-              <>{formatPrice(fees.basePrice)}</>
-            )}
-            {fees.fees > 0 && <> + {formatPrice(fees.fees)} fees</>}
-            {!fees.taxInclusive && fees.tax > 0 && <> + {formatPrice(fees.tax)} tax</>}
-          </p>
+          {!unpriced && (
+            <p className="mt-2.5 text-xs tabular-nums text-gray-500 dark:text-slate-400">
+              {fees.taxInclusive ? (
+                <>
+                  {formatPrice(fees.listedPrice)}
+                  {fees.tax > 0 && <> incl. {formatPrice(fees.tax)} tax</>}
+                </>
+              ) : (
+                <>{formatPrice(fees.basePrice)}</>
+              )}
+              {fees.fees > 0 && <> + {formatPrice(fees.fees)} fees</>}
+              {!fees.taxInclusive && fees.tax > 0 && <> + {formatPrice(fees.tax)} tax</>}
+            </p>
+          )}
         </div>
 
         {/* The stub: all-in price over the stepper, torn off by the perforation */}
@@ -141,15 +155,16 @@ export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChan
               soldOut ? 'text-gray-400 line-through decoration-2 dark:text-slate-500' : 'text-gray-900 dark:text-slate-50'
             }`}
           >
-            {formatPrice(fees.total)}
+            {unpriced ? <Placeholder>$ –</Placeholder> : formatPrice(fees.total)}
           </p>
           <div className="relative flex items-center gap-2 sm:gap-2.5">
             <button
               type="button"
               aria-label={`Decrease ${tier.name} quantity`}
-              onClick={() => onChange(-1)}
+              onClick={() => step(-1)}
               disabled={soldOut || quantity === 0}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-500 dark:focus-visible:ring-offset-slate-800"
+              {...offProps(offReasonId)}
+              className={`${OFF_CLASS} flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 transition-colors hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-500 dark:focus-visible:ring-offset-slate-800`}
             >
               <Minus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
             </button>
@@ -163,9 +178,10 @@ export default function TierStub({ tier, quantity, taxRate, taxInclusive, onChan
             <button
               type="button"
               aria-label={`Increase ${tier.name} quantity`}
-              onClick={() => onChange(1)}
+              onClick={() => step(1)}
               disabled={soldOut || maxQuantity < minQuantity || quantity >= maxQuantity}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-brand-fg transition-[opacity,transform] hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:active:scale-100 dark:focus-visible:ring-offset-slate-800"
+              {...offProps(offReasonId)}
+              className={`${OFF_CLASS} flex h-9 w-9 items-center justify-center rounded-full bg-brand text-brand-fg transition-[opacity,transform] hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:active:scale-100 dark:focus-visible:ring-offset-slate-800`}
             >
               <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
             </button>

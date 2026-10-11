@@ -16,6 +16,8 @@ interface CartLineItemProps {
   onToggle: () => void;
   /** `compact`: single row (desktop summary). `drawer`: two-line row (mobile sheet / checkout). */
   variant?: 'compact' | 'drawer';
+  /** Off without a handler (spec 050 preview): id of the note saying why; stays focusable. */
+  offReasonId?: string;
 }
 
 export default function CartLineItem({
@@ -25,6 +27,7 @@ export default function CartLineItem({
   open,
   onToggle,
   variant = 'compact',
+  offReasonId,
 }: CartLineItemProps) {
   const regionId = `cart-line-breakdown-${id}`;
   const isDrawer = variant === 'drawer';
@@ -32,7 +35,9 @@ export default function CartLineItem({
   const priceButton = (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={offReasonId ? undefined : onToggle}
+      aria-disabled={offReasonId ? true : undefined}
+      aria-describedby={offReasonId}
       aria-expanded={open}
       aria-controls={regionId}
       aria-label={`${open ? 'Hide' : 'Show'} price breakdown for ${name}`}

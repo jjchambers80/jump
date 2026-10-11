@@ -20,6 +20,8 @@ interface AddOnPickerProps {
   hint?: string;
   /** Heading level for `title`, so the picker nests under the page's outline (default h3). */
   headingLevel?: 'h2' | 'h3' | 'h4';
+  /** Steppers are off (spec 050 preview without a handler): id of the note saying why. They stay focusable. */
+  offReasonId?: string;
 }
 
 export default function AddOnPicker({
@@ -32,7 +34,12 @@ export default function AddOnPicker({
   title = 'Add-ons',
   hint = 'Optional extras for this order.',
   headingLevel: Heading = 'h3',
+  offReasonId,
 }: AddOnPickerProps) {
+  const off = offReasonId ? { 'aria-disabled': true as const, 'aria-describedby': offReasonId } : {};
+  const set = (addOnId: string, quantity: number) => {
+    if (!offReasonId) onChange(addOnId, quantity);
+  };
   const titleId = React.useId();
   if (addOns.length === 0) return null;
 
@@ -74,9 +81,10 @@ export default function AddOnPicker({
                 <button
                   type="button"
                   aria-label={`Decrease ${addOn.name} quantity`}
-                  onClick={() => onChange(addOn.id, Math.max(0, quantity - 1))}
+                  onClick={() => set(addOn.id, Math.max(0, quantity - 1))}
                   disabled={quantity === 0}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                  {...off}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xl font-bold leading-none text-gray-700 dark:text-slate-200 transition-colors hover:border-gray-400 dark:hover:border-slate-500 disabled:opacity-30 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                 >
                   −
                 </button>
@@ -86,9 +94,10 @@ export default function AddOnPicker({
                 <button
                   type="button"
                   aria-label={`Increase ${addOn.name} quantity`}
-                  onClick={() => onChange(addOn.id, Math.min(max, quantity + 1))}
+                  onClick={() => set(addOn.id, Math.min(max, quantity + 1))}
                   disabled={soldOut || quantity >= max}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                  {...off}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-fg text-xl font-bold leading-none transition-opacity hover:opacity-90 disabled:opacity-30 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-link focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
                 >
                   +
                 </button>
