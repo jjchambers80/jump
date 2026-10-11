@@ -2,8 +2,10 @@
 
 > **Spec 037 phase 3:** the edit page is now two section editors over one component (`edit/EventEditor.tsx`, `scope` prop): `/admin/events/:id/edit/details` (Details, Media, Date & venue, Listing) and `/admin/events/:id/edit/sales` (Admission, Price tiers, Add-ons). Each saves only its fields and returns to the event's Details page; `/edit` redirects by hash. Small edits (one tier, admission, listing, form settings) happen in flyouts on the Details page — see [Event Details](event-details.md).
 
-**Status**: Implemented
-**Last Updated**: 2026-09-25
+> **Spec 050 (event setup wizard):** with `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` on, `/admin/events/new` is the wizard and `/edit`, `/edit/details`, `/edit/sales` redirect to its steps (`legacyEditStep`); this page describes the flag-off editors, which 050-P deletes once the flag is on in prod. The old create page lives on as `new/LegacyCreateEventPage.tsx`. Shared pieces moved out so both use them: `components/events/tierForm.ts` (tier form mapping, bodies, `tierErrors`, `capacityOverflow`), `components/events/EventTaxSummary.tsx`, and `AddOnsSection` split into `AddOnRow` / `AddOnDialog`. `TierEditDialog` is now a real modal (`useDialog`). See [Event Setup Wizard](event-setup-wizard.md).
+
+**Status**: Implemented (flag off; superseded by the wizard under the flag)
+**Last Updated**: 2026-10-11
 
 ## Overview
 The admin event create and edit pages (`/admin/events/new`, `/admin/events/:eventId/edit`) share one two-column layout: content on the left, event settings in the right-hand aside. The edit page (redesigned in PR #196) is laid out like a run sheet. It is titled by the event itself, numbers its sections, and opens the aside with a ticket-stub summary: the event as buyers will meet it, and how its capacity splits across tiers. A save card stays pinned to the bottom of the screen and tracks unsaved changes.
@@ -14,7 +16,7 @@ The admin event create and edit pages (`/admin/events/new`, `/admin/events/:even
 | `frontend/src/components/events/EventFormLayout.tsx` | Shared shell (`EventFormShell`, 8/4 grid, flex-column aside, mobile sticky save bar), `EventFormHeader` (eyebrow + title + meta line), `FormCard` (numbered `step`, `id` anchor, staggered entrance), `FormPanel`, `EventFormActions`, `EventFormActionsCard` (Create page's top-pinned save card), `AdmissionModeField`, `RsvpSettingsFields`, `TierHeaderActions` |
 | `frontend/src/components/events/EventEditSummary.tsx` | Edit page only: `EventEditSummary` (stub: image band, date tile, venue/time, perforation, capacity meter, tier legend, section links), `EventSaveCard` (bottom-pinned save state + actions), `EventStatusPill`, `tierAccent(index)` |
 | `frontend/src/app/admin/events/[eventId]/edit/page.tsx` | Edit page: load, dirty snapshot + `beforeunload` guard, section list / step numbers, PATCH + tier create/patch/reorder on save |
-| `frontend/src/app/admin/events/new/page.tsx` | Create page (same shell, no summary, no step numbers) |
+| `frontend/src/app/admin/events/new/page.tsx` → `LegacyCreateEventPage.tsx` | Create page (same shell, no summary, no step numbers); the route renders the wizard instead when the flag is on |
 | `frontend/src/components/events/EventMediaCard.tsx` | Media card (event image), optional `step` |
 | `frontend/src/app/admin/events/[eventId]/edit/AddOnsSection.tsx` | Add-ons (saves through its own API immediately), optional `step` |
 | `frontend/src/components/TierEditDialog.tsx` | `TierCard` (optional `accentClass`: edge strip + sold bar) and `TierEditDialog` |
@@ -57,7 +59,8 @@ None.
 - **The aside is `flex flex-col gap-6`, not `space-y-6`.** `space-y-*` sets `margin-top` with higher specificity than `mt-auto` and would stop the save card from resting at the column's end.
 - **`animate-card-in` uses `backwards` fill only.** A lingering `transform` on a card would become the containing block for fixed-position children, and `TierEditDialog` renders inside the Price Tiers card.
 - The dirty baseline is taken after load. `RichTextEditor` sets content with `emitUpdate: false`, so loading a description does not mark the form dirty. Keep it that way.
-- Any new aside or main section should be added to `sections` on the edit page to get a number and a jump link.
+- Any new aside or main section should be added to `sections` on the edit page to get a number and a jump link. Better: don't add one. New event fields go into a wizard step (root AGENTS gotcha 39).
+- Capacity is nullable since spec 050-A (`capacity: number | null`): the editor shows an empty input, never sends `NaN`, and `CapacityMeter` renders "Capacity not set".
 
 ## Related Features
 - [Event Management](event-management.md)
