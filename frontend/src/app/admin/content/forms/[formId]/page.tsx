@@ -40,7 +40,7 @@ function StandingForm({ formId }: { formId: string }) {
   const pathname = usePathname();
   const tab: Tab = (['fields', 'settings'] as const).find((t) => t === searchParams.get('tab')) ?? 'submissions';
   const { selectedOrg, loading: orgLoading } = useOrg();
-  const canEdit = useCan('applications.forms');
+  const canEdit = useCan('applications.standingForms');
   const api = useApplicationsApi('', formId);
   const participants = useParticipantsApi();
   const [form, setForm] = useState<AdminForm | null>(null);

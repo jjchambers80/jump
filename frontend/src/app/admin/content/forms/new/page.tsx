@@ -19,7 +19,7 @@ const choice =
 export default function NewFormPage() {
   const router = useRouter();
   const { selectedOrgId } = useOrg();
-  const canEdit = useCan('applications.forms');
+  const canEdit = useCan('applications.standingForms');
   const participants = useParticipantsApi();
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');

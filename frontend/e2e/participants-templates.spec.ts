@@ -252,7 +252,7 @@ test('Save as template from the form editor: new template appears in the Templat
   await expect(page.getByTestId('forms-template-picker')).toContainText('Vendor space 2028');
 });
 
-test('template editor: edit settings, add a question, reorder, save; unsaved guard; ORGANIZER sees no write controls', async ({ page, baseURL }) => {
+test('template editor: edit settings, add a question, reorder, save; unsaved guard; ORGANIZER can edit too', async ({ page, baseURL }) => {
   const { calls, state } = await mockAdmin(page, baseURL!);
   await page.goto('/admin/events/templates/tpl-booths');
   await expect(page.getByTestId('template-subtitle')).toContainText('Paid template');
@@ -311,16 +311,16 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   });
   await expect(page).toHaveURL(/\/admin\/events$/);
 
-  // ORGANIZER: read-only.
+  // ORGANIZER edits templates too (spec 050-E, applications.forms).
   await page.context().clearCookies();
   await mockAdmin(page, baseURL!, 'ORGANIZER');
   await page.goto(`/admin/events/${EXPO.id}/applications/forms`);
   await expect(page.getByTestId('forms-list')).toBeVisible();
-  await expect(page.getByTestId('forms-new')).toHaveCount(0);
+  await expect(page.getByTestId('forms-new')).toBeVisible();
   await page.goto('/admin/events/templates/tpl-booths');
-  await expect(page.getByTestId('template-save')).toHaveCount(0);
-  await expect(page.getByLabel('Name')).toBeDisabled();
-  await expect(page.getByTestId('question-add')).toHaveCount(0);
+  await expect(page.getByTestId('template-save')).toBeVisible();
+  await expect(page.getByLabel('Name')).toBeEnabled();
+  await expect(page.getByTestId('question-add')).toBeVisible();
 });
 
 test('Delete a saved template from the New form picker after confirming', async ({ page, baseURL }) => {

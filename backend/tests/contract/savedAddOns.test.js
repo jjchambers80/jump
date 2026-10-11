@@ -145,10 +145,8 @@ describe('Saved add-ons (spec 037 phase 4)', () => {
       expect(badScope.status).toBe(400);
     });
 
-    it('ORGANIZER reads but cannot write; non-members get 403', async () => {
-      expect((await request(app).post(saved()).set(auth(organizerToken)).send({ name: 'x', defaultPrice: 1 })).status).toBe(403);
+    it('non-members get 403 (ORGANIZER writes: organizerFormConfig.test.js)', async () => {
       expect((await request(app).get(saved()).set(auth(outsiderToken))).status).toBe(403);
-      expect((await request(app).patch(`${saved()}/${power.id}`).set(auth(organizerToken)).send({ name: 'y' })).status).toBe(403);
     });
 
     it('archives out of the picker and back', async () => {
