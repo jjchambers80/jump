@@ -9,21 +9,12 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import api from '@/services/api';
-import { acceptanceLine, type PublicForm } from '@/lib/applications';
+import { acceptanceLine, PURPOSE_CTA, type PublicForm } from '@/lib/applications';
 
 // Organizers name forms in full ("2026 Game and Geek Vendor Application");
-// the pill only needs the role. The full name stays in the accessible name.
-const ROLES: [RegExp, string][] = [
-  [/vendor|exhibit|booth|merchant|artist/i, 'Become a vendor'],
-  [/sponsor/i, 'Become a sponsor'],
-  [/press|media/i, 'Press pass'],
-  [/panel|speaker|talk/i, 'Host a panel'],
-  [/volunteer/i, 'Volunteer'],
-];
-
-function shortLabel(name: string): string {
-  return ROLES.find(([pattern]) => pattern.test(name))?.[1] ?? 'Apply';
-}
+// the pill only needs the role, from the form's purpose (spec 050 §6.2).
+// The full name stays in the accessible name.
+const shortLabel = (form: PublicForm) => PURPOSE_CTA[form.purpose ?? 'OTHER'] ?? PURPOSE_CTA.OTHER;
 
 export default function GetInvolved({
   eventId,
@@ -55,7 +46,7 @@ export default function GetInvolved({
   if (forms.length === 0) return null;
 
   // Two forms for the same role ("Apply", "Apply") would be ambiguous: fall back to the names.
-  const labels = forms.map((form) => shortLabel(form.name));
+  const labels = forms.map(shortLabel);
   const ambiguous = new Set(labels).size < labels.length;
 
   return (

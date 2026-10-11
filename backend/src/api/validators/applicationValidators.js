@@ -3,7 +3,7 @@
 
 import { ValidationError } from '../../middleware/errorHandler.js';
 
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'collectBusiness', 'buttonLabel', 'successMessage']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'purpose', 'collectBusiness', 'buttonLabel', 'successMessage']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);

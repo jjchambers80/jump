@@ -70,7 +70,7 @@
 - **Floor map step sits right after Vendor applications**, because its visibility depends on a vendor form's `spaceSelection`.
 - **Listing category moves into the Describe step**, and the slug ("Edit URL") into the Name step.
 - **Flyouts on the Details page are removed** in edit mode (one form per field). A tier's Edit opens the Tickets step with that tier's dialog (`?step=tickets&tier=<id>`).
-- **Special guest forms are FREE.** Guests are not charged to appear. Vendor forms may be PAID or FREE. Other-application forms may be PAID only when the purpose is SPONSOR.
+- **Special guest and volunteer forms are FREE only** (400 `PURPOSE_KIND_MISMATCH`, §7.3). Guests are not charged to appear and volunteers give their time. VENDOR, SPONSOR, PRESS, PANEL and OTHER forms may be FREE or PAID.
 - **`collectBusiness: false` is allowed on FREE event forms only.** PAID forms keep the business profile that approval, booth assignment and check-in read.
 
 ## 4. Draft lifecycle

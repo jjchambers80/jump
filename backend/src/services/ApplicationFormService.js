@@ -15,6 +15,7 @@ import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from 
 import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
+import { FORM_PURPOSES, FREE_ONLY_PURPOSES, defaultsFor } from './applicationFormDefaults.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
 const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
@@ -180,6 +181,7 @@ class ApplicationFormService {
       event: f.event ? { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status, timezone: f.event.venue?.timezone ?? null } : null,
       ...(organizationId ? {} : { organization: f.organization }),
       kind: f.kind,
+      purpose: f.purpose,
       name: f.name,
       slug: f.slug,
       status: f.status,
@@ -220,7 +222,6 @@ class ApplicationFormService {
   async createForm(eventId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
-    if (body.collectBusiness === false) throw new ValidationError('Event application forms must collect business details');
     let template = null;
     if (body.templateId) {
       template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId ?? event.venue.organizationId);
@@ -228,8 +229,17 @@ class ApplicationFormService {
       if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
     }
     const { templateId: _templateId, ...fields } = body;
-    const settings = template ? { ...this._templateSettings(template.definition, body.kind), ...fields } : fields;
+    // No template and no questions: start from the purpose's defaults (spec 050 §5.2).
+    const base = template
+      ? this._templateSettings(template.definition, body.kind)
+      : body.questions === undefined
+        ? defaultsFor(body.purpose)
+        : {};
+    const { questions: defaultQuestions, ...baseSettings } = base;
+    const settings = { ...baseSettings, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
+    this._assertEventFormRules(data.purpose ?? 'OTHER', body.kind, data.collectBusiness ?? true);
+    if (defaultQuestions) body = { ...body, questions: defaultQuestions };
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -252,6 +262,10 @@ class ApplicationFormService {
   /** The settings half of a template definition, shaped like a create body (PAID keys only on PAID). */
   _templateSettings(definition, kind) {
     const out = { intro: definition.intro ?? null };
+    // Old snapshots carry no purpose: the form falls back to OTHER unless the body names one.
+    if (definition.purpose) out.purpose = definition.purpose;
+    // Old snapshots carry no collectBusiness either: the column default (true) applies.
+    if (typeof definition.collectBusiness === 'boolean') out.collectBusiness = definition.collectBusiness;
     if (kind === 'PAID') {
       for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
         if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
@@ -310,6 +324,8 @@ class ApplicationFormService {
     // definition holds null there (and the validator refuses them on FREE).
     const paid = form.kind === 'PAID';
     return {
+      purpose: form.purpose ?? 'OTHER',
+      collectBusiness: form.collectBusiness !== false,
       intro: form.intro ?? null,
       chargeTiming: paid ? form.chargeTiming : null,
       feeMode: paid ? form.feeMode : null,
@@ -364,6 +380,8 @@ class ApplicationFormService {
           // Spec 039: the copy's map starts as a draft, so a MAP form cannot
           // open until that map is published (see _assertCanOpen).
           spaceSelection: f.spaceSelection,
+          purpose: f.purpose,
+          collectBusiness: f.collectBusiness,
           displayOrder: f.displayOrder,
           createdFromTemplateId: f.createdFromTemplateId,
         },
@@ -385,8 +403,12 @@ class ApplicationFormService {
     const existing = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { tiers: true } });
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
-    if (body.collectBusiness === false) throw new ValidationError('Event application forms must collect business details');
     const data = this._validateFormFields(body, existing.kind, existing);
+    this._assertEventFormRules(data.purpose ?? existing.purpose, existing.kind, data.collectBusiness ?? existing.collectBusiness);
+    if (data.purpose !== undefined && data.purpose !== existing.purpose) {
+      const submitted = await prisma.application.count({ where: { formId, status: { not: 'DRAFT' } } });
+      if (submitted > 0) throw coded(new ConflictError('Purpose cannot change once the form has submissions'), 'PURPOSE_LOCKED');
+    }
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.spaceSelection !== undefined && data.spaceSelection !== existing.spaceSelection) {
       await this._assertSpaceSelectionChangeable(formId);
@@ -637,13 +659,14 @@ class ApplicationFormService {
 
   /**
    * Forms a visitor can see for a published event: OPEN, and DRAFT-less upcoming windows.
-   * `anyEventStatus`: the staff preview payload (spec 050 F) on a draft event.
+   * `preview`: the staff preview payload (spec 050 F) — any event status, DRAFT forms too,
+   * so the wizard's Get involved shows the forms publish will open.
    */
-  async publicForms(eventId, { anyEventStatus = false } = {}) {
+  async publicForms(eventId, { preview = false } = {}) {
     const event = await this.requireEvent(eventId);
-    if (event.status !== 'PUBLISHED' && !anyEventStatus) throw new NotFoundError('Event not found');
+    if (event.status !== 'PUBLISHED' && !preview) throw new NotFoundError('Event not found');
     const forms = await prisma.applicationForm.findMany({
-      where: { eventId, status: { in: ['OPEN', 'CLOSED'] } },
+      where: { eventId, status: { in: preview ? ['DRAFT', 'OPEN', 'CLOSED'] : ['OPEN', 'CLOSED'] } },
       include: FORM_INCLUDE,
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -747,6 +770,10 @@ class ApplicationFormService {
       if (typeof body.collectBusiness !== 'boolean') throw new ValidationError('collectBusiness must be a boolean');
       data.collectBusiness = body.collectBusiness;
     }
+    if (body.purpose !== undefined) {
+      if (!FORM_PURPOSES.has(body.purpose)) throw new ValidationError(`purpose must be one of ${[...FORM_PURPOSES].join(', ')}`);
+      data.purpose = body.purpose;
+    }
     for (const [key, max] of [['buttonLabel', 80], ['successMessage', 2000]]) {
       if (body[key] !== undefined) {
         if (body[key] !== null && typeof body[key] !== 'string') throw new ValidationError(`${key} must be a string`);
@@ -793,6 +820,21 @@ class ApplicationFormService {
       }
     }
     return data;
+  }
+
+  /**
+   * Spec 050 §3: special guests and volunteers are never charged, and a PAID
+   * form keeps the business profile approval, booth assignment and check-in read.
+   */
+  _assertEventFormRules(purpose, kind, collectBusiness) {
+    this._assertPurposeKind(purpose, kind);
+    if (kind === 'PAID' && collectBusiness === false) throw new ValidationError('PAID application forms must collect business details');
+  }
+
+  _assertPurposeKind(purpose, kind) {
+    if (kind === 'PAID' && FREE_ONLY_PURPOSES.has(purpose)) {
+      throw coded(new ValidationError(`${purpose} forms must be FREE`), 'PURPOSE_KIND_MISMATCH');
+    }
   }
 
   async _assertCanOpen(form) {
@@ -918,6 +960,7 @@ class ApplicationFormService {
       eventId: form.eventId,
       organizationId: form.organizationId,
       kind: form.kind,
+      purpose: form.purpose,
       name: form.name,
       slug: form.slug,
       intro: form.intro,
@@ -953,6 +996,7 @@ class ApplicationFormService {
     return {
       id: form.id,
       kind: form.kind,
+      purpose: form.purpose,
       name: form.name,
       slug: form.slug,
       intro: form.intro,

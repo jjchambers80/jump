@@ -108,6 +108,20 @@ export interface AdminTier {
   addOns: TierAddOnOption[];
 }
 
+/** Spec 050 §6.2: what a form is for. Places it in a wizard step and labels its storefront pill. */
+export type FormPurpose = 'VENDOR' | 'SPONSOR' | 'PRESS' | 'PANEL' | 'SPECIAL_GUEST' | 'VOLUNTEER' | 'OTHER';
+
+/** Short call to action per purpose ("Get involved" pills). */
+export const PURPOSE_CTA: Record<FormPurpose, string> = {
+  VENDOR: 'Become a vendor',
+  SPONSOR: 'Become a sponsor',
+  PRESS: 'Press pass',
+  PANEL: 'Host a panel',
+  SPECIAL_GUEST: 'Apply as a guest',
+  VOLUNTEER: 'Volunteer',
+  OTHER: 'Apply',
+};
+
 export interface AdminForm {
   id: string;
   /** Null on a standing form (spec 044): organization-level, FREE, no tiers. */
@@ -117,6 +131,7 @@ export interface AdminForm {
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: FormKind;
+  purpose: FormPurpose;
   name: string;
   slug: string;
   intro: string | null;
@@ -161,6 +176,8 @@ export interface PublicTier {
 export interface PublicForm {
   id: string;
   kind: FormKind;
+  /** Spec 050 §6.2. Optional so older payloads still render (they label as OTHER). */
+  purpose?: FormPurpose;
   name: string;
   slug: string;
   intro: string | null;
@@ -172,7 +189,7 @@ export interface PublicForm {
   organizationName?: string | null;
   tiers: PublicTier[];
   questions: Question[];
-  /** Spec 044: standing forms may skip the business step; event forms always collect it. */
+  /** Spec 044 / 050: standing forms and FREE event forms may skip the business step. */
   collectBusiness?: boolean;
   /** Spec 044: standing forms' own button label and thank-you line. */
   buttonLabel?: string | null;
@@ -318,7 +335,8 @@ export interface ApplicantApplication {
   paymentDueAt: string | null;
   /** Spec 037 phase 5: set while an approved PAID application chooses or holds its space. */
   selection?: SpaceSelection | null;
-  profile: ApplicantProfile;
+  /** Null when the form skips the business step (`collectBusiness: false`, spec 044 / 050). */
+  profile: ApplicantProfile | null;
   answers: AnswerView[];
   boothLabel: string | null;
   /** Spec 014 phase 2: the booth owned (SOLD / RESERVED) or held while paying (HELD, with the deadline). */
