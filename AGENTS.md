@@ -97,7 +97,7 @@ npm test --workspace=packages/cli   # Jump CLI (spec 043), node --test against a
 | `AUDIT_LOG_ENABLED`, `AUDIT_RETENTION_DAYS`, `AUDIT_SWEEP_INTERVAL_MS` | backend | Optional. Audit trail (spec 048): `false` turns change capture off (default on); rows kept 730 days (24 months); retention sweep interval (default 24 h) |
 | `NEXT_PUBLIC_LEGAL_PAGES_ENABLED` | frontend | Optional. `true` renders `/legal/<slug>` from `frontend/content/legal/<slug>.md` (attorney text with front matter, spec 023 LR-01) and links the consent texts on the apply form, the checkout sentence and `PaymentForm` to `/legal/privacy` / `/legal/terms`. Off (default): every `/legal/*` path is 404 and the texts render without links, so nothing promises a 404. `/terms` and `/privacy` 308 to the new paths either way. Build-time |
 
-The event setup wizard (spec 050) is always on since 050-P: `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` no longer exists and can be removed from the Railway frontend service.
+The event setup wizard (spec 050) is always on since 050-P: `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` no longer exists (removed from the Railway frontend service on 2026-10-11).
 
 ## Deployment
 

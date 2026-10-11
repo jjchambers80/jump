@@ -160,6 +160,8 @@ Visible only while a VENDOR form has `spaceSelection: MAP`. No map: **Create a b
 
 ### Permissions (050-E)
 
+**Visibility setting:** the wizard is a sub-area of the catalog feature **`events`** (`backend/src/permissions/catalog.js`; locked, `adminPaths` `/admin/events` and `/admin/create-event`, which covers `/admin/events/new`, `/admin/events/<id>/setup` and `/admin/events/preview-frame`). It adds no feature key of its own. The `events` actions it uses are `applications.forms`, `applications.money` and `addOns.manage`; it also uses `maps.forceAssign` (feature `maps`) and `applications.standingForms` (feature `content`).
+
 | Key | Default | Covers |
 |---|---|---|
 | `applications.forms` | ADMIN + **ORGANIZER** | event forms, tiers, tier add-ons, questions, templates, shifts |
