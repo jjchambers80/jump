@@ -364,7 +364,17 @@ function EventsListContent() {
                 publishBlockers={blockers?.eventId === event.id ? blockers.items : undefined}
                 onDuplicate={() => setDuplicating({ id: event.id, name: event.name })}
                 onCancelEvent={() => setCancelling({ id: event.id, name: event.name })}
-                onLifecycleDone={() => {
+                onLifecycleDone={(action) => {
+                  setNotice(
+                    ({
+                      'close-sales': `Sales closed for ${event.name}.`,
+                      'reopen-sales': `Sales reopened for ${event.name}.`,
+                      unpublish: `${event.name} is a draft again.`,
+                      delete: `${event.name} was deleted.`,
+                    } as Record<string, string>)[action]
+                  );
+                  // A deleted card takes its menu button with it: land on the list heading.
+                  if (action === 'delete') document.getElementById('events-heading')?.focus();
                   fetchEvents();
                   fetchSummary();
                 }}

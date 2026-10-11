@@ -28,7 +28,7 @@ interface EventActionsMenuProps {
 }
 
 const itemBase =
-  'flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
+  'flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left aria-disabled:cursor-not-allowed aria-disabled:opacity-50 text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-slate-100 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
 
 const destructiveItem = `${itemBase} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20`;
 
@@ -47,7 +47,11 @@ export default function EventActionsMenu({
   const [open, setOpen] = useState(false);
   const [lifecycle, setLifecycle] = useState<LifecycleAction | null>(null);
   const published = status === 'PUBLISHED';
+  // Lifecycle calls are org-scoped: without a selected org they stay visible but off, with the reason.
+  const noOrgId = `lifecycle-no-org-${eventId}`;
+  const lifecycleOff = selectedOrgId ? {} : { 'aria-disabled': true as const, 'aria-describedby': noOrgId };
   const startLifecycle = (action: LifecycleAction) => {
+    if (!selectedOrgId) return;
     close(false);
     setLifecycle(action);
   };
@@ -154,20 +158,25 @@ export default function EventActionsMenu({
             Copy link
           </button>
           <hr className="my-1 border-gray-200 dark:border-slate-600" />
+          {!selectedOrgId && (
+            <p id={noOrgId} className="px-3 py-1.5 text-xs text-gray-600 dark:text-slate-300">
+              Choose an organization to change sales or publishing.
+            </p>
+          )}
           {published && (
-            <button type="button" role="menuitem" className={itemBase} onClick={() => startLifecycle('unpublish')}>
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('unpublish')}>
               <EyeOff className="h-4 w-4 shrink-0" aria-hidden />
               Unpublish…
             </button>
           )}
           {published && salesClosed && (
-            <button type="button" role="menuitem" className={itemBase} onClick={() => startLifecycle('reopen-sales')}>
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('reopen-sales')}>
               <LockOpen className="h-4 w-4 shrink-0" aria-hidden />
               Reopen sales
             </button>
           )}
           {published && !salesClosed && (
-            <button type="button" role="menuitem" className={itemBase} onClick={() => startLifecycle('close-sales')}>
+            <button type="button" role="menuitem" className={itemBase} {...lifecycleOff} onClick={() => startLifecycle('close-sales')}>
               <Lock className="h-4 w-4 shrink-0" aria-hidden />
               Close sales…
             </button>
@@ -182,7 +191,7 @@ export default function EventActionsMenu({
             Cancel event…
           </button>
           {status === 'DRAFT' && (
-            <button type="button" role="menuitem" className={destructiveItem} onClick={() => startLifecycle('delete')}>
+            <button type="button" role="menuitem" className={destructiveItem} {...lifecycleOff} onClick={() => startLifecycle('delete')}>
               <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
               Delete draft…
             </button>
