@@ -21,7 +21,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../middleware/err
 import { platformBaseUrl, orgPageUrl } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 import {
-  deriveDescriptorSuffix,
+  deriveStatementDescriptor,
   normalizeDescriptorText,
   stripeMode,
 } from './PaymentSettingsService.js';
@@ -188,7 +188,7 @@ class ConnectService {
     const row = await this.accountFor(organizationId);
     // Once Connect is enabled, every buyer charge must run on the
     // organization's account. Missing, disconnected, onboarding and paused
-    // accounts all refuse instead of making Jump the merchant of record.
+    // accounts all refuse instead of making Eventimus the merchant of record.
     if (!row || row.disconnectedAt || !row.detailsSubmitted || !row.chargesEnabled) {
       throw paymentsUnavailable(organizationId);
     }
@@ -251,7 +251,7 @@ class ConnectService {
       });
     } catch (error) {
       // An account connected with OAuth belongs to the organization, not to
-      // Jump: Stripe refuses Account Links for it. Its owner finishes any
+      // Eventimus: Stripe refuses Account Links for it. Its owner finishes any
       // outstanding requirement in the Stripe dashboard.
       throw new ConflictError(`Finish setting up this account in your Stripe dashboard (${error.message})`);
     }
@@ -495,7 +495,7 @@ class ConnectService {
 
   /**
    * A new account the organization owns (spec 047 §3 S1): full Stripe
-   * dashboard, so Stripe — not Jump — bills its processing fees, carries
+   * dashboard, so Stripe — not Eventimus — bills its processing fees, carries
    * negative balances, collects requirements and files the 1099-K. Stripe
    * requests the default capabilities (card_payments, transfers) for a
    * full-dashboard account; none are requested here.
@@ -503,6 +503,7 @@ class ConnectService {
   _createParams(organization, url) {
     const supportPhone =
       organization.phoneNumber ? `${organization.phoneCountryCode || '+1'}${organization.phoneNumber}`.replace(/[^\d+]/g, '') : undefined;
+    const statementDescriptor = deriveStatementDescriptor(organization.name);
     return {
       country: 'US',
       ...(organization.email && { email: organization.email }),
@@ -519,9 +520,7 @@ class ConnectService {
       },
       settings: {
         payouts: {
-          ...(deriveDescriptorSuffix(organization.name, 'JUMP') && {
-            statement_descriptor: deriveDescriptorSuffix(organization.name, 'JUMP'),
-          }),
+          ...(statementDescriptor && { statement_descriptor: statementDescriptor }),
         },
       },
       metadata: { organizationId: organization.id, mode: stripeMode() },

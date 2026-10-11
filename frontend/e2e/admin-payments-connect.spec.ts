@@ -211,7 +211,11 @@ test('not started: pill, action leads to the connect choice', async ({ page, bas
   const checklist = page.getByTestId('payments-onboarding-checklist');
   await expect(checklist).toBeVisible();
   await expect(checklist.getByText(/IRS EIN letter/)).toBeVisible();
-  await expect(checklist.getByText(/Jump never collects these details/)).toBeVisible();
+  await expect(checklist.getByText(/Eventimus never collects these details/)).toBeVisible();
+  await expect(page.getByTestId('payments-connected-descriptor-note')).toHaveCount(0);
+  await page.getByTestId('payments-statement-card').getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('dialog', { name: 'Customer billing statement' }).getByLabel('Name on customer statement')).toBeVisible();
+  await page.getByRole('dialog', { name: 'Customer billing statement' }).getByRole('button', { name: 'Cancel' }).click();
 
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
   expect(a11y.violations).toEqual([]);
@@ -230,6 +234,12 @@ test('active: connected pill, Stripe dashboard opens the organization\'s own das
   await expect(page.getByTestId('payments-onboarding-checklist')).toHaveCount(0);
   await expect(page.getByTestId('payments-connect-action')).toHaveCount(0);
   await expect(page.getByTestId('payments-payouts-row')).toContainText('Wells Fargo •••• 3544');
+  const statementCard = page.getByTestId('payments-statement-card');
+  await expect(statementCard.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+  await expect(page.getByTestId('payments-connected-descriptor-note')).toContainText(
+    "Card and bank statements use the statement descriptor set in your organization's Stripe account."
+  );
+  await expect(page.getByTestId('payments-connected-descriptor-note').getByRole('link', { name: 'Stripe dashboard' })).toHaveAttribute('href', DASHBOARD_URL);
 
   const popup = context.waitForEvent('page');
   await page.getByTestId('payments-connect-manage').click();

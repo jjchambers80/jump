@@ -29,7 +29,7 @@ jest.unstable_mockModule('../../src/services/ConnectService.js', () => ({
 
 process.env.STRIPE_SECRET_KEY = 'sk_test_unit';
 
-const { default: service, deriveDescriptorSuffix, normalizeDescriptorText, suffixBudget, stripeMode, applicationFeeCents } = await import(
+const { default: service, deriveDescriptorSuffix, deriveStatementDescriptor, normalizeDescriptorText, suffixBudget, stripeMode, applicationFeeCents } = await import(
   '../../src/services/PaymentSettingsService.js'
 );
 const { default: feeService } = await import('../../src/services/FeeService.js');
@@ -74,6 +74,12 @@ describe('descriptor helpers', () => {
     expect(deriveDescriptorSuffix('The Carolina Theatre of Greensboro', 'JUMP')).toBe('THE CAROLINA THE');
     expect(deriveDescriptorSuffix('12345', 'JUMP')).toBeNull();
     expect(deriveDescriptorSuffix('Roman', null)).toBeNull();
+  });
+
+  test('derives a full descriptor using the complete 22-character budget', () => {
+    expect(deriveStatementDescriptor('A'.repeat(22))).toBe('A'.repeat(22));
+    expect(deriveStatementDescriptor('B'.repeat(23))).toBe('B'.repeat(22));
+    expect(deriveStatementDescriptor('12345')).toBeNull();
   });
 
   test('stripeMode follows the key prefix', () => {
