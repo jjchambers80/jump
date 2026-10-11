@@ -10,7 +10,6 @@ pnpm-lock.yaml
 
 # Next.js build output
 .next/
-.next-e2e-wizard/
 out/
 build/
 

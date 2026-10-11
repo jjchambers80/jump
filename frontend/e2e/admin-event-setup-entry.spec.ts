@@ -1,12 +1,11 @@
 // Event setup wizard entry points and the Done screen (spec 050-I): "Start
 // from a past event" on step 1, "Continue setup" on the events list, and Done.
-// Runs on the flag-on dev server (playwright.config.ts ›
-// PLAYWRIGHT_WIZARD_BASE_URL); every API call is mocked, with a catch-all 404.
+// Every API call is mocked, with a catch-all 404.
 // Assertions are scoped to <main> or the dialog: the preview repeats names.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-entry';
@@ -69,9 +68,6 @@ async function mockApi(page: Page, copy = adminEvent(), forms: { id: string }[] 
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL });
 const COLD = { timeout: 30000 };
 const STAFF = { id: 'entry-admin', email: 'entry-admin@test.com', role: 'ADMIN' as const };
 
@@ -83,9 +79,8 @@ const serious = async (page: Page) =>
 // Compile every route this spec visits once, before any test times a step change.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(240000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   for (const path of ['/admin/events/new', `/admin/events/${COPY_ID}/setup?step=date`, `/admin/events?orgId=${ORG_ID}`]) {
     await page.goto(path, { timeout: 120000 });
@@ -221,7 +216,8 @@ test.describe('desktop', () => {
 });
 
 test.describe('mobile', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  // Axe must not catch the motion-safe card fade mid-opacity (wizard specs' rule).
+  test.use({ viewport: { width: 390, height: 844 }, contextOptions: { reducedMotion: 'reduce' } });
 
   for (const scheme of ['light', 'dark'] as const) {
     test(`past-event dialog and Done pass axe with no horizontal scroll (${scheme})`, async ({ page }) => {

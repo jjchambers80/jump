@@ -1,12 +1,12 @@
 // Volunteer shifts in the event setup wizard (spec 050 §6.4, card 050-S):
 // the Volunteers step's shift editor — add, edit, delete, times in the venue
 // zone, the soft outside-the-event warning, and the server's two 409s in
-// words. Runs on the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL) at
+// words. Runs at
 // 390 × 844 with reduced motion and axe. The API is a small stateful fake.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-shifts';
@@ -90,9 +90,7 @@ async function mockApi(page: Page, initial: Shift[] = [GATE, RUNNER]) {
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL, viewport: { width: 390, height: 844 }, contextOptions: { reducedMotion: 'reduce' } });
+test.use({ viewport: { width: 390, height: 844 }, contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'shifts-organizer', email: 'shifts-organizer@test.com', role: 'ORGANIZER' as const };
@@ -105,9 +103,8 @@ const serious = async (page: Page) =>
 // Warm the wizard route and the preview frame before any timed step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 390, height: 844 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 390, height: 844 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   await page.goto(URL_, { timeout: 120000 });
   await expect(page.locator('main').getByTestId('setup-shifts')).toBeVisible({ timeout: 120000 });

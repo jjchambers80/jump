@@ -1,13 +1,13 @@
 // Event setup wizard application steps (spec 050-L): Vendor applications,
-// Special guests, Volunteers, Other applications. Runs on the flag-on dev
-// server (PLAYWRIGHT_WIZARD_BASE_URL) as an ORGANIZER (050-E opened form
+// Special guests, Volunteers, Other applications. Runs as an
+// ORGANIZER (050-E opened form
 // configuration to them). Every API call is mocked by a small stateful fake,
 // so a create, patch or delete changes what the next list returns. Assertions
 // are scoped to the form pane (<main>): the preview frame repeats names.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-apps';
@@ -51,11 +51,11 @@ const TEMPLATES = [
   { id: 'tpl-old', name: 'Old free form', kind: 'FREE', purpose: null, tierCount: 0, questionCount: 1, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
 ];
 
-type Calls = { create: Request[]; patch: Request[]; remove: Request[] };
+type Calls = { create: Request[]; patch: Request[]; remove: Request[]; questions: Request[] };
 
 async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
   let forms = structuredClone(initialForms);
-  const calls: Calls = { create: [], patch: [], remove: [] };
+  const calls: Calls = { create: [], patch: [], remove: [], questions: [] };
   const list = `${API}/admin/events/${EVENT_ID}/application-forms`;
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
@@ -80,6 +80,15 @@ async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
     forms.push(created);
     return route.fulfill(json(created, 201));
   });
+  await page.route(new RegExp(`${list}/[^/]+/questions$`), (route) => {
+    const id = route.request().url().split('/').slice(-2)[0];
+    const target = forms.find((f) => f.id === id)!;
+    const body = route.request().postDataJSON();
+    calls.questions.push(route.request());
+    const q = { id: `${id}-q${target.questions.length}`, helpText: null, required: false, options: [], pinned: false, displayOrder: target.questions.length, ...body };
+    target.questions.push(q);
+    return route.fulfill(json(q, 201));
+  });
   await page.route(new RegExp(`${list}/[^/]+$`), (route) => {
     const id = route.request().url().split('/').pop()!;
     if (route.request().method() === 'DELETE') {
@@ -95,9 +104,7 @@ async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL, contextOptions: { reducedMotion: 'reduce' } });
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'apps-organizer', email: 'apps-organizer@test.com', role: 'ORGANIZER' as const };
@@ -112,9 +119,8 @@ const serious = async (page: Page) =>
 // Compile the wizard route and the preview frame once, before any timed step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page, [form({ purpose: 'VENDOR', kind: 'PAID', name: 'Warm-up' })]);
   for (const step of ['vendors', 'volunteers', 'other-applications']) {
     await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });
@@ -211,6 +217,14 @@ test.describe('desktop', () => {
     await expect(questions.getByText('Emergency contact (name and phone)')).toBeVisible();
     // FREE forms have no tiers card.
     await expect(main(page).getByText('Tiers', { exact: true })).toHaveCount(0);
+
+    // Add a question inline (carried over from the old forms editor spec, 050-P).
+    const add = main(page).getByTestId('question-add');
+    await add.getByLabel('Question').fill('Years volunteering');
+    await add.getByLabel('Type').selectOption('NUMBER');
+    await add.getByRole('button', { name: 'Add question' }).click();
+    await expect.poll(() => calls.questions.map((r) => r.postDataJSON())).toEqual([expect.objectContaining({ label: 'Years volunteering', type: 'NUMBER' })]);
+    await expect(questions.getByText('Years volunteering')).toBeVisible();
   });
 
   test('other applications: a purpose per form, fixed once it has applications; delete or close', async ({ page }) => {

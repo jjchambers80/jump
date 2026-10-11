@@ -1,11 +1,10 @@
-// Event setup wizard shell and steps 1–3 (spec 050-H). Runs on the flag-on
-// dev server (playwright.config.ts › PLAYWRIGHT_WIZARD_BASE_URL); every API
+// Event setup wizard shell and steps 1–3 (spec 050-H). Every API
 // call is mocked. Assertions are scoped to the form pane (<main>) or the
 // preview frame: the preview repeats the event's name and date.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Locator, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-setup';
@@ -59,10 +58,6 @@ async function mockApi(page: Page, event = adminEvent(), createdRow?: Record<str
   return calls;
 }
 
-// Set by playwright.config.ts; unset with PLAYWRIGHT_WIZARD=0 (no flag-on server).
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL });
 // Cold dev servers compile each route on first request: allow for it on
 // every first look after a navigation, never a retry (e2e.yml header).
 const COLD = { timeout: 30000 };
@@ -88,9 +83,8 @@ const STAFF = { id: 'setup-admin', email: 'setup-admin@test.com', role: 'ADMIN' 
 // Compile every wizard route once before any test times a step change.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   for (const path of ['/admin/events/new', `/admin/events/${EVENT_ID}/setup?step=name`]) {
     await page.goto(path, { timeout: 120000 });

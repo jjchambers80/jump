@@ -1,12 +1,12 @@
-// Event setup wizard step 9, Floor map (spec 050-M). Runs on the flag-on dev
-// server (PLAYWRIGHT_WIZARD_BASE_URL) as an ORGANIZER. Every API call is mocked
+// Event setup wizard step 9, Floor map (spec 050-M). Runs as an
+// ORGANIZER. Every API call is mocked
 // by a small stateful fake (forms and the event's map), so a form patch or a
 // map create changes what the next read returns. Assertions are scoped to the
 // form pane (<main>): the preview frame repeats names.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-map';
@@ -114,9 +114,7 @@ async function mockApi(page: Page, { forms: initial, map: initialMap = null, cre
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL, contextOptions: { reducedMotion: 'reduce' } });
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'map-organizer', email: 'map-organizer@test.com', role: 'ORGANIZER' as const };
@@ -137,9 +135,8 @@ const done = (page: Page) => page.getByTestId('map-builder').getByRole('button',
 // Compile the wizard route and the preview frame once, before any timed step.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page, { forms: [MAP_FORM] });
   for (const step of ['vendors', 'floor-map']) {
     await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });

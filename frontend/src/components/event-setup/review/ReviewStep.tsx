@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import PublishBlockers from '@/components/events/PublishBlockers';
 import EventTaxSummary from '@/components/events/EventTaxSummary';
-import { publishBlockers, wizardReadinessHref, type ReadinessItem } from '@/lib/eventReadiness';
+import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { secondaryButton } from '../ui';
@@ -122,7 +122,7 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
 
   return (
     <div className="space-y-4">
-      <PublishBlockers blockers={blockers} eventId={saved.id} orgId={orgId} hrefFor={(item) => wizardReadinessHref(item, saved.id)} />
+      <PublishBlockers blockers={blockers} eventId={saved.id} orgId={orgId} />
       {error && (
         <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
           {error}

@@ -243,24 +243,33 @@ test.describe('Event description HTML rendering', () => {
   });
 });
 
-test.describe('Admin event edit page — editor', () => {
+test.describe('Admin event editor (setup wizard) — description', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsStaff(page, staffUser, 'http://localhost:3001');
   });
 
-  test('admin edit page shows the RichTextEditorField (Tiptap editor) for description', async ({ page }) => {
-    test.setTimeout(60000);
+  test('the wizard Describe step shows the RichTextEditorField (Tiptap editor) with the saved HTML', async ({ page }) => {
+    test.setTimeout(120000);
     await mockAdminApi(page);
+    // Spec 050-P: the setup wizard is the only editor; it reads the overview and the preview payload.
+    const event = { ...makeAdminEventPayload(), setupStep: null, setupCompletedAt: '2026-01-01T00:00:00.000Z', endDate: null };
+    const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    await page.route(API + '/organizations', (route) => route.fulfill(json([{ id: orgId, name: 'HTML Org', status: 'ACTIVE' }])));
+    await page.route(API + '/admin/permissions', (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
+    await page.route(API + '/organizations/' + orgId + '/events/' + sampleEventId + '/overview', (route) =>
+      route.fulfill(json({ event, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
+    );
+    await page.route(API + '/organizations/' + orgId + '/events/' + sampleEventId + '/preview-payload', (route) =>
+      route.fulfill(json({ event, organization: { id: orgId, name: 'HTML Org' }, forms: [] }))
+    );
 
-    // Navigate to the admin edit event page
-    await page.goto('/admin/events/' + sampleEventId + '/edit?orgId=' + orgId);
-
-    // Wait for the page to load
-    await expect(page.getByRole('heading', { name: /edit event/i })).toBeVisible({ timeout: 30000 });
+    // An old editor link with the description hash lands on the Describe step.
+    await page.goto('/admin/events/' + sampleEventId + '/edit?orgId=' + orgId + '#event-description');
+    await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Describe it' })).toBeVisible({ timeout: 60000 });
 
     // The RichTextEditorField dynamically imports the Tiptap editor (ssr: false).
     // After hydration, Tiptap mounts a .ProseMirror element inside the editor container.
-    const editor = page.locator('.ProseMirror');
+    const editor = page.locator('main .ProseMirror');
     await expect(editor.first()).toBeVisible({ timeout: 30000 });
 
     // The editor should contain the loaded description HTML content

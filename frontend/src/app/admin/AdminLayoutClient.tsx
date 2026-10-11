@@ -12,13 +12,10 @@ import AdminSidebar, { isSystemPath } from '@/components/AdminSidebar';
 import EventimusLogo from '@/components/EventimusLogo';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import { OrgProvider, HiddenPathRedirect } from '@/components/OrgContext';
-import { EVENT_WIZARD_ENABLED } from '@/lib/eventWizard';
 
 // Full-screen admin tools that bring their own chrome (spec 038 theme editor,
-// spec 050 event setup wizard and its preview frame; `new` only with the flag).
-const FULL_SCREEN = EVENT_WIZARD_ENABLED
-  ? /^\/admin\/(online-store\/themes\/[^/]+\/(editor|code)|events\/(new|preview-frame|[^/]+\/setup))\/?$/
-  : /^\/admin\/(online-store\/themes\/[^/]+\/(editor|code)|events\/(preview-frame|[^/]+\/setup))\/?$/;
+// spec 050 event setup wizard and its preview frame).
+const FULL_SCREEN = /^\/admin\/(online-store\/themes\/[^/]+\/(editor|code)|events\/(new|preview-frame|[^/]+\/setup))\/?$/;
 
 export default function AdminLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -16,11 +16,9 @@ interface Props {
   eventId: string;
   orgId: string | null;
   className?: string;
-  /** Where each item links; defaults to the existing editors (`readinessHref`). */
-  hrefFor?: (item: ReadinessItem) => string;
 }
 
-export default function PublishBlockers({ blockers, eventId, orgId, className = '', hrefFor }: Props) {
+export default function PublishBlockers({ blockers, eventId, orgId, className = '' }: Props) {
   const { permissions } = useOrg();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -56,7 +54,7 @@ export default function PublishBlockers({ blockers, eventId, orgId, className = 
                 </p>
               ) : (
                 <Link
-                  href={hrefFor ? hrefFor(b) : readinessHref(b, eventId, orgId)}
+                  href={readinessHref(b, eventId, orgId)}
                   className="relative z-10 flex min-h-11 items-center justify-between gap-3 rounded py-2 text-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
                 >
                   <span>{b.message}</span>

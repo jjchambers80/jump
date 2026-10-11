@@ -127,6 +127,6 @@ test('a draft that is not ready shows what to fix instead of publishing', async 
   await expect(alert).toBeFocused();
   await expect(alert.getByRole('link', { name: /Add at least one active ticket tier/ })).toHaveAttribute(
     'href',
-    '/admin/events/evt-draft/edit/sales?orgId=org-dash#event-price-tiers'
+    '/admin/events/evt-draft/setup?step=tickets&org=org-dash'
   );
 });

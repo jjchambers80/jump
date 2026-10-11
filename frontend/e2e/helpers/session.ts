@@ -38,6 +38,9 @@ export async function mintSessionToken(user: StaffUser): Promise<string> {
     .sign(new TextEncoder().encode(authSecret()));
 }
 
+/** The app under test (mirrors playwright.config.ts), for pages opened outside a test's own fixtures. */
+export const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${process.env.PLAYWRIGHT_PORT || '3001'}`;
+
 /** Sign the page in as staff: session cookie for the edge + mocked session endpoint for the client. */
 export async function signInAsStaff(page: Page, user: StaffUser, baseURL: string) {
   const token = await mintSessionToken(user);

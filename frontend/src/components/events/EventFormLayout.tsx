@@ -1,13 +1,13 @@
 'use client';
 
-// Shared layout pieces for the admin event create and edit pages.
+// Shared layout pieces for the admin venue editor and the event setup wizard's
+// fields (the old event create and edit pages went in spec 050-P).
 // Content (name, description, tiers, add-ons) sits in the wide left column;
 // configuration (venue, date, admission, category) in the right-hand <aside>.
 // Fields in the aside are outside the <form> element, so they point back at it
 // with the `form` attribute: native `required` checks and Enter-to-submit still work.
 
 import React from 'react';
-import TierPresetMenu, { type TierPreset } from './TierPresetMenu';
 
 export const EVENT_FORM_ID = 'event-form';
 
@@ -160,15 +160,6 @@ export function FormCard({
   );
 }
 
-/** Plain card for sections that render their own heading (Add-ons). */
-export function FormPanel({ id, children }: { id?: string; children: React.ReactNode }) {
-  return (
-    <div id={id} className={cardClass}>
-      {children}
-    </div>
-  );
-}
-
 export function EventFormActions({
   submitLabel,
   savingLabel,
@@ -205,22 +196,6 @@ export function EventFormActions({
       >
         Cancel
       </button>
-    </div>
-  );
-}
-
-/**
- * Save card at the top of the aside, pinned while the content column scrolls.
- * Hidden below `xl`, where the sticky bottom bar takes over.
- */
-export function EventFormActionsCard(props: Omit<React.ComponentProps<typeof EventFormActions>, 'layout'> & {
-  children?: React.ReactNode;
-}) {
-  const { children, ...actions } = props;
-  return (
-    <div className="hidden xl:block xl:sticky xl:top-6 xl:z-10 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800 sm:p-6">
-      {children}
-      <EventFormActions {...actions} layout="stack" />
     </div>
   );
 }
@@ -354,33 +329,5 @@ export function RsvpSettingsFields({
         {errors.maxPartySize && <p id="event-rsvp-party-size-error" className={errorClass}>{errors.maxPartySize}</p>}
       </div>
     </div>
-  );
-}
-
-/** "Saved tiers" menu (pick, edit, delete — spec 037 D2) + "+ Add Tier" for the Price Tiers card header. */
-export function TierHeaderActions({
-  orgId,
-  presets,
-  onPresetsChange,
-  onPick,
-  onAdd,
-}: {
-  orgId: string | null;
-  presets: TierPreset[];
-  onPresetsChange: (next: TierPreset[]) => void;
-  onPick: (preset: TierPreset) => void;
-  onAdd: () => void;
-}) {
-  return (
-    <>
-      <TierPresetMenu orgId={orgId} presets={presets} onPresetsChange={onPresetsChange} onPick={onPick} />
-      <button
-        type="button"
-        onClick={onAdd}
-        className={`min-h-9 rounded-md bg-accent-500 px-3 py-1.5 text-xs font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
-      >
-        + Add Tier
-      </button>
-    </>
   );
 }

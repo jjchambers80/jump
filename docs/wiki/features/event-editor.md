@@ -1,71 +1,30 @@
-# Event Editor (Admin)
+# Event Editor (Admin) — retired
 
-> **Spec 037 phase 3:** the edit page is now two section editors over one component (`edit/EventEditor.tsx`, `scope` prop): `/admin/events/:id/edit/details` (Details, Media, Date & venue, Listing) and `/admin/events/:id/edit/sales` (Admission, Price tiers, Add-ons). Each saves only its fields and returns to the event's Details page; `/edit` redirects by hash. Small edits (one tier, admission, listing, form settings) happen in flyouts on the Details page — see [Event Details](event-details.md).
-
-> **Spec 050 (event setup wizard):** with `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` on, `/admin/events/new` is the wizard and `/edit`, `/edit/details`, `/edit/sales` redirect to its steps (`legacyEditStep`); this page describes the flag-off editors, which 050-P deletes once the flag is on in prod. The old create page lives on as `new/LegacyCreateEventPage.tsx`. Shared pieces moved out so both use them: `components/events/tierForm.ts` (tier form mapping, bodies, `tierErrors`, `capacityOverflow`), `components/events/EventTaxSummary.tsx`, and `AddOnsSection` split into `AddOnRow` / `AddOnDialog`. `TierEditDialog` is now a real modal (`useDialog`). See [Event Setup Wizard](event-setup-wizard.md).
-
-**Status**: Implemented (flag off; superseded by the wizard under the flag)
+**Status**: Retired in spec 050-P (2026-10-11). The [Event Setup Wizard](event-setup-wizard.md) is the only event editor.
 **Last Updated**: 2026-10-11
 
-## Overview
-The admin event create and edit pages (`/admin/events/new`, `/admin/events/:eventId/edit`) share one two-column layout: content on the left, event settings in the right-hand aside. The edit page (redesigned in PR #196) is laid out like a run sheet. It is titled by the event itself, numbers its sections, and opens the aside with a ticket-stub summary: the event as buyers will meet it, and how its capacity splits across tiers. A save card stays pinned to the bottom of the screen and tracks unsaved changes.
+The old event editor (spec 037 phase 3: `/admin/events/new`'s one-page form and the two section editors `edit/details` and `edit/sales` over `edit/EventEditor.tsx`, plus the four Details flyouts in `components/events/EventFlyouts.tsx`) was deleted once the owner signed the wizard parity checklist (PR #431) and the wizard went on in prod. Its history is in git (last on `main` before 050-P).
 
-## Key Files
-| File | Purpose |
-|------|---------|
-| `frontend/src/components/events/EventFormLayout.tsx` | Shared shell (`EventFormShell`, 8/4 grid, flex-column aside, mobile sticky save bar), `EventFormHeader` (eyebrow + title + meta line), `FormCard` (numbered `step`, `id` anchor, staggered entrance), `FormPanel`, `EventFormActions`, `EventFormActionsCard` (Create page's top-pinned save card), `AdmissionModeField`, `RsvpSettingsFields`, `TierHeaderActions` |
-| `frontend/src/components/events/EventEditSummary.tsx` | Edit page only: `EventEditSummary` (stub: image band, date tile, venue/time, perforation, capacity meter, tier legend, section links), `EventSaveCard` (bottom-pinned save state + actions), `EventStatusPill`, `tierAccent(index)` |
-| `frontend/src/app/admin/events/[eventId]/edit/page.tsx` | Edit page: load, dirty snapshot + `beforeunload` guard, section list / step numbers, PATCH + tier create/patch/reorder on save |
-| `frontend/src/app/admin/events/new/page.tsx` → `LegacyCreateEventPage.tsx` | Create page (same shell, no summary, no step numbers); the route renders the wizard instead when the flag is on |
-| `frontend/src/components/events/EventMediaCard.tsx` | Media card (event image), optional `step` |
-| `frontend/src/app/admin/events/[eventId]/edit/AddOnsSection.tsx` | Add-ons (saves through its own API immediately), optional `step` |
-| `frontend/src/components/TierEditDialog.tsx` | `TierCard` (optional `accentClass`: edge strip + sold bar) and `TierEditDialog` |
-| `frontend/tailwind.config.js` | `animate-card-in` keyframe |
-| `frontend/e2e/admin-event-form-layout.spec.ts` | Layout, sticky save, keyboard radios, media, summary / dirty state / section jump |
+## What the old URLs do now
 
-## Configuration
-None.
+| Old URL | Now |
+|---|---|
+| `/admin/events/new` | The setup wizard, steps 1–3 (no row until the date step) |
+| `/admin/events/:id/edit#event-…` | Redirect to the wizard step that owns the section (`legacyEditStep` in `frontend/src/lib/eventWizard.ts`; fallback `name`) |
+| `/admin/events/:id/edit/details#…` | Same map, fallback `name` |
+| `/admin/events/:id/edit/sales#…` | Same map, fallback `tickets` |
+| `/admin/events/:id/applications/forms` | `setup?step=vendors` |
+| `/admin/events/:id/applications/forms/:formId` | `setup?step=<the form's purpose step>&form=<id>` |
 
-## How It Works
+Every redirect is `components/event-setup/WizardRedirect.tsx`, which carries `?orgId=` / `?org=` as `&org=` so a member of two organizations lands in the right one. Keep these routes for bookmarks and email links; never put a form back on them.
 
-### Header
-`EventFormHeader` takes `eyebrow`, `title` and `meta`. On the edit page the `<h1>` holds the "Edit event" eyebrow and the event's live name, so its accessible name is "Edit event Summer Music Festival" (tests match `/edit event/i`). The meta line shows `EventStatusPill`, `formatEventDateTime(instant, venueZone)` and the venue name. Event times use the venue's wall clock (spec 033).
+## What stayed
 
-### Numbered sections
-The page builds one ordered `sections` list (main column first, then the aside). Tiers appear only for `TICKETED`. `stepOf(id)` gives each `FormCard` / `EventMediaCard` / `AddOnsSection` its `step`. The number is `aria-hidden` and never part of the region name, so `getByRole('region', { name: 'Event Details' })` still works. `FormCard` now sets `id={id}` on the `<section>` so it can be linked to.
-
-### Summary stub (xl only)
-`EventEditSummary` is read-only and derives everything from the page's form state:
-- **Image band**: the event image (blurred, cover), or a striped placeholder with the event's initial.
-- **Date tile**: month / day / weekday, split from `formatEventDate(instant, zone)`, so it uses the venue zone like every other event date.
-- **Capacity meter** (`role="img"` with a full-sentence `aria-label`): one segment per tier, sized against `max(capacity, sum of tier quantities)`. The sold part is solid, the rest tinted, and capacity no tier holds is hatched. Tiers over capacity add a red ring and "N over capacity". RSVP events show the headcount cap instead.
-- **Tier legend**: colors come from `tierAccent(index)`, which `TierCard` also uses, so a row matches its segment.
-- **Section links**: `jumpTo(id)` scrolls only the nearest scrolling ancestor (the admin `<main>`), then focuses the section (`tabindex="-1"`, `outline-none`).
-
-### Save card and unsaved changes
-`EventSaveCard` is the last aside item: `xl:sticky xl:bottom-6 xl:mt-auto`. It stays pinned to the bottom of the viewport while the aside runs past the screen, and rests at the end of the column (flush with the content's end) once reached. Below `xl` it is hidden and the shell's bottom bar is the only Save button.
-
-The dirty state is a `JSON.stringify` snapshot of every field the Save button sends (name, slug, description, venue, date, capacity, category, admission mode, RSVP settings, tiers). It is compared with the baseline taken once tiers are initialised. Media and add-ons save on their own, so they are excluded. While dirty, the card shows "Unsaved changes" (amber, `role="status"`) and a `beforeunload` listener warns before leaving.
-
-## API Endpoints
-Unchanged by the redesign. See [Event Management](event-management.md) and [Price Tiers](price-tiers.md).
-
-## Database
-None.
-
-## Gotchas
-- **Never use a plain `#anchor` or `scrollIntoView` to reach a section.** The admin frame is `h-screen overflow-hidden` with `<main>` scrolling inside it. Both scroll every ancestor, including the frame, which pushes the sidebar off screen with blank space below. Use `jumpTo` (or scroll `<main>` directly).
-- **The save card is pinned to the bottom on purpose.** A tall top-pinned card covers the aside cards (Date & venue, Admission, Listing) as they scroll under it. The Create page still uses the small top-pinned `EventFormActionsCard`.
-- **The aside is `flex flex-col gap-6`, not `space-y-6`.** `space-y-*` sets `margin-top` with higher specificity than `mt-auto` and would stop the save card from resting at the column's end.
-- **`animate-card-in` uses `backwards` fill only.** A lingering `transform` on a card would become the containing block for fixed-position children, and `TierEditDialog` renders inside the Price Tiers card.
-- The dirty baseline is taken after load. `RichTextEditor` sets content with `emitUpdate: false`, so loading a description does not mark the form dirty. Keep it that way.
-- Any new aside or main section should be added to `sections` on the edit page to get a number and a jump link. Better: don't add one. New event fields go into a wizard step (root AGENTS gotcha 39).
-- Capacity is nullable since spec 050-A (`capacity: number | null`): the editor shows an empty input, never sends `NaN`, and `CapacityMeter` renders "Capacity not set".
+- `components/events/EventFormLayout.tsx` (`EventFormShell`, `FormCard`, `FormAlert`, `EventFormActions`, `AdmissionModeField`, `RsvpSettingsFields`, the input classes), `EventSaveCard` and `jumpTo` in `EventEditSummary.tsx`: the venue editor and the wizard's Tickets step use them.
+- `components/events/tierForm.ts`, `EventTaxSummary.tsx`, `TierEditDialog`, `TierCard`, `TierPresetMenu`, `EventMediaCard`, `VenueFlyout`, `SlugField`, `AddOnsSection` (moved to `components/events/add-ons/`): the wizard's steps compose them.
+- The rule that admin pages never scroll with a plain `#anchor` or `scrollIntoView` (scroll `<main>` with `jumpTo`) still holds; see `frontend/AGENTS.md`.
 
 ## Related Features
-- [Event Management](event-management.md)
-- [Price Tiers](price-tiers.md)
-- [Add-ons](add-ons.md)
-- [RSVP Events](rsvp-events.md)
-- [Venue Time Zones](venue-time-zones.md)
-- [Events List](events-list.md)
+
+- [Event Setup Wizard](event-setup-wizard.md)
+- [Event Details](event-details.md)

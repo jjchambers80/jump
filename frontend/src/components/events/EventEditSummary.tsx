@@ -1,14 +1,11 @@
 'use client';
 
-// Summary at the top of the edit page's aside, drawn like a ticket stub: the
-// event as buyers will meet it (image, date at the venue, venue), a
-// perforation, how its capacity is split across tiers, and jump links to each
-// section of the form. Read-only: every number comes from the form state the
-// page already holds. `EventSaveCard` is its partner at the foot of the aside.
+// Shared pieces of the admin event and venue pages: tier colors, the status
+// pill, the ticket-stub perforation, the capacity meter, and the venue
+// editor's jump links and save card. (The old event editor's summary stub went
+// with the editor in spec 050-P.)
 
 import React from 'react';
-import { formatEventDate, formatEventTime } from '@/lib/eventTime';
-import type { AdmissionMode } from './EventFormLayout';
 
 /** Tier colors, shared with the tier list so a meter segment and its row match. */
 const TIER_ACCENTS = [
@@ -55,161 +52,7 @@ export interface SummaryTier {
   quantitySold: number;
 }
 
-export interface SummarySection {
-  id: string;
-  label: string;
-}
-
-/** "Wed, Nov 25, 2026" → tile parts. Falls back to the whole string. */
-function dateTileParts(instant: Date | null, zone: string | null | undefined) {
-  if (!instant) return null;
-  const full = formatEventDate(instant, zone);
-  const match = full.match(/^(\w+), (\w+) (\d+), (\d+)$/);
-  return {
-    full,
-    weekday: match?.[1] ?? '',
-    month: match?.[2] ?? '',
-    day: match?.[3] ?? '',
-    year: match?.[4] ?? '',
-    time: formatEventTime(instant, zone),
-  };
-}
-
 const n = (value: number) => value.toLocaleString('en-US');
-
-export function EventEditSummary({
-  name,
-  imageSrc,
-  status,
-  instant,
-  zone,
-  venueName,
-  admissionMode,
-  capacity,
-  tiers,
-  rsvpLimit,
-  sections,
-}: {
-  name: string;
-  imageSrc: string | null;
-  status: string;
-  /** Event start as an instant; shown on the venue's wall clock. */
-  instant: Date | null;
-  zone: string | null | undefined;
-  venueName: string | null;
-  admissionMode: AdmissionMode;
-  capacity: number | null;
-  tiers: SummaryTier[];
-  rsvpLimit: number | null;
-  sections: SummarySection[];
-}) {
-  const date = dateTileParts(instant, zone);
-  const monogram = (name.trim()[0] ?? 'E').toUpperCase();
-
-  return (
-    <section
-      aria-label="Event summary"
-      className="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-900/[0.04] dark:border-slate-700/80 dark:bg-slate-800 dark:shadow-none motion-safe:animate-card-in"
-    >
-      {/* Image band — the event image, or a quiet striped placeholder with its initial */}
-      <div className="relative h-24 overflow-hidden bg-slate-900">
-        {imageSrc ? (
-          <img src={imageSrc} alt="" className="h-full w-full scale-110 object-cover opacity-80 blur-[2px]" />
-        ) : (
-          <div
-            aria-hidden
-            className="flex h-full items-end justify-end pr-4 [background-image:repeating-linear-gradient(135deg,rgb(255_255_255/0.05)_0_1px,transparent_1px_9px)]"
-          >
-            <span className="translate-y-5 select-none text-8xl font-black leading-none tracking-tighter text-accent-400/20">
-              {monogram}
-            </span>
-          </div>
-        )}
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/10 to-transparent" />
-        <EventStatusPill status={status} className="absolute left-4 top-3" />
-      </div>
-
-      {/* Date tile + name + venue */}
-      <div className="flex items-start gap-4 px-5 pb-5">
-        <div
-          className="relative z-10 -mt-7 flex w-16 shrink-0 flex-col items-center overflow-hidden rounded-lg border border-gray-200 bg-white text-center shadow-md dark:border-slate-600 dark:bg-slate-900"
-          aria-hidden={!!date}
-        >
-          <span className="w-full bg-accent-500 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-gray-950">
-            {date?.month || '—'}
-          </span>
-          <span className="py-1 text-2xl font-bold leading-none tabular-nums text-gray-900 dark:text-white">
-            {date?.day || '··'}
-          </span>
-          <span className="pb-1 text-[0.65rem] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-            {date?.weekday || 'Date'}
-          </span>
-        </div>
-        <div className="min-w-0 pt-3">
-          <p className="truncate font-semibold text-gray-900 dark:text-white" title={name}>
-            {name || 'Untitled event'}
-          </p>
-          <p className="truncate text-sm text-gray-600 dark:text-slate-300">
-            {venueName ?? 'No venue selected'}
-          </p>
-          <p className="text-xs tabular-nums text-gray-500 dark:text-slate-400">
-            {date ? (
-              <>
-                <span className="sr-only">{date.full}, </span>
-                {date.time}
-              </>
-            ) : (
-              'Set a date and time'
-            )}
-          </p>
-        </div>
-      </div>
-
-      <Perforation />
-
-      {/* Capacity */}
-      <div className="px-5 py-4">
-        {admissionMode === 'TICKETED' ? (
-          <CapacityMeter capacity={capacity} tiers={tiers} />
-        ) : (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-slate-400">RSVP</p>
-            <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
-              {rsvpLimit ? (
-                <>
-                  Capped at <span className="font-semibold tabular-nums text-gray-900 dark:text-white">{n(rsvpLimit)}</span> guests
-                </>
-              ) : (
-                'No headcount limit'
-              )}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {sections.length > 0 && (
-        <nav aria-label="Sections" className="border-t border-gray-100 px-5 py-3 dark:border-slate-700/80">
-          <ul className="flex flex-wrap gap-x-1 gap-y-0.5">
-            {sections.map((section) => (
-              <li key={section.id}>
-                <a
-                  href={`#${section.id}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    jumpTo(section.id);
-                  }}
-                  className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
-                >
-                  {section.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
-    </section>
-  );
-}
 
 /**
  * Scroll only the nearest scrolling ancestor (the admin shell's <main>): a plain

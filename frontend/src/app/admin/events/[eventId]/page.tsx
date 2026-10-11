@@ -18,16 +18,17 @@ import { EventStatusPill, Perforation } from '@/components/events/EventEditSumma
 import EventActionsMenu from '@/components/events/EventActionsMenu';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
 import PublishBlockers from '@/components/events/PublishBlockers';
-import { publishBlockers, wizardReadinessHref, type ReadinessItem } from '@/lib/eventReadiness';
+import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
-import { continueSetupHref, detailsEditLinks, EVENT_WIZARD_ENABLED, withOrg } from '@/lib/eventWizard';
+import { continueSetupHref, detailsEditLinks } from '@/lib/eventWizard';
 import { rememberEditControl, takeEditControl } from '@/lib/detailsReturn';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
   AdmissionCard,
   ApplicationsSection,
   DescriptionSection,
+  GuestsCard,
   ListingCard,
   MapCard,
   PaymentsCard,
@@ -35,8 +36,8 @@ import {
   SalesSection,
   WhenWhereCard,
 } from '@/components/events/EventOverviewSections';
-import { formatCount as n, formatMoney, relativeDays, type EventOverview, type OverviewForm, type OverviewTier } from '@/lib/eventOverview';
-import { AdmissionFlyout, FormSettingsFlyout, ListingFlyout, TierFlyout } from '@/components/events/EventFlyouts';
+import { formatCount as n, formatMoney, relativeDays, type EventOverview } from '@/lib/eventOverview';
+import type { AdminEventGuest } from '@/lib/eventGuests';
 import type { PaymentSettingsResponse } from '@/app/admin/settings/payments/types';
 
 const focusRing =
@@ -60,29 +61,26 @@ function EventDetailsContent() {
   const [duplicating, setDuplicating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
-  const [flyout, setFlyout] = useState<
-    | { kind: 'admission' }
-    | { kind: 'listing' }
-    | { kind: 'tier'; tier: OverviewTier | null }
-    | { kind: 'form'; form: OverviewForm }
-    | null
-  >(null);
+  // Spec 050-P: the special guest lineup, for its summary card ('error' when it failed to load).
+  const [guests, setGuests] = useState<AdminEventGuest[] | 'error' | null>(null);
 
   // Spec 050-O: Save & exit in the wizard returns here with ?saved=1 (saved)
   // or ?saved=0 (the organizer left after a failed save).
-  const savedParam = EVENT_WIZARD_ENABLED ? searchParams.get('saved') : null;
+  const savedParam = searchParams.get('saved');
   const returned = useRef(false);
 
   const load = useCallback(async () => {
     if (orgLoading || !orgId || !eventId) return;
     try {
       setError(null);
-      const [data, payments] = await Promise.all([
+      const [data, payments, lineup] = await Promise.all([
         api.get<EventOverview>(`/organizations/${orgId}/events/${eventId}/overview`),
         api.get<PaymentSettingsResponse>('/admin/settings/payments').catch(() => null),
+        api.get<{ data: AdminEventGuest[] }>(`/organizations/${orgId}/events/${eventId}/guests`).then((r) => r.data, () => 'error' as const),
       ]);
       setOverview(data);
       setPaymentSettings(payments);
+      setGuests(lineup);
     } catch (err: any) {
       setOverview(null);
       setError(err?.status === 404 ? 'This event is not in the selected organization.' : err?.message || 'Failed to load the event');
@@ -172,20 +170,10 @@ function EventDetailsContent() {
   const { event } = overview;
   const q = `?orgId=${encodeURIComponent(orgId)}`;
   const base = `/admin/events/${eventId}`;
-  // Spec 037 phase 3: two section editors; small edits open a flyout here.
-  const edit = (section: string) =>
-    `${base}/edit/${['event-price-tiers', 'event-add-ons', 'event-admission'].includes(section) ? 'sales' : 'details'}${q}#${section}`;
-  const hasSales = (overview.tickets?.issued ?? 0) > 0 || overview.money.tickets.orders > 0 || (overview.rsvp?.going ?? 0) > 0;
-  const reload = () => {
-    setFlyout(null);
-    setNotice('Saved.');
-    load();
-  };
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
   const ticketed = event.admissionMode === 'TICKETED';
-  // Spec 050-O: with the wizard flag on, every Edit opens its wizard step and
-  // no flyout mounts (one form per field). Flag off: the editors and flyouts as before.
-  const wizard = EVENT_WIZARD_ENABLED ? detailsEditLinks(eventId, overview.applications.forms, orgId) : null;
+  // Spec 050-O/P: every Edit opens its wizard step (one form per field).
+  const wizard = detailsEditLinks(eventId, overview.applications.forms, orgId);
   const cancelled = event.status === 'CANCELLED';
   const connect = paymentSettings?.connect;
   const paymentsReady =
@@ -195,13 +183,13 @@ function EventDetailsContent() {
   const showPaymentsNotice = !paymentsReady && (hasPaidTier || hasPaidForm);
 
   return (
-    <PageFrame onClickCapture={wizard ? (e) => rememberEditControl(eventId, e.target) : undefined}>
+    <PageFrame onClickCapture={(e) => rememberEditControl(eventId, e.target)}>
       <Breadcrumb name={event.name} />
 
       <EventHero
         overview={overview}
         publicPath={publicPath}
-        imageHref={wizard && !cancelled ? wizard.image : undefined}
+        imageHref={cancelled ? undefined : wizard.image}
         actions={
           <>
             <a
@@ -227,8 +215,8 @@ function EventDetailsContent() {
             )}
             {event.status !== 'CANCELLED' && (
               <Link
-                href={wizard?.name ?? `${base}/edit/details${q}`}
-                className={`inline-flex ${wizard ? 'min-h-11' : 'min-h-9'} items-center gap-1.5 rounded-md bg-accent-500 px-3 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
+                href={wizard.name}
+                className={`inline-flex min-h-11 items-center gap-1.5 rounded-md bg-accent-500 px-3 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover ${focusRing}`}
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
                 Edit event
@@ -278,7 +266,6 @@ function EventDetailsContent() {
           blockers={blockers}
           eventId={eventId}
           orgId={orgId}
-          hrefFor={wizard ? (item) => withOrg(wizardReadinessHref(item, eventId), orgId) : undefined}
           className="mt-4"
         />
       )}
@@ -310,57 +297,39 @@ function EventDetailsContent() {
           {ticketed ? (
             <SalesSection
               overview={overview}
-              editHref={wizard?.tickets ?? edit('event-price-tiers')}
-              editLabel={wizard ? 'Edit tickets' : undefined}
+              editHref={wizard.tickets}
+              editLabel="Edit tickets"
               ordersHref={`/admin/orders?eventId=${eventId}`}
-              onEditTier={wizard || cancelled ? undefined : (tier) => setFlyout({ kind: 'tier', tier })}
-              tierHref={wizard && !cancelled ? wizard.tier : undefined}
-              addOnsHref={wizard?.addOns}
+              tierHref={cancelled ? undefined : wizard.tier}
+              addOnsHref={wizard.addOns}
               delay={40}
             />
           ) : (
-            <RsvpSection overview={overview} editHref={wizard?.tickets ?? edit('event-admission')} addOnsHref={wizard?.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
+            <RsvpSection overview={overview} editHref={wizard.tickets} addOnsHref={wizard.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
           <ApplicationsSection
             overview={overview}
             base={`${base}/applications`}
-            onFormSettings={wizard ? undefined : (form) => setFlyout({ kind: 'form', form })}
-            formHref={wizard?.form}
-            newFormHref={wizard?.newForm}
+            formHref={wizard.form}
+            newFormHref={wizard.newForm}
             delay={80}
           />
-          <DescriptionSection overview={overview} editHref={wizard?.description ?? edit('event-details')} editLabel={wizard ? 'Edit description' : undefined} delay={120} />
+          <GuestsCard guests={guests} editHref={wizard.guests} delay={100} />
+          <DescriptionSection overview={overview} editHref={wizard.description} editLabel="Edit description" delay={120} />
         </div>
         <aside className="min-w-0 space-y-6" aria-label="Event settings">
-          <WhenWhereCard overview={overview} editHref={wizard?.date ?? edit('event-when-where')} venueHref={wizard?.venue} delay={60} />
-          <AdmissionCard
-            overview={overview}
-            editHref={wizard?.tickets ?? edit('event-admission')}
-            onEdit={wizard ? undefined : () => setFlyout({ kind: 'admission' })}
-            delay={100}
-          />
-          <MapCard overview={overview} wizardHref={wizard ? wizard.map : undefined} delay={140} />
+          <WhenWhereCard overview={overview} editHref={wizard.date} venueHref={wizard.venue} delay={60} />
+          <AdmissionCard overview={overview} editHref={wizard.tickets} delay={100} />
+          <MapCard overview={overview} wizardHref={wizard.map} delay={140} />
           <ListingCard
             overview={overview}
-            editHref={wizard?.listing ?? edit('event-listing')}
-            onEdit={wizard ? undefined : () => setFlyout({ kind: 'listing' })}
+            editHref={wizard.listing}
             publicHref={publicPath}
             delay={180}
           />
           <PaymentsCard overview={overview} delay={220} />
         </aside>
       </div>
-
-      {!wizard && flyout?.kind === 'admission' && (
-        <AdmissionFlyout orgId={orgId} event={event} hasSales={hasSales} onClose={() => setFlyout(null)} onSaved={reload} />
-      )}
-      {!wizard && flyout?.kind === 'listing' && <ListingFlyout orgId={orgId} event={event} onClose={() => setFlyout(null)} onSaved={reload} />}
-      {!wizard && flyout?.kind === 'tier' && (
-        <TierFlyout orgId={orgId} event={event} tier={flyout.tier} onClose={() => setFlyout(null)} onSaved={reload} />
-      )}
-      {!wizard && flyout?.kind === 'form' && (
-        <FormSettingsFlyout event={event} form={flyout.form} paymentsReady={paymentsReady} onClose={() => setFlyout(null)} onSaved={reload} />
-      )}
 
       {duplicating && (
         <DuplicateEventDialog
@@ -488,7 +457,6 @@ function EventHero({
               <Link
                 href={imageHref}
                 aria-label="Edit image"
-                title="Edit image"
                 className={`group absolute inset-0 rounded-xl ${focusRing}`}
               >
                 <span className="absolute left-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white/95 text-gray-700 shadow-sm group-hover:text-accent-700 dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-200">

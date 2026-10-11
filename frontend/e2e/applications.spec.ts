@@ -368,48 +368,9 @@ test('admin detail: answers, notes, waitlist with edited email and history', asy
   await expect(page.getByTestId('application-actions')).not.toContainText('Waitlist');
 });
 
-test('forms: create a free form, edit settings, add a question', async ({ page, baseURL }) => {
-  const api = await mockAdmin(page, baseURL!);
-  await page.goto(`/admin/events/${EVENT_ID}/applications/forms`);
-  await expect(page.getByTestId('form-row-press-media')).toContainText('Open');
-  await expect(page.getByTestId('form-row-press-media')).toContainText('3 questions');
-
-  await page.getByTestId('forms-new').click();
-  await page.getByLabel('Name').fill('Panels');
-  await page.getByRole('button', { name: 'Create' }).click();
-  await expect(page).toHaveURL(new RegExp(`/applications/forms/form-new$`));
-  expect(api.calls.find((c) => c.method === 'POST' && c.path.endsWith('/application-forms'))?.body).toEqual({ kind: 'FREE', name: 'Panels' });
-
-  await page.goto(`/admin/events/${EVENT_ID}/applications/forms/form-press`);
-  await expect(page.getByTestId('form-settings')).toBeVisible();
-  await expect(page.getByTestId('form-tiers')).toHaveCount(0);
-  await page.getByLabel('Status').selectOption('CLOSED');
-  await page.getByRole('button', { name: 'Save settings' }).click();
-  await expect(page.getByRole('status')).toContainText('Form settings saved');
-  expect(api.calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/form-press'))?.body).toMatchObject({ status: 'CLOSED', name: 'Press & Media', slug: 'press-media' });
-
-  const add = page.getByTestId('question-add');
-  await add.getByLabel('Question').fill('Years covering games');
-  await add.getByLabel('Type').selectOption('NUMBER');
-  await add.getByRole('button', { name: 'Add question' }).click();
-  await expect(page.getByRole('status')).toContainText('Question added');
-  await expect(page.getByTestId('form-questions')).toContainText('Years covering games');
-
-  const a11y = await new AxeBuilder({ page }).include('main').analyze();
-  expect(a11y.violations).toEqual([]);
-});
-
-// Spec 050-E: event form configuration is an ORGANIZER default (applications.forms).
-test('ORGANIZER builds forms', async ({ page, baseURL }) => {
-  await mockAdmin(page, baseURL!, 'ORGANIZER');
-  await page.goto(`/admin/events/${EVENT_ID}/applications/forms`);
-  await expect(page.getByTestId('forms-new')).toBeVisible();
-  await page.goto(`/admin/events/${EVENT_ID}/applications/forms/form-press`);
-  await expect(page.getByLabel('Status')).toBeEnabled();
-  await expect(page.getByTestId('question-add')).toBeVisible();
-  const a11y = await new AxeBuilder({ page }).include('main').analyze();
-  expect(a11y.violations).toEqual([]);
-});
+// Event form configuration (create, settings, questions, ORGANIZER access) is
+// covered on the setup wizard steps by admin-event-setup-applications.spec.ts
+// since spec 050-P deleted the old forms pages.
 
 test('settings: application email templates edit and save', async ({ page, baseURL }) => {
   const api = await mockAdmin(page, baseURL!);

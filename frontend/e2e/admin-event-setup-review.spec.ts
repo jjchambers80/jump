@@ -1,11 +1,10 @@
-// Wizard step 13, Review and publish (spec 050-N). Runs on the flag-on dev
-// server (playwright.config.ts › PLAYWRIGHT_WIZARD_BASE_URL); every API call is
+// Wizard step 13, Review and publish (spec 050-N). Every API call is
 // mocked, anything else answers 404. Assertions are scoped to <main>: the
 // preview frame repeats the event's name.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
-import { signInAsStaff } from './helpers/session';
+import { BASE_URL, signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-review';
@@ -82,9 +81,6 @@ async function mockApi(page: Page, setup: Setup = {}) {
   return calls;
 }
 
-const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
-test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
-test.use({ baseURL: WIZARD_URL });
 
 const main = (page: Page) => page.locator('main');
 const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
@@ -97,9 +93,8 @@ const serious = async (page: Page) =>
 // Compile the routes these tests visit once, before anything is timed.
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
-  if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
-  await signInAsStaff(page, STAFF, WIZARD_URL);
+  const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, BASE_URL);
   await mockApi(page);
   for (const step of ['review', 'tickets', 'done']) {
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=${step}`, { timeout: 120000 });
@@ -254,7 +249,7 @@ test.describe('desktop', () => {
     await main(page).getByRole('button', { name: 'Publish' }).click();
     const summary = main(page).getByRole('alert').filter({ hasText: 'Fix 1 thing before publishing' });
     await expect(summary).toBeFocused();
-    await expect(summary.getByRole('link', { name: /The start time has passed\./ })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=date`);
+    await expect(summary.getByRole('link', { name: /The start time has passed\./ })).toHaveAttribute("href", `/admin/events/${EVENT_ID}/setup?step=date&org=${ORG_ID}`);
     await expect(heading(page, 'Review and publish')).toBeVisible();
   });
 

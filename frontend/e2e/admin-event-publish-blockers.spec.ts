@@ -15,7 +15,7 @@ const future = new Date(Date.now() + 20 * 86_400_000).toISOString();
 const event = {
   id: EVENT_ID, slug: 'spring-swap', name: 'Spring Swap Meet', description: null, logoUrl: null, date: future, endDate: null,
   capacity: null, category: null, status: 'DRAFT', admissionMode: 'TICKETED', rsvpLimit: null, rsvpMaxPartySize: 1, rsvpRemaining: null,
-  setupStep: 'tickets', setupCompletedAt: null, tax: { rate: 0, source: null, region: 'NC' }, taxInclusivePricing: false,
+  setupStep: null, setupCompletedAt: '2026-10-01T00:00:00.000Z', tax: { rate: 0, source: null, region: 'NC' }, taxInclusivePricing: false,
   venue: { id: 'venue-1', name: 'Fairgrounds', address: '1 Fair Rd, Raleigh, NC', timezone: 'America/New_York' },
   priceTiers: [], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z',
 };
@@ -83,13 +83,14 @@ test('a refused publish lists the blockers as text with links to fix them', asyn
   await expect(alert).toBeFocused();
   const links = alert.getByRole('link');
   await expect(links).toHaveCount(2);
+  // Each blocker opens the wizard step that fixes it (spec 050-P), in this organization.
   await expect(alert.getByRole('link', { name: /Set the event capacity/ })).toHaveAttribute(
     'href',
-    `/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}#event-admission`
+    `/admin/events/${EVENT_ID}/setup?step=tickets&org=${ORG_ID}`
   );
   await expect(alert.getByRole('link', { name: /Add at least one active ticket tier/ })).toHaveAttribute(
     'href',
-    `/admin/events/${EVENT_ID}/edit/sales?orgId=${ORG_ID}#event-price-tiers`
+    `/admin/events/${EVENT_ID}/setup?step=tickets&org=${ORG_ID}`
   );
   for (const box of await Promise.all((await links.all()).map((l) => l.boundingBox()))) {
     expect(box!.height).toBeGreaterThanOrEqual(44);
