@@ -14,9 +14,6 @@ import storeFileService from './StoreFileService.js';
 const STARTER_ORG_SELECT = {
   name: true,
   companyName: true,
-  email: true,
-  phoneCountryCode: true,
-  phoneNumber: true,
   addressLine1: true,
   addressLine2: true,
   city: true,

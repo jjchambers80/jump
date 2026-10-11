@@ -8,7 +8,7 @@
 Each store can publish seven buyer-facing policies from **Settings › Policies › Written policies**: Return and refund policy, Privacy policy, Terms of service, Shipping policy, Contact information, Legal notice, and Accessibility statement. The screen is modelled on Shopify's Policies page.
 
 - Each row shows **Published** or **No policy set** and opens a dialog with a WYSIWYG editor (`RichTextEditorField`). The dialog has Cancel and Save.
-- A policy with no saved text opens on **starter text**: a generic template filled in with the store's name, email, phone, address and its self-serve refund rules (Settings › Customer accounts). Nothing is stored until the store presses **Publish**.
+- A policy with no saved text opens on **starter text**: a generic template filled in with the store's name, address and its self-serve refund rules (Settings › Customer accounts). The store's email and phone number are never copied in: policies end with a plain "please contact us" line, and the store adds the contact details it wants public. Nothing is stored until the store presses **Publish**.
 - A dialog warning says the starter text is not legal advice. The page footer adds: *"Recommended policies are not legal advice. You are responsible for ensuring they are accurate and comply with applicable laws."*
 - **Remove policy** deletes the page, and the row goes back to *No policy set*. Any policy can stay unset.
 - Published policies are linked under the storefront footer and below the consent line at checkout. The **⋯** menu has **Show policies in footer and checkout** (`Organization.showPoliciesInFooter`, default on).
@@ -56,6 +56,6 @@ The catalog action is `settings.policies` under the locked `settings` feature (`
 
 ## Tests
 
-- `backend/tests/contract/policies.test.js`: the list, starter text (escaped), ORGANIZER 403s, validation, save (sanitized) followed by the public page and menus link, hiding from Content › Pages, org scoping, the footer switch, and remove.
+- `backend/tests/contract/policies.test.js`: the list, starter text (escaped, no store email), ORGANIZER 403s, validation, save (sanitized) followed by the public page and menus link, hiding from Content › Pages, org scoping, the footer switch, and remove.
 - `backend/tests/unit/policyTemplates.test.js`: every type renders, and the refund rules are filled in.
 - `frontend/e2e/admin-settings-policies.spec.ts`: the list, publishing starter text, Cancel, the ⋯ switch, and the storefront footer link.

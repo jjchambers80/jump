@@ -24,13 +24,11 @@ export function policyMeta(type) {
 
 function details(org) {
   const name = escapeHtml(org.companyName || org.name || 'our organization');
-  const email = org.email ? escapeHtml(org.email) : null;
-  const phone = org.phoneNumber ? escapeHtml(`${org.phoneCountryCode || ''} ${org.phoneNumber}`.trim()) : null;
   const address = [org.addressLine1, org.addressLine2, [org.city, org.state].filter(Boolean).join(', '), org.postalCode]
     .filter(Boolean)
     .map(escapeHtml)
     .join('<br>');
-  return { name, email, phone, address };
+  return { name, address };
 }
 
 function refundTerms(org) {
@@ -49,10 +47,9 @@ function refundTerms(org) {
   return `<p>You can request a refund for eligible tickets from your account ${cutoff}.${fee} Some ticket types are marked non-refundable at checkout.</p>`;
 }
 
-const contactLine = ({ email, phone }) =>
-  email || phone
-    ? `<p>Questions? Contact us${email ? ` at <a href="mailto:${email}">${email}</a>` : ''}${phone ? `${email ? ' or' : ''} by phone at ${phone}` : ''}.</p>`
-    : '<p>Questions? Contact us using the details on our contact page.</p>';
+// The store's email and phone are never copied into starter text: the
+// organization adds the contact details it wants public itself.
+const CONTACT_LINE = '<p>If you have any questions about this policy, please contact us.</p>';
 
 const TEMPLATES = {
   REFUND: (org, d) => `
@@ -62,7 +59,7 @@ ${refundTerms(org)}
 <p>Approved refunds are returned to the original payment method. Your bank may take 5–10 business days to show the credit.</p>
 <h2>Add-ons and merchandise</h2>
 <p>Unused add-ons purchased with a ticket are refunded with that ticket. Physical items may be returned unused within 30 days of receipt.</p>
-${contactLine(d)}`,
+${CONTACT_LINE}`,
 
   PRIVACY: (_org, d) => `
 <p>${d.name} respects your privacy. This policy explains what personal information we collect when you buy tickets, register or apply for our events, and how we use it.</p>
@@ -74,7 +71,7 @@ ${contactLine(d)}`,
 <p>We share information only with service providers who help us run our store and events (for example payment processing and email delivery). We do not sell your personal information.</p>
 <h2>Your choices</h2>
 <p>You may request a copy of your data, ask us to correct it, or ask us to delete it. You can unsubscribe from marketing emails at any time.</p>
-${contactLine(d)}`,
+${CONTACT_LINE}`,
 
   TERMS: (_org, d) => `
 <p>These terms apply to purchases and registrations made through this store, operated by ${d.name}.</p>
@@ -88,26 +85,23 @@ ${contactLine(d)}`,
 <p>Attendees must follow venue rules and staff instructions. We may remove anyone who endangers others, without a refund.</p>
 <h2>Liability</h2>
 <p>To the extent permitted by law, our liability is limited to the amount you paid for your order.</p>
-${contactLine(d)}`,
+${CONTACT_LINE}`,
 
   SHIPPING: (_org, d) => `
 <h2>Tickets</h2>
 <p>Tickets are delivered by email right after your order is confirmed and are always available from your account. There is no physical shipping for tickets.</p>
 <h2>Physical items</h2>
 <p>Any physical items are available for pickup at the event unless the product says otherwise. Where shipping is offered, delivery times and costs are shown at checkout.</p>
-${contactLine(d)}`,
+${CONTACT_LINE}`,
 
   CONTACT: (_org, d) => `
 <p><strong>${d.name}</strong></p>
 ${d.address ? `<p>${d.address}</p>` : ''}
-${d.email ? `<p>Email: <a href="mailto:${d.email}">${d.email}</a></p>` : ''}
-${d.phone ? `<p>Phone: ${d.phone}</p>` : ''}
-${!d.address && !d.email && !d.phone ? '<p>Add your email, phone number and business address here.</p>' : ''}`,
+<p>We'd love to hear from you. Contact us with any questions about your order, tickets or our events.</p>`,
 
   LEGAL_NOTICE: (_org, d) => `
 <p>This store is operated by <strong>${d.name}</strong>.</p>
 ${d.address ? `<p>${d.address}</p>` : ''}
-${d.email ? `<p>Email: <a href="mailto:${d.email}">${d.email}</a></p>` : ''}
 <p>Add your registered business name, registration or tax number, and the person responsible for this site if the law where you operate requires it.</p>`,
 
   ACCESSIBILITY: (_org, d) => `
@@ -118,7 +112,7 @@ ${d.email ? `<p>Email: <a href="mailto:${d.email}">${d.email}</a></p>` : ''}
 <p>Ask us about accessible seating, step-free access, companion tickets and other accommodations before you attend.</p>
 <h2>Feedback</h2>
 <p>If something on this site or at our events is hard to use, please tell us so we can fix it.</p>
-${contactLine(d)}`,
+${CONTACT_LINE}`,
 };
 
 /** Starter `{ title, content }` for one policy type, filled from the organization. */

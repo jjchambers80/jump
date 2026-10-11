@@ -1,7 +1,7 @@
 // Spec 052: starter policy text.
 import { POLICY_TYPES, starterPolicy } from '../../src/config/policyTemplates.js';
 
-const org = { name: 'Retro <Expo>', email: null, selfServeRefundsEnabled: true, selfServeRefundCutoffHours: 48, selfServeRefundFeeType: 'FIXED', selfServeRefundFeeValue: '2.5' };
+const org = { name: 'Retro <Expo>', email: 'owner@private.test', phoneNumber: '9999999999', selfServeRefundsEnabled: true, selfServeRefundCutoffHours: 48, selfServeRefundFeeType: 'FIXED', selfServeRefundFeeValue: '2.5' };
 
 describe('starterPolicy', () => {
   it('builds titled HTML for every policy type with the store name escaped', () => {
@@ -10,6 +10,7 @@ describe('starterPolicy', () => {
       expect(policy.title).toBe(title);
       expect(policy.content).toMatch(/^<(p|h2)>/);
       expect(policy.content).not.toContain('<Expo>');
+      expect(policy.content).not.toMatch(/owner@private\.test|9999999999|mailto:/);
     }
   });
 
