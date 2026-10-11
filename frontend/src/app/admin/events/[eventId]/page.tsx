@@ -17,6 +17,8 @@ import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eve
 import { EventStatusPill, Perforation } from '@/components/events/EventEditSummary';
 import EventActionsMenu from '@/components/events/EventActionsMenu';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
+import PublishBlockers from '@/components/events/PublishBlockers';
+import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
@@ -49,6 +51,7 @@ function EventDetailsContent() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [blockers, setBlockers] = useState<ReadinessItem[]>([]);
   const [duplicating, setDuplicating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -83,12 +86,17 @@ function EventDetailsContent() {
     if (!orgId) return;
     setPublishing(true);
     setError(null);
+    setNotice(null);
+    setBlockers([]);
     try {
       await api.post(`/organizations/${orgId}/events/${eventId}/publish`, {});
       setNotice('Published. The event page is live.');
       await load();
     } catch (err: any) {
-      setError(err?.message || 'Failed to publish the event');
+      // Spec 050-C: a 422 lists what to fix; anything else is a plain error.
+      const found = publishBlockers(err);
+      if (found) setBlockers(found);
+      else setError(err?.message || 'Failed to publish the event');
     } finally {
       setPublishing(false);
     }
@@ -171,7 +179,7 @@ function EventDetailsContent() {
                 type="button"
                 onClick={publish}
                 disabled={publishing}
-                className={`inline-flex min-h-9 items-center rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 ${focusRing}`}
+                className={`inline-flex min-h-11 items-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-60 ${focusRing}`}
               >
                 {publishing ? 'Publishing…' : 'Publish'}
               </button>
@@ -211,6 +219,10 @@ function EventDetailsContent() {
           )}
         />
       </div>
+
+      {blockers.length > 0 && event.status === 'DRAFT' && (
+        <PublishBlockers blockers={blockers} eventId={eventId} orgId={orgId} className="mt-4" />
+      )}
 
       {(notice || error) && (
         <p
@@ -411,7 +423,7 @@ function EventHero({
                 </span>
               )}
             </div>
-            <p className="mt-1 truncate font-mono text-xs text-gray-400 dark:text-slate-500">
+            <p className="mt-1 truncate font-mono text-xs text-gray-500 dark:text-slate-400">
               {publicPath}
               <span className="sr-only">, doors at {formatEventTime(event.date, zone)}</span>
             </p>

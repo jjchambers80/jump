@@ -126,8 +126,9 @@ const adminService = {
   /**
    * Publish an event (make visible to customers)
    */
-  async publishEvent(eventId: string): Promise<{ event: AdminEvent }> {
-    return api.post<{ event: AdminEvent }>(`/admin/events/${eventId}/publish`, {});
+  async publishEvent(orgId: string, eventId: string): Promise<AdminEvent> {
+    // Spec 050-C: the org-scoped route runs the readiness check (422 EVENT_NOT_READY).
+    return api.post<AdminEvent>(`/organizations/${orgId}/events/${eventId}/publish`, {});
   },
 
   /**
