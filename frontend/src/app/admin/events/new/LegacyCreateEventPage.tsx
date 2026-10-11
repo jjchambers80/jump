@@ -82,7 +82,7 @@ function newTier(): PriceTierInput {
   };
 }
 
-export default function CreateEventPage() {
+export default function LegacyCreateEventPage() {
   const router = useRouter();
 
   const { selectedOrgId } = useOrg();
