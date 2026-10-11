@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, Suspense, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
@@ -28,7 +28,9 @@ import {
 import { mapsApi } from '@/services/api';
 import type { MapBooth, MapElement } from '@/services/api';
 import { formatPrice } from '@/lib/fees';
+import { safeAdminReturnTo } from '@/lib/returnTo';
 import { useMapEditor, tempId, type Layout, type SaveStatus } from '@/components/maps/useMapEditor';
+import { useLeaveAfterSave } from '@/components/maps/useLeaveAfterSave';
 import EditorCanvas, { type EditorCanvasHandle } from '@/components/maps/builder/EditorCanvas';
 import AddPalette from '@/components/maps/builder/AddPalette';
 import InspectorPanel from '@/components/maps/builder/InspectorPanel';
@@ -76,6 +78,8 @@ function BuilderContent() {
   const params = useParams();
   const router = useRouter();
   const mapId = params.mapId as string;
+  // Opened from the setup wizard (spec 050-M): Back and Done go back there.
+  const returnTo = safeAdminReturnTo(useSearchParams().get('returnTo'));
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
 
@@ -100,6 +104,8 @@ function BuilderContent() {
     publish,
     unpublish,
   } = useMapEditor(mapId);
+  const go = useCallback((href: string) => router.push(href), [router]);
+  const { leaving, leave } = useLeaveAfterSave(saveStatus, save, go);
 
   const canvasRef = useRef<EditorCanvasHandle>(null);
   const [zoom, setZoom] = useState(1);
@@ -640,10 +646,10 @@ function BuilderContent() {
           <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-red-500" aria-hidden="true" />
           <p className="font-medium text-red-600 dark:text-red-400">{error}</p>
           <button
-            onClick={() => router.push('/admin/maps')}
+            onClick={() => router.push(returnTo ?? '/admin/maps')}
             className="mt-4 text-sm text-accent-600 hover:underline dark:text-accent-400"
           >
-            Back to maps
+            {returnTo ? 'Back to setup' : 'Back to maps'}
           </button>
         </div>
       </div>
@@ -672,9 +678,14 @@ function BuilderContent() {
       {/* Header */}
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         <Link
-          href={state.eventId ? `/admin/events/${state.eventId}` : '/admin/maps'}
-          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700"
-          aria-label="Back to event"
+          href={returnTo ?? (state.eventId ? `/admin/events/${state.eventId}` : '/admin/maps')}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            leave(e.currentTarget.getAttribute('href')!);
+          }}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-400 dark:hover:bg-slate-700"
+          aria-label={returnTo ? 'Back to setup' : 'Back to event'}
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
@@ -741,7 +752,7 @@ function BuilderContent() {
                 href={`/events/${state.eventId}/map`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 View map
@@ -750,7 +761,7 @@ function BuilderContent() {
               <button
                 type="button"
                 onClick={handleUnpublish}
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <EyeOff className="h-4 w-4" aria-hidden="true" />
                 Unpublish
@@ -763,10 +774,26 @@ function BuilderContent() {
                 setPublishError(null);
                 setShowPublish(true);
               }}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
             >
               <Eye className="h-4 w-4" aria-hidden="true" />
               Publish
+            </button>
+          )}
+          {returnTo && (
+            <button
+              type="button"
+              onClick={() => leave(returnTo)}
+              disabled={leaving}
+              aria-busy={leaving}
+              className="inline-flex min-h-11 disabled:cursor-wait disabled:opacity-70 items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              {leaving ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              ) : (
+                <Check className="h-4 w-4" aria-hidden="true" />
+              )}
+              {leaving ? 'Saving…' : 'Done'}
             </button>
           )}
         </div>
@@ -1036,7 +1063,7 @@ function IconButton({
       aria-keyshortcuts={shortcut}
       aria-pressed={pressed}
       title={shortcut ? `${label} (${shortcut})` : label}
-      className="flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700"
+      className="flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700"
     >
       {children}
     </button>
