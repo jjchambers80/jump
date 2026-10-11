@@ -9,7 +9,7 @@
 // `preview` = no commerce: checkout and RSVP submit are disabled, no dialog
 // opens, and unset fields render as placeholders ("Add a date", "$ –").
 // Section anchors: #event-hero #event-hero-image #event-date #event-venue
-// #about #tickets #rsvp-pass #add-ons #get-involved #floor-map.
+// #about #tickets #rsvp-pass #add-ons #get-involved #floor-map #guests.
 
 import type { ReactNode } from 'react';
 import BrandScope from '@/components/BrandScope';
@@ -24,6 +24,7 @@ import EventTickets from './EventTickets';
 import EventRsvp from './EventRsvp';
 import EventCart from './EventCart';
 import EventMobileBar from './EventMobileBar';
+import EventGuests from './EventGuests';
 import { EMPTY_CART, type EventCart as Cart } from './useEventCart';
 import { eventPageState, type EventPageEvent, type EventPageOrg, type PriceTier } from './eventPage';
 
@@ -125,6 +126,7 @@ export default function EventPageView({
                 />
               </>
             )}
+            <EventGuests guests={event.guests} preview={preview} className="mt-10" />
           </div>
         </div>
 
