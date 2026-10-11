@@ -66,6 +66,16 @@ export const ART: Record<SetupTaskId, React.ReactNode> = {
       <text x="80" y="33" fontSize="10" fill={stroke} textAnchor="middle">.com</text>
     </svg>
   ),
+  policies: (
+    <svg viewBox="0 0 160 80" className="w-full h-full text-gray-300 dark:text-slate-600" aria-hidden="true">
+      <g fill="none" stroke={stroke} strokeWidth="2">
+        <rect x="38" y="10" width="56" height="62" rx="6" transform="rotate(-6 66 41)" />
+        <rect x="66" y="10" width="56" height="62" rx="6" className="fill-white dark:fill-slate-800" />
+        <path d="M76 24h36M76 34h36M76 44h24" strokeLinecap="round" />
+        <path d="M100 56l6 6 12-12" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  ),
   applications: (
     <svg viewBox="0 0 160 80" className="w-full h-full text-gray-300 dark:text-slate-600" aria-hidden="true">
       <g fill="none" stroke={stroke} strokeWidth="2">
@@ -138,6 +148,14 @@ export function copyFor(task: SetupTask): TaskCopy {
         doneTitle: 'Web address claimed',
         art: ART.domain,
       };
+    case 'policies':
+      return {
+        title: 'Review your store policies',
+        body: 'Starter refund, privacy and terms policies are ready to edit and publish. They are not legal advice.',
+        cta: 'Review policies',
+        doneTitle: 'Policies published',
+        art: ART.policies,
+      };
     case 'applications':
       return {
         title: 'Open vendor & sponsor applications',
@@ -158,6 +176,6 @@ export function copyFor(task: SetupTask): TaskCopy {
 }
 
 export const GROUPS: { label: string; ids: SetupTaskId[] }[] = [
-  { label: 'Set up your store', ids: ['business', 'design', 'payments', 'domain'] },
+  { label: 'Set up your store', ids: ['business', 'design', 'payments', 'domain', 'policies'] },
   { label: 'Start selling', ids: ['event', 'applications', 'checkin'] },
 ];

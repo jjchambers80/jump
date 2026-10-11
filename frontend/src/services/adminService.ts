@@ -82,7 +82,7 @@ export interface DashboardOverview {
   };
 }
 
-export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'applications' | 'checkin';
+export type SetupTaskId = 'event' | 'design' | 'payments' | 'business' | 'domain' | 'policies' | 'applications' | 'checkin';
 
 export interface SetupTask {
   id: SetupTaskId;

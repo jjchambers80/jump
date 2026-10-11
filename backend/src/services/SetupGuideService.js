@@ -29,12 +29,13 @@ class SetupGuideService {
     });
     if (!org) throw new NotFoundError('Organization not found');
 
-    const [eventCount, activeDomainCount, formCount, redeemedCount, connect] = await Promise.all([
+    const [eventCount, activeDomainCount, formCount, redeemedCount, connect, policyCount] = await Promise.all([
       prisma.event.count({ where: { venue: { organizationId } } }),
       prisma.organizationDomain.count({ where: { organizationId, status: 'ACTIVE' } }),
       prisma.applicationForm.count({ where: { event: { venue: { organizationId } } } }),
       prisma.ticket.count({ where: { status: 'REDEEMED', event: { venue: { organizationId } } } }),
       connectService.statusFor(organizationId),
+      prisma.page.count({ where: { organizationId, policyType: { not: null } } }),
     ]);
 
     const goals = org.platformCustomer?.onboarding?.goals ?? [];
@@ -60,6 +61,8 @@ class SetupGuideService {
       },
       { id: 'business', done: Boolean(org.companyName && org.addressLine1), href: '/admin/settings', shown: true },
       { id: 'domain', done: activeDomainCount > 0, href: '/admin/settings/domains', shown: true },
+      // Spec 052: reviewing the starter policies; any one published counts.
+      { id: 'policies', done: policyCount > 0, href: '/admin/settings/policies', shown: true },
       { id: 'applications', done: formCount > 0, href: '/admin/events', shown: showApplications },
       // Phase 3: organizers selling at the door get pointed at the scanner
       { id: 'checkin', done: redeemedCount > 0, href: '/admin/orders/scan', shown: showCheckin },

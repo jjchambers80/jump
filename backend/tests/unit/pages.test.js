@@ -38,7 +38,7 @@ describe('Online Store pages', () => {
 
     await expect(pageService.list('org-1')).resolves.toEqual([{ id: 'page-1' }]);
     expect(page.findMany).toHaveBeenCalledWith({
-      where: { organizationId: 'org-1' },
+      where: { organizationId: 'org-1', policyType: null },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   });
@@ -97,7 +97,7 @@ describe('Online Store pages', () => {
     page.findFirst.mockResolvedValue(null);
     await expect(pageService.get('org-1', 'page-9')).rejects.toMatchObject({ statusCode: 404 });
     expect(page.findFirst).toHaveBeenCalledWith({
-      where: { id: 'page-9', organizationId: 'org-1' },
+      where: { id: 'page-9', organizationId: 'org-1', policyType: null },
     });
   });
 

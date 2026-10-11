@@ -8,6 +8,7 @@ import { prisma } from '@jump/db';
 import { uniqueHandle } from '../utils/uniqueHandle.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { postStatus } from './BlogPostService.js';
+import policyService from './PolicyService.js';
 
 export const MENU_MAX_DEPTH = 3;
 export const MENU_MAX_ITEMS = 200;
@@ -266,9 +267,10 @@ class MenuService {
       include: { items: true },
     });
     const allItems = menus.flatMap((menu) => menu.items);
-    const [targets, organizationSlug] = await Promise.all([
+    const [targets, organizationSlug, policies] = await Promise.all([
       this._resolveTargets(organizationId, allItems),
       this._organizationSlug(organizationId),
+      policyService.publicLinks(organizationId),
     ]);
     const render = (node) => {
       const described = this._describeTarget(organizationSlug, node, targets);
@@ -281,7 +283,8 @@ class MenuService {
         children: node.children.map(render).filter(Boolean),
       };
     };
-    const out = { main: [], footer: [] };
+    // Spec 052: published written policies, linked under the footer and at checkout.
+    const out = { main: [], footer: [], policies };
     for (const menu of menus) {
       const items = buildTree(menu.items).map(render).filter(Boolean);
       if (menu.handle === 'main-menu') out.main = items;

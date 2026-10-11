@@ -21,6 +21,7 @@ import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
 import { validateUpdateCustomerAccountSettings } from '../validators/customerAccountSettingsValidators.js';
+import { validatePolicySettings, validatePolicyType, validateSavePolicy } from '../validators/policyValidators.js';
 import { validateUpdateCustomer } from '../validators/customerValidators.js';
 import {
   timelineQuery,
@@ -57,6 +58,7 @@ import setupGuideService from '../../services/SetupGuideService.js';
 import customerAccountSettingsService from '../../services/CustomerAccountSettingsService.js';
 import billingService from '../../services/BillingService.js';
 import pageService from '../../services/PageService.js';
+import policyService from '../../services/PolicyService.js';
 import pageTemplateService from '../../services/PageTemplateService.js';
 import storefrontPreferencesService from '../../services/StorefrontPreferencesService.js';
 import adminSearchService from '../../services/AdminSearchService.js';
@@ -254,6 +256,58 @@ router.patch(
     }
   }
 );
+
+/** GET /admin/settings/policies — Settings › Policies › Written policies (spec 052). */
+router.get('/settings/policies', async (req, res, next) => {
+  try {
+    res.json(await policyService.list(await activeOrgFor(req)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PATCH /admin/settings/policies { showInFooter } — footer and checkout links (ADMIN). */
+router.patch('/settings/policies', requirePermission('settings.policies'), validatePolicySettings, async (req, res, next) => {
+  try {
+    res.json(await policyService.setShowInFooter(await activeOrgFor(req), req.body.showInFooter));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /admin/settings/policies/:type — the saved policy, or starter text when none is set. */
+router.get('/settings/policies/:type', validatePolicyType, async (req, res, next) => {
+  try {
+    res.json(await policyService.get(await activeOrgFor(req), req.params.type));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** PUT /admin/settings/policies/:type { title, content } — save and publish (ADMIN). */
+router.put(
+  '/settings/policies/:type',
+  requirePermission('settings.policies'),
+  validatePolicyType,
+  validateSavePolicy,
+  async (req, res, next) => {
+    try {
+      res.json(await policyService.save(await activeOrgFor(req), req.params.type, req.body));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/** DELETE /admin/settings/policies/:type — unset a policy ("No policy set") (ADMIN). */
+router.delete('/settings/policies/:type', requirePermission('settings.policies'), validatePolicyType, async (req, res, next) => {
+  try {
+    await policyService.remove(await activeOrgFor(req), req.params.type);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 /** GET /admin/setup-guide — dashboard setup tasks for the active organization (spec 022). */
 router.get('/setup-guide', async (req, res, next) => {

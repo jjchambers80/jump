@@ -112,8 +112,9 @@ export default function FooterSection({
 }: FooterSectionProps) {
   const { organization, resolved, host } = ctx;
   const items = resolved.menus.footer ?? [];
+  const policies = resolved.menus.policies ?? [];
   const legal = showLegalLinks && LEGAL_PAGES_ENABLED;
-  if (!items.length && !blocks.length && !copyright && !legal && !poweredBy) return null;
+  if (!items.length && !policies.length && !blocks.length && !copyright && !legal && !poweredBy) return null;
 
   const before = blocks.length ? (
     <div className="mb-10 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
@@ -148,6 +149,7 @@ export default function FooterSection({
         copyright={copyright || undefined}
         before={before}
         after={after}
+        policies={policies}
       />
     </div>
   );
