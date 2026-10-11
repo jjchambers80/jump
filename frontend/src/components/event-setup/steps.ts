@@ -190,7 +190,7 @@ export const EVENT_STEPS: EventStep[] = [
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
   VENDORS_STEP,
-  { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: false, visible: (ctx) => !!ctx.forms?.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP'), complete: never },
+  { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: true, visible: (ctx) => !!ctx.forms?.some((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP'), complete: never },
   SPECIAL_GUESTS_STEP,
   VOLUNTEERS_STEP,
   OTHER_APPLICATIONS_STEP,

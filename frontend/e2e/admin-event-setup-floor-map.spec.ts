@@ -1,0 +1,231 @@
+// Event setup wizard step 9, Floor map (spec 050-M). Runs on the flag-on dev
+// server (PLAYWRIGHT_WIZARD_BASE_URL) as an ORGANIZER. Every API call is mocked
+// by a small stateful fake (forms and the event's map), so a form patch or a
+// map create changes what the next read returns. Assertions are scoped to the
+// form pane (<main>): the preview frame repeats names.
+
+import AxeBuilder from '@axe-core/playwright';
+import { expect as baseExpect, test, type Page, type Request } from '@playwright/test';
+import { signInAsStaff } from './helpers/session';
+
+const API = 'http://localhost:3002';
+const ORG_ID = 'org-map';
+const EVENT_ID = 'evt-map';
+const expect = baseExpect.configure({ timeout: 15000 });
+const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
+const VENUE = { id: 'v-hall', name: 'Union Hall', address: '1 Main St', timezone: 'America/New_York', city: 'Raleigh', state: 'NC' };
+
+const EVENT = {
+  id: EVENT_ID, slug: 'spring-fair', name: 'Spring Fair', description: null, logoUrl: null,
+  date: '2031-06-01T20:00:00.000Z', endDate: null, capacity: 100, category: null, status: 'DRAFT',
+  admissionMode: 'TICKETED', setupStep: 'vendors', setupCompletedAt: null, rsvpLimit: null, rsvpMaxPartySize: 1,
+  rsvpRemaining: null, taxRate: 0, tax: { rate: 0, source: null, region: null }, taxInclusivePricing: false,
+  organizationId: ORG_ID, organizationName: 'Map Org',
+  venue: { id: VENUE.id, name: VENUE.name, address: VENUE.address, timezone: VENUE.timezone }, priceTiers: [],
+};
+
+function form(patch: Record<string, any>) {
+  const id = patch.id;
+  return {
+    id, eventId: EVENT_ID, kind: 'PAID', purpose: 'VENDOR', name: 'Vendor booths', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
+    chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW', reserveOnApproval: true,
+    spaceSelection: 'TIERS', displayOrder: 0, createdFromTemplateId: null, acceptance: { accepting: true, reason: null },
+    paymentsEnabled: true, applicationCount: 0, collectBusiness: true, tiers: [], addOns: [], questions: [],
+    ...patch,
+  };
+}
+
+const PLANS = [
+  { id: 'plan-hall', name: 'Union Hall layout', width: 100, height: 60, boothCount: 24, zoneCount: 0, elementCount: 4, sourceMapId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
+];
+
+function mapDetail(patch: Record<string, any> = {}) {
+  return {
+    id: 'map-1', organizationId: ORG_ID, eventId: EVENT_ID, name: 'Spring Fair floor map', status: 'DRAFT', unit: 'ft', gridSize: 5,
+    width: 100, height: 60, underlayFileId: null, underlayOpacity: 0.5, layout: { version: 1, elements: [] },
+    publishedAt: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z', booths: [], tiers: [],
+    ...patch,
+  };
+}
+
+const booth = (id: string, tierId: string | null) => ({
+  id, mapId: 'map-1', label: id, kind: 'BOOTH', x: 0, y: 0, w: 10, h: 10, rotation: 0, tierId, status: 'AVAILABLE',
+  price: null, applicationId: null, assignedById: null,
+});
+
+async function mockApi(page: Page, { forms: initial, map: initialMap = null }: { forms: Record<string, any>[]; map?: Record<string, any> | null }) {
+  const forms = structuredClone(initial);
+  let map = initialMap ? structuredClone(initialMap) : null;
+  const calls: { patch: Request[]; createMap: Request[] } = { patch: [], createMap: [] };
+  const list = `${API}/admin/events/${EVENT_ID}/application-forms`;
+  await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
+  await page.route(`${API}/organizations`, (route) =>
+    route.fulfill(json([{ id: ORG_ID, name: 'Map Org', slug: 'map-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' }]))
+  );
+  await page.route(`${API}/admin/permissions`, (route) =>
+    route.fulfill(json({ granted: ['dashboard', 'events', 'applications', 'applications.forms', 'addOns.manage', 'venues', 'maps'], hiddenPaths: [] }))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([VENUE])));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
+    route.fulfill(json({ event: EVENT, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
+  );
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) =>
+    route.fulfill(json({ event: EVENT, organization: { id: ORG_ID, name: 'Map Org' }, forms }))
+  );
+  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
+  await page.route(list, (route) => route.fulfill(json({ data: forms })));
+  await page.route(new RegExp(`${list}/[^/]+$`), (route) => {
+    calls.patch.push(route.request());
+    const target = forms.find((f) => f.id === route.request().url().split('/').pop())!;
+    Object.assign(target, route.request().postDataJSON());
+    return route.fulfill(json(target));
+  });
+  await page.route(`${API}/admin/events/${EVENT_ID}/map`, (route) =>
+    route.fulfill(map ? json({ mapId: map.id }) : json({ error: 'NotFoundError', message: 'No map for this event' }, 404))
+  );
+  await page.route(`${API}/admin/maps/templates`, (route) => route.fulfill(json(PLANS)));
+  await page.route(`${API}/admin/maps`, (route) => {
+    calls.createMap.push(route.request());
+    map = mapDetail();
+    return route.fulfill(json(map, 201));
+  });
+  await page.route(`${API}/admin/maps/map-1`, (route) => route.fulfill(map ? json(map) : json({ message: 'Not found' }, 404)));
+  return calls;
+}
+
+const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
+test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
+test.use({ baseURL: WIZARD_URL, contextOptions: { reducedMotion: 'reduce' } });
+const COLD = { timeout: 30000 };
+test.describe.configure({ timeout: 90000 });
+const STAFF = { id: 'map-organizer', email: 'map-organizer@test.com', role: 'ORGANIZER' as const };
+const setupUrl = (query: string) => `/admin/events/${EVENT_ID}/setup?${query}`;
+const RETURN_TO = encodeURIComponent(`/admin/events/${EVENT_ID}/setup?step=floor-map`);
+
+const main = (page: Page) => page.locator('main');
+const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
+const steps = (page: Page) => page.getByRole('list', { name: 'Setup steps' });
+const preview = (page: Page) => page.frameLocator('iframe[title="Event page preview"]');
+const serious = async (page: Page) =>
+  (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
+const MAP_FORM = form({ id: 'form-map', spaceSelection: 'MAP' });
+
+// Compile the wizard route and the preview frame once, before any timed step.
+test.beforeAll(async ({ browser }) => {
+  test.setTimeout(180000);
+  if (!WIZARD_URL) return;
+  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
+  await signInAsStaff(page, STAFF, WIZARD_URL);
+  await mockApi(page, { forms: [MAP_FORM] });
+  for (const step of ['vendors', 'floor-map']) {
+    await page.goto(setupUrl(`step=${step}`), { timeout: 120000 });
+    await expect(page.locator('main h1')).toBeVisible({ timeout: 120000 });
+  }
+  await expect(preview(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 120000 });
+  await page.close();
+});
+
+test.beforeEach(async ({ page, baseURL }) => {
+  await signInAsStaff(page, STAFF, baseURL!);
+});
+
+test.describe('desktop', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the step follows a vendor form between TIERS and MAP', async ({ page }) => {
+    const calls = await mockApi(page, { forms: [form({ id: 'form-paid' })] });
+    await page.goto(setupUrl('step=vendors&form=form-paid'));
+    await expect(heading(page, 'Vendor applications')).toBeVisible(COLD);
+    await expect(steps(page)).toBeVisible();
+    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
+    const settings = main(page).getByTestId('form-settings');
+    await settings.getByTestId('form-space-map').check();
+    await settings.getByRole('button', { name: 'Save settings' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
+    await expect(steps(page).getByText('Floor map')).toBeVisible();
+
+    await settings.getByTestId('form-space-tiers').check();
+    await settings.getByRole('button', { name: 'Save settings' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('TIERS');
+    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
+  });
+
+  test('a sponsor form on MAP does not add the step', async ({ page }) => {
+    await mockApi(page, { forms: [form({ id: 'form-sponsor', purpose: 'SPONSOR', name: 'Sponsors', spaceSelection: 'MAP' })] });
+    await page.goto(setupUrl('step=vendors'));
+    await expect(heading(page, 'Vendor applications')).toBeVisible(COLD);
+    await expect(steps(page)).toBeVisible();
+    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
+  });
+
+  test('no map yet: create a blank map, then open the builder with returnTo', async ({ page }) => {
+    const calls = await mockApi(page, { forms: [MAP_FORM] });
+    await page.goto(setupUrl('step=floor-map'));
+    await expect(heading(page, 'Floor map')).toBeVisible(COLD);
+    await expect(main(page).getByRole('heading', { level: 2, name: 'No floor map yet' })).toBeVisible();
+    await expect(main(page).getByText('Vendors choose spots on the floor map, but the map is not published.')).toBeVisible();
+    await expect(main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ })).toBeVisible();
+    await main(page).getByRole('button', { name: 'Create a blank map' }).click();
+    await expect.poll(() => calls.createMap.length).toBe(1);
+    expect(calls.createMap[0].postDataJSON()).toEqual({ eventId: EVENT_ID });
+    const summary = main(page).getByTestId('setup-map-summary');
+    await expect(summary.getByRole('heading', { name: /Spring Fair floor map/ })).toBeVisible();
+    await expect(summary.getByText('Draft', { exact: true })).toBeVisible();
+    await expect(summary.getByText('No booths yet')).toBeVisible();
+    await expect(summary.getByRole('link', { name: 'Open map builder' })).toHaveAttribute('href', `/admin/maps/map-1?returnTo=${RETURN_TO}`);
+  });
+
+  test('a published map shows its booths and tiers, and no warning', async ({ page }) => {
+    const map = mapDetail({
+      status: 'PUBLISHED', publishedAt: '2031-01-02T00:00:00Z',
+      booths: [booth('A1', 't-std'), booth('A2', 't-std'), booth('A3', null)],
+      tiers: [
+        { id: 't-std', name: 'Standard booth', price: 100, mapBound: true, quantityTotal: 10, form: null, displayOrder: 0 },
+        { id: 't-corner', name: 'Corner booth', price: 150, mapBound: false, quantityTotal: 2, form: null, displayOrder: 1 },
+      ],
+    });
+    await mockApi(page, { forms: [MAP_FORM], map });
+    await page.goto(setupUrl('step=floor-map'));
+    await expect(heading(page, 'Floor map')).toBeVisible(COLD);
+    const summary = main(page).getByTestId('setup-map-summary');
+    await expect(summary.getByText('Published', { exact: true })).toBeVisible();
+    await expect(summary.getByText('3 booths, 1 without a tier')).toBeVisible();
+    await expect(summary.getByText('Standard booth', { exact: true })).toBeVisible();
+    await expect(main(page).getByText(/the map is not published/)).toHaveCount(0);
+  });
+
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`no serious axe findings on the floor map step (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      await mockApi(page, { forms: [MAP_FORM] });
+      await page.goto(setupUrl('step=floor-map'));
+      await expect(heading(page, 'Floor map')).toBeVisible(COLD);
+      if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
+      await expect(main(page).getByRole('button', { name: 'Create a blank map' })).toBeVisible();
+      await expect(preview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
+      expect(await serious(page)).toEqual([]);
+    });
+  }
+});
+
+test.describe('mobile', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('floor map step at 390 × 844: both states, axe, 44 px targets, no horizontal scroll', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await mockApi(page, { forms: [MAP_FORM] });
+    await page.goto(setupUrl('step=floor-map'));
+    await expect(heading(page, 'Floor map')).toBeVisible(COLD);
+    const create = main(page).getByRole('button', { name: 'Create a blank map' });
+    const plan = main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ });
+    for (const target of [create, plan]) expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await serious(page)).toEqual([]);
+    await create.click();
+    const open = main(page).getByRole('link', { name: 'Open map builder' });
+    await expect(open).toBeVisible();
+    expect((await open.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const overflow = await page.evaluate(() => [document.documentElement, document.querySelector('main')].filter((el) => !!el && el.scrollWidth > el.clientWidth).length);
+    expect(overflow).toBe(0);
+    expect(await serious(page)).toEqual([]);
+  });
+});

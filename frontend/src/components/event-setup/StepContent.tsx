@@ -19,6 +19,7 @@ import ImageStep from './steps/ImageStep';
 import TicketsStep from './steps/TicketsStep';
 import CollectMoreStep from './steps/CollectMoreStep';
 import ApplicationsStep from './steps/ApplicationsStep';
+import FloorMapStep from './steps/FloorMapStep';
 import { isApplicationStep } from './applicationSteps';
 import type { SetupForms } from './useSetupForms';
 import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
@@ -36,6 +37,7 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   vendors: 'Let vendors apply for a space. Add one form, or several (for example food and crafts).',
   'special-guests': 'Let artists, creators and celebrities apply to appear.',
   volunteers: 'Let people sign up to help, with your own questions.',
+  'floor-map': 'Optional. Vendors pick a space from your list of tiers, or on this map.',
   'other-applications': 'Sponsors, press, panels and anything else people apply for.',
 };
 
@@ -102,6 +104,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {isApplicationStep(step.key) && props.row && (
             <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
           )}
+          {step.key === 'floor-map' && props.row && <FloorMapStep eventId={props.row.saved.id} refreshPreview={props.row.refreshPreview} />}
           {!step.built && <PendingStep />}
         </fieldset>
         {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
