@@ -15,6 +15,7 @@ import { mapsApi, type MapElement, type PublicMap, type PublicMapBooth } from '@
 import MapCanvas from '@/components/maps/MapCanvas';
 import { eventPath } from '@/lib/publicPaths';
 import { BoothDetail, Legend, iconButton, toMapBooth } from './map/PublicMapClient';
+import { BLANK_PREVIEW_ID } from '@/components/event-setup/previewMessages';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -45,6 +46,7 @@ export default function FloorMapButton({
 
   const load = useCallback(() => {
     let cancelled = false;
+    if (eventId === BLANK_PREVIEW_ID) return () => {};
     mapsApi
       .getPublicEventMap(eventId)
       .then((data) => {

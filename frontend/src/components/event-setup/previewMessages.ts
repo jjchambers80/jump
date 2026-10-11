@@ -55,10 +55,13 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
 export const trustedMessage = (event: MessageEvent, source: MessageEventSource | null | undefined) =>
   event.origin === window.location.origin && !!source && event.source === source;
 
+/** Id of the blank event before the row exists; nothing public can be fetched for it. */
+export const BLANK_PREVIEW_ID = 'preview';
+
 /** The event before the row exists: blank, so the view shows its placeholders. */
 export function blankPreviewEvent(): EventPageEvent {
   return {
-    id: 'preview',
+    id: BLANK_PREVIEW_ID,
     name: '',
     description: null,
     logoUrl: null,
@@ -70,6 +73,7 @@ export function blankPreviewEvent(): EventPageEvent {
     taxRate: 0,
     venue: null,
     priceTiers: [],
+    previewForms: [],
   };
 }
 
