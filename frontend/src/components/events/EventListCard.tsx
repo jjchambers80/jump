@@ -21,6 +21,8 @@ import {
   Users,
 } from 'lucide-react';
 import EventActionsMenu from './EventActionsMenu';
+import PublishBlockers from './PublishBlockers';
+import type { ReadinessItem } from '@/lib/eventReadiness';
 import type { AdmissionMode } from './EventFormLayout';
 
 export interface PriceTier {
@@ -79,6 +81,8 @@ interface EventListCardProps {
   onPublish: () => void;
   onDuplicate: () => void;
   onCancelEvent: () => void;
+  /** What stopped the last Publish (spec 050-C, 422 EVENT_NOT_READY). */
+  publishBlockers?: ReadinessItem[];
 }
 
 function formatPrice(dollars: number): string {
@@ -108,6 +112,7 @@ export default function EventListCard({
   onPublish,
   onDuplicate,
   onCancelEvent,
+  publishBlockers = [],
 }: EventListCardProps) {
   const zone = event.venue?.timezone;
   const now = new Date();
@@ -332,7 +337,7 @@ export default function EventListCard({
                 <button
                   type="button"
                   onClick={onPublish}
-                  className="inline-flex min-h-9 items-center rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                  className="inline-flex min-h-11 items-center rounded-md bg-green-700 px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
                 >
                   Publish
                 </button>
@@ -386,6 +391,12 @@ export default function EventListCard({
           </div>
         </div>
       </div>
+
+      {event.status === 'DRAFT' && publishBlockers.length > 0 && (
+        <div className="relative px-4 pb-4 sm:px-5">
+          <PublishBlockers blockers={publishBlockers} eventId={event.id} orgId={selectedOrgId} />
+        </div>
+      )}
 
       {/* Expanded Tier table */}
       {isExpanded && (
