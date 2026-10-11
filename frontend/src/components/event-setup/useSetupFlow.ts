@@ -23,6 +23,7 @@ import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
 import { useHistoryGuard } from './useHistoryGuard';
 import { clearSetupFinished, setupJustFinished } from './doneMarker';
+import { useDonationsEligible } from './useDonationsEligible';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import { salesFieldsFromSaved } from './contentSteps';
 
@@ -79,7 +80,8 @@ export function useSetupFlow(eventId: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.load.status, initialised, orgId, saved]);
 
-  const ctx: StepCtx = { saved, fields, zone, savedZone, forms: [] };
+  const donationsEligible = useDonationsEligible(orgId);
+  const ctx: StepCtx = { saved, fields, zone, savedZone, forms: [], donationsEligible };
   const mode: 'create' | 'edit' = saved?.setupCompletedAt ? 'edit' : 'create';
   const list = visibleSteps(ctx);
   const requested = stepByKey(params.get('step'));

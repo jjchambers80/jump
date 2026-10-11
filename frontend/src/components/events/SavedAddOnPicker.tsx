@@ -199,7 +199,7 @@ export default function SavedAddOnPicker({
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => !editing && setOpen(false), 150)}
           onKeyDown={onKey}
-          className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          className="block min-h-11 w-full rounded-md border border-gray-300 bg-white py-2 pl-8 pr-3 text-sm sm:min-h-0 text-gray-900 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
       </div>
 
