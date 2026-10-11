@@ -34,6 +34,8 @@ const FIXTURES = [
   ['Vendor sponsor combo', 'PAID', true, 'VENDOR'], // first match wins
   ['Food trucks', 'PAID', true, 'VENDOR'], // unmatched PAID event form
   ['Cosplay contest', 'FREE', true, 'OTHER'],
+  ['Volunteer parking pass', 'PAID', true, 'VENDOR'], // FREE-only purpose: PAID falls through
+  ['Celebrity photo ops', 'PAID', true, 'VENDOR'],
   ['Become a volunteer', 'FREE', false, 'VOLUNTEER'], // standing form, same rules
   ['General inquiries', 'FREE', false, 'OTHER'],
 ];

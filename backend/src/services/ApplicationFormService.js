@@ -264,6 +264,8 @@ class ApplicationFormService {
     const out = { intro: definition.intro ?? null };
     // Old snapshots carry no purpose: the form falls back to OTHER unless the body names one.
     if (definition.purpose) out.purpose = definition.purpose;
+    // Old snapshots carry no collectBusiness either: the column default (true) applies.
+    if (typeof definition.collectBusiness === 'boolean') out.collectBusiness = definition.collectBusiness;
     if (kind === 'PAID') {
       for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
         if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
@@ -323,6 +325,7 @@ class ApplicationFormService {
     const paid = form.kind === 'PAID';
     return {
       purpose: form.purpose ?? 'OTHER',
+      collectBusiness: form.collectBusiness !== false,
       intro: form.intro ?? null,
       chargeTiming: paid ? form.chargeTiming : null,
       feeMode: paid ? form.feeMode : null,

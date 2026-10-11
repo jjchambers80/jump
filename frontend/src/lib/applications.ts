@@ -335,7 +335,8 @@ export interface ApplicantApplication {
   paymentDueAt: string | null;
   /** Spec 037 phase 5: set while an approved PAID application chooses or holds its space. */
   selection?: SpaceSelection | null;
-  profile: ApplicantProfile;
+  /** Null when the form skips the business step (`collectBusiness: false`, spec 044 / 050). */
+  profile: ApplicantProfile | null;
   answers: AnswerView[];
   boothLabel: string | null;
   /** Spec 014 phase 2: the booth owned (SOLD / RESERVED) or held while paying (HELD, with the deadline). */

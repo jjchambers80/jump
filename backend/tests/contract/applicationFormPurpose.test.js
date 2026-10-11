@@ -127,6 +127,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     const saved = await request(app).post(`${forms()}/${volunteer.id}/save-as-template`).set(...auth()).send({ name: 'Crew template' });
     expect(saved.status).toBe(201);
     expect(saved.body.definition.purpose).toBe('VOLUNTEER');
+    expect(saved.body.definition.collectBusiness).toBe(false);
     const list = await request(app).get('/admin/application-templates').set(...auth());
     const summary = (list.body.data ?? list.body).find((t) => t.id === saved.body.id);
     expect(summary.purpose).toBe('VOLUNTEER');
@@ -134,6 +135,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     const made = await request(app).post(forms(draftEventId)).set(...auth()).send({ kind: 'FREE', name: 'Crew 2', templateId: saved.body.id });
     expect(made.status).toBe(201);
     expect(made.body.purpose).toBe('VOLUNTEER');
+    expect(made.body.collectBusiness).toBe(false);
     expect(made.body.questions).toHaveLength(4);
 
     const paidGuest = await request(app)
@@ -142,11 +144,21 @@ describe('Application form purpose (spec 050 §6.2)', () => {
       .send({ name: 'Paid guests', kind: 'PAID', definition: { purpose: 'SPECIAL_GUEST' } });
     expect(paidGuest.status).toBe(400);
     expect(paidGuest.body.code).toBe('PURPOSE_KIND_MISMATCH');
+    const paidNoBiz = await request(app)
+      .post('/admin/application-templates')
+      .set(...auth())
+      .send({ name: 'Paid no business', kind: 'PAID', definition: { collectBusiness: false } });
+    expect(paidNoBiz.status).toBe(400);
+    // An old snapshot without the key keeps asking for the business profile.
+    const legacy = await request(app).post('/admin/application-templates').set(...auth()).send({ name: 'Legacy', kind: 'FREE', definition: { intro: 'Hi' } });
+    expect(legacy.body.definition.collectBusiness).toBeNull();
+    const fromLegacy = await request(app).post(forms(draftEventId)).set(...auth()).send({ kind: 'FREE', name: 'From legacy', templateId: legacy.body.id });
+    expect(fromLegacy.body).toMatchObject({ purpose: 'OTHER', collectBusiness: true });
   });
 
   it('the preview payload includes the draft event\'s DRAFT forms with purpose', async () => {
     const res = await request(app).get(`/organizations/${org.id}/events/${draftEventId}/preview-payload`).set(...auth());
     expect(res.status).toBe(200);
-    expect(res.body.forms).toEqual([expect.objectContaining({ name: 'Crew 2', purpose: 'VOLUNTEER', acceptance: { open: false, reason: 'not_published' } })]);
+    expect(res.body.forms).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Crew 2', purpose: 'VOLUNTEER', acceptance: { open: false, reason: 'not_published' } })]));
   });
 });

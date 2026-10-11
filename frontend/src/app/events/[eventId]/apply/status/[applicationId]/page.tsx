@@ -168,8 +168,8 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                   {app.form.name}
                   {app.tier ? ` · ${app.tier.name}` : ''}
                 </p>
-                <p className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-slate-100" title={app.profile.businessName}>
-                  {app.profile.businessName}
+                <p className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-slate-100" title={app.profile?.businessName ?? 'Your application'}>
+                  {app.profile?.businessName ?? 'Your application'}
                 </p>
               </div>
               <span data-testid="apply-status-pill" className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
@@ -219,7 +219,7 @@ function StatusContent({ params }: { params: { eventId: string; applicationId: s
                       {app.form.name}{app.tier ? ` · ${app.tier.name}` : ''}
                       {app.orderRef ? <span className="font-mono" data-testid="apply-order-ref"> · Order {app.orderRef}</span> : null}
                     </p>
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile.businessName}</h2>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-slate-100">{app.profile?.businessName ?? 'Your application'}</h2>
                   </div>
                   <span data-testid="apply-status-pill" className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[app.status]}`}>{STATUS_LABEL[app.status]}</span>
                 </div>
