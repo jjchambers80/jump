@@ -196,16 +196,16 @@ export default auth(async (req: NextRequest & { auth: unknown }) => {
   if (!tenant) return notFound(req);
   const { orgId } = tenant;
 
+  // Behind Railway's proxy req.url carries the internal origin; redirects must stay on the tenant host.
+  const proto = req.headers.get('x-forwarded-proto')?.split(',')[0].trim() || req.nextUrl.protocol.replace(':', '');
+  const origin = `${proto}://${req.headers.get('host')}`;
   const route = routeForTenantHost(req.nextUrl.pathname, orgId, tenant.slug);
-  if (route.kind === 'redirect') {
-    const url = req.nextUrl.clone();
-    url.pathname = route.pathname;
-    return NextResponse.redirect(url, 308);
-  }
+  if (route.kind === 'redirect')
+    return NextResponse.redirect(new URL(route.pathname + req.nextUrl.search, origin), 308);
   if (route.kind === 'notFound') {
     const to = await redirectTarget(orgId, req.nextUrl.pathname);
     if (to)
-      return NextResponse.redirect(new URL(hostifyRedirectTarget(to, orgId, true), req.url), 301);
+      return NextResponse.redirect(new URL(hostifyRedirectTarget(to, orgId, true), origin), 301);
     return notFound(req);
   }
 
