@@ -756,4 +756,21 @@ describe('Application payments contract (spec 011 phase 2, spec 037 phase 5)', (
     const paid = await checkoutPaid(legacy.id, `pi_${TAG}_legacy`);
     expect(paid).toMatchObject({ paymentStatus: 'PAID', capacitySlot: 'APPROVED', orderStatus: 'COMPLETED' });
   });
+
+  it('spec 050-D: an approved vendor still chooses and pays after sales close; a new submission is refused', async () => {
+    const id = await approved(sponsorForm.slug, `closed-sales@${TAG}.test`, 'Closed Sales Co');
+    await prisma.event.update({ where: { id: eventId }, data: { salesClosedAt: new Date() } });
+    try {
+      const refused = await submit(sponsorForm.slug, `late@${TAG}.test`, 'Late Co');
+      expect(refused.status).toBe(409);
+      expect(refused.body.code).toBe('SALES_CLOSED');
+
+      expect((await select(id, {})).status).toBe(200);
+      expect((await pay(id)).status).toBe(200);
+      const paid = await checkoutPaid(id, `pi_${TAG}_after_close`);
+      expect(paid).toMatchObject({ paymentStatus: 'PAID', orderStatus: 'COMPLETED' });
+    } finally {
+      await prisma.event.update({ where: { id: eventId }, data: { salesClosedAt: null } });
+    }
+  });
 });

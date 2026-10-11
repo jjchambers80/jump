@@ -578,12 +578,11 @@ class EventService {
    * RSVPs, applications past DRAFT. Empty = nothing a buyer holds.
    * @returns {Promise<string[]>} human-readable reasons
    */
-  async _liveActivityReasons(eventId) {
-    const [orders, rsvps, applications] = await Promise.all([
-      prisma.order.count({ where: { eventId, status: { notIn: ['FAILED', 'CANCELLED'] } } }),
-      prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }),
-      prisma.application.count({ where: { eventId, status: { not: 'DRAFT' } } }),
-    ]);
+  async _liveActivityReasons(eventId, db = prisma) {
+    // Sequential: `db` may be an interactive transaction (one connection).
+    const orders = await db.order.count({ where: { eventId, status: { notIn: ['FAILED', 'CANCELLED'] } } });
+    const rsvps = await db.eventRsvp.count({ where: { eventId, status: 'GOING' } });
+    const applications = await db.application.count({ where: { eventId, status: { not: 'DRAFT' } } });
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
     return [
       orders && plural(orders, 'order'),
@@ -610,16 +609,21 @@ class EventService {
    * submitted. Clears a sales close.
    */
   async unpublishEvent(orgId, eventId) {
-    const existing = await this._orgEvent(orgId, eventId);
-    if (existing.status !== 'PUBLISHED') {
-      throw new ConflictError(`Cannot unpublish event with status ${existing.status}. Only PUBLISHED events can be unpublished.`);
-    }
-    const reasons = await this._liveActivityReasons(eventId);
-    if (reasons.length) throw this._blocked('UNPUBLISH_BLOCKED', 'unpublish', reasons);
-    // ponytail: check-then-write, no lock; a checkout landing in between keeps its order on a draft (same as tier sale windows).
-    await prisma.event.update({
-      where: { id: eventId },
-      data: { status: 'DRAFT', salesClosedAt: null, salesClosedById: null },
+    await this._orgEvent(orgId, eventId);
+    // Guard and write under the event row lock: checkout, RSVP and submit take
+    // it too (FOR SHARE / FOR UPDATE), so none can land between the count and the write.
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR UPDATE`;
+      const { status } = await tx.event.findUnique({ where: { id: eventId }, select: { status: true } });
+      if (status !== 'PUBLISHED') {
+        throw new ConflictError(`Cannot unpublish event with status ${status}. Only PUBLISHED events can be unpublished.`);
+      }
+      const reasons = await this._liveActivityReasons(eventId, tx);
+      if (reasons.length) throw this._blocked('UNPUBLISH_BLOCKED', 'unpublish', reasons);
+      await tx.event.update({
+        where: { id: eventId },
+        data: { status: 'DRAFT', salesClosedAt: null, salesClosedById: null },
+      });
     });
     logger.info('Event unpublished', { event: 'event_unpublished', orgId, eventId });
     return this._adminEventDetail(eventId);

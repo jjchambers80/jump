@@ -374,6 +374,14 @@ class ApplicationService {
     const presentedText = { PRIVACY: applyConsentText({ organizationName }) };
 
     const application = await prisma.$transaction(async (tx) => {
+      // Spec 050-D: re-check the event under a shared lock, so an unpublish
+      // either counts this submission or this submission sees the draft.
+      if (eventId) {
+        await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${eventId} FOR SHARE`;
+        const locked = await tx.event.findUnique({ where: { id: eventId }, select: { status: true, salesClosedAt: true } });
+        if (locked?.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+        assertSalesOpen(locked);
+      }
       // Opt-ins are recorded on the application and applied by
       // ContactOptInService once it reaches SUBMITTED, never here (spec 024 phase 3).
       // Fill in a missing name only; never overwrite one (spec 037 D12).
