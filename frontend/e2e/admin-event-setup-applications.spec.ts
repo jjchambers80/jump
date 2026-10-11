@@ -140,6 +140,7 @@ test.describe('desktop', () => {
     const add = main(page).getByRole('button', { name: 'Add a vendor application' });
     await add.click();
     const dialog = page.getByRole('dialog', { name: 'Add a vendor application' });
+    await expect(dialog.getByLabel('Name')).toBeFocused();
     await expect(dialog.getByLabel('Name')).toHaveValue('Spring Fair Vendor Application');
     await expect(dialog.getByLabel('Charge for space')).toBeChecked();
     // Purpose-matched templates only (the PAID vendor one).
@@ -156,8 +157,10 @@ test.describe('desktop', () => {
     await expect(dialog).toHaveCount(0);
     await expect.poll(() => calls.create.length).toBe(1);
     expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair Vendor Application', kind: 'PAID', purpose: 'VENDOR' });
-    // The new form opens inline, deep-linked.
+    // The new form opens inline, deep-linked, with focus on its heading and a notice.
     await expect(page).toHaveURL(/form=form-/);
+    await expect(main(page).getByRole('heading', { level: 3, name: 'Spring Fair Vendor Application' })).toBeFocused();
+    await expect(main(page).getByRole('status').filter({ hasText: 'Spring Fair Vendor Application created.' })).toBeVisible();
     await expect(main(page).getByTestId('form-settings')).toBeVisible();
     await expect(main(page).getByText('What do you sell?')).toBeVisible();
 
@@ -169,8 +172,8 @@ test.describe('desktop', () => {
     await dialog.getByRole('button', { name: 'Create form' }).click();
     await expect.poll(() => calls.create.length).toBe(2);
     expect(calls.create[1].postDataJSON()).toEqual({ name: 'Food trucks', kind: 'FREE', purpose: 'VENDOR' });
-    await expect(main(page).getByRole('heading', { level: 2, name: 'Food trucks' })).toBeVisible();
-    await expect(main(page).getByRole('heading', { level: 2, name: 'Spring Fair Vendor Application' })).toBeVisible();
+    await expect(main(page).getByRole('heading', { level: 3, name: 'Food trucks' })).toBeVisible();
+    await expect(main(page).getByRole('heading', { level: 3, name: 'Spring Fair Vendor Application' })).toBeVisible();
     await expect(preview(page).getByText('Food trucks').first()).toBeAttached(COLD);
   });
 
@@ -184,6 +187,9 @@ test.describe('desktop', () => {
     const settings = main(page).getByTestId('form-settings');
     await expect(settings.getByTestId('form-space-tiers')).toBeChecked();
     await settings.getByTestId('form-space-map').check();
+    // Inside the wizard the cards link to its own steps, not the old event pages.
+    await expect(settings.getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=floor-map`);
+    await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await settings.getByRole('button', { name: 'Save settings' }).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
     await expect(steps.getByText('Floor map')).toBeVisible();
@@ -208,7 +214,7 @@ test.describe('desktop', () => {
   });
 
   test('other applications: a purpose per form, fixed once it has applications; delete or close', async ({ page }) => {
-    const calls = await mockApi(page, [form({ id: 'form-sold', purpose: 'SPONSOR', name: 'Sponsors', applicationCount: 2, status: 'OPEN' })]);
+    const calls = await mockApi(page, [form({ id: 'form-sold', purpose: 'SPONSOR', name: 'Sponsors', applicationCount: 2, purposeLocked: true, status: 'OPEN' })]);
     await page.goto(setupUrl('step=other-applications'));
     await expect(heading(page, 'Other applications')).toBeVisible(COLD);
     const sponsors = main(page).getByTestId('setup-form-form-sold');
@@ -216,6 +222,8 @@ test.describe('desktop', () => {
     await expect(sponsors.getByRole('button', { name: 'Delete Sponsors' })).toHaveCount(0);
     await sponsors.getByRole('button', { name: 'Close Sponsors' }).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ status: 'CLOSED' });
+    await expect(sponsors.getByText(/It is closed to new ones\./)).toBeVisible();
+    await expect(sponsors.getByRole('button', { name: 'Close Sponsors' })).toHaveCount(0);
     await sponsors.getByRole('button', { name: 'Edit Sponsors' }).click();
     await expect(main(page).getByLabel('What is this form for?')).toBeDisabled();
     await expect(main(page).getByText('Fixed: this form already has applications.')).toBeVisible();
@@ -238,6 +246,16 @@ test.describe('desktop', () => {
     await press.getByRole('button', { name: 'Delete Press passes' }).click();
     await expect(main(page).getByRole('heading', { name: 'Press passes' })).toHaveCount(0);
     await expect.poll(() => calls.remove.length).toBe(1);
+    await expect(main(page).getByRole('heading', { level: 2, name: '1 form on this step' })).toBeFocused();
+    await expect(main(page).getByRole('status').filter({ hasText: 'Press passes deleted.' })).toBeVisible();
+  });
+
+  test('a form deep link on the wrong step moves to the step of its purpose', async ({ page }) => {
+    await mockApi(page, [form({ id: 'form-sponsor', purpose: 'SPONSOR', name: 'Sponsors' })]);
+    await page.goto(setupUrl('step=vendors&form=form-sponsor'));
+    await expect(page).toHaveURL(/step=other-applications&form=form-sponsor/, COLD);
+    await expect(heading(page, 'Other applications')).toBeVisible();
+    await expect(main(page).getByTestId('form-settings')).toBeVisible();
   });
 
   for (const scheme of ['light', 'dark'] as const) {

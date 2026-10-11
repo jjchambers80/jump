@@ -6,11 +6,11 @@
 // or one of the org's templates for that purpose. Modal: focus trap, Escape,
 // focus back to the opener (useDialog).
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useDialog } from '@/lib/useDialog';
 import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
-import { FREE_ONLY, PURPOSE_LABEL, type ApplicationStepConfig } from '../applicationSteps';
+import { FREE_ONLY, PURPOSE_LABEL, templatesFor, type ApplicationStepConfig } from '../applicationSteps';
 import { hintClass, iconButton, inputClass, labelClass, primaryButton, secondaryButton } from '../ui';
 
 /** Purposes whose blank form starts with Jump's suggested questions. */
@@ -23,13 +23,6 @@ export interface NewFormBody {
   templateId?: string;
 }
 
-/** Templates for this purpose and kind; else same-kind templates saved before purposes existed. */
-export function templatesFor(templates: FormTemplateSummary[], purpose: FormPurpose, kind: FormKind) {
-  const sameKind = templates.filter((t) => t.kind === kind);
-  const matching = sameKind.filter((t) => t.purpose === purpose);
-  return matching.length ? matching : sameKind.filter((t) => !t.purpose);
-}
-
 interface Props {
   config: ApplicationStepConfig;
   eventName: string;
@@ -40,6 +33,8 @@ interface Props {
 
 export default function AddFormDialog({ config, eventName, templates, onCreate, onClose }: Props) {
   const panelRef = useDialog<HTMLDivElement>(true, onClose);
+  // After useDialog's own first focus (the Close button): start on the Name field.
+  useEffect(() => document.getElementById('add-form-name')?.focus(), []);
   const [name, setName] = useState(`${eventName} ${config.nameSuffix}`.trim());
   const [purpose, setPurpose] = useState<FormPurpose>(config.purposes[0]);
   const [paid, setPaid] = useState(config.defaultKind === 'PAID');

@@ -155,6 +155,8 @@ export interface AdminForm {
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
+  /** Spec 050-L: a submitted (non-DRAFT) application fixes the purpose. */
+  purposeLocked?: boolean;
   tiers: AdminTier[];
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */

@@ -11,6 +11,8 @@ import { PURPOSE_LABEL } from '../applicationSteps';
 import { secondaryButton, textButton } from '../ui';
 
 const STATUS_LABEL: Record<AdminForm['status'], string> = { DRAFT: 'Draft', OPEN: 'Open', CLOSED: 'Closed' };
+/** The row's heading: focus lands here after the form is created. */
+export const formHeadingId = (id: string) => `setup-form-title-${id}`;
 const chip = 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-slate-700 dark:text-slate-200';
 
 interface Props {
@@ -34,7 +36,9 @@ export default function FormRow({ form, expanded, showPurpose, canEdit, busy, on
     <li className="rounded-lg border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800" data-testid={`setup-form-${form.id}`}>
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
         <div className="min-w-0">
-          <h2 className="break-words text-base font-semibold text-gray-900 dark:text-white">{form.name}</h2>
+          <h3 id={formHeadingId(form.id)} tabIndex={-1} className="break-words text-base font-semibold text-gray-900 focus:outline-none dark:text-white">
+            {form.name}
+          </h3>
           <p className="mt-1 flex flex-wrap items-center gap-1.5">
             {showPurpose && <span className={chip}>{PURPOSE_LABEL[form.purpose ?? 'OTHER']}</span>}
             <span className={chip}>{STATUS_LABEL[form.status]}</span>
@@ -46,7 +50,9 @@ export default function FormRow({ form, expanded, showPurpose, canEdit, busy, on
           </p>
           {submitted && canEdit && (
             <p id={reasonId} className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-              Has applications, so it can&apos;t be deleted. Close it to stop new ones.
+              {form.status === 'CLOSED'
+                ? 'Has applications, so it can\u2019t be deleted. It is closed to new ones.'
+                : 'Has applications, so it can\u2019t be deleted. Close it to stop new ones.'}
             </p>
           )}
         </div>

@@ -50,7 +50,7 @@ describe('createForm defaults per purpose (spec 050 §5.2)', () => {
   it.each(cases)('$purpose ($kind) starts from its defaults', async ({ purpose, kind, collectBusiness }) => {
     const res = await create({ kind, purpose, name: `${purpose} ${kind}` });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness });
+    expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness, purposeLocked: false });
     const expected = (defaultsFor(purpose).questions ?? []).map((q) => ({ label: q.label, type: q.type, required: q.required }));
     expect(res.body.questions.map((q) => ({ label: q.label, type: q.type, required: q.required }))).toEqual(expected);
   });

@@ -4,7 +4,7 @@
 //
 // Pure module, type-only imports from steps.ts (it imports this file).
 
-import type { FormKind, FormPurpose } from '@/lib/applications';
+import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import type { EventStep, StepCtx } from './steps';
 
 export type ApplicationStepKey = 'vendors' | 'special-guests' | 'volunteers' | 'other-applications';
@@ -78,6 +78,19 @@ export const formsOnStep = <F extends { purpose?: FormPurpose | null }>(key: App
 /** The step a form's purpose places it on (deep links: `setup?step=<key>&form=<id>`). */
 export const stepForPurpose = (purpose: FormPurpose | null | undefined): ApplicationStepKey =>
   (Object.keys(APPLICATION_STEPS) as ApplicationStepKey[]).find((key) => APPLICATION_STEPS[key].purposes.includes(purpose ?? 'OTHER'))!;
+
+/** Templates for this purpose and kind; else same-kind templates saved before purposes existed. */
+export function templatesFor(templates: FormTemplateSummary[], purpose: FormPurpose, kind: FormKind) {
+  const sameKind = templates.filter((t) => t.kind === kind);
+  const matching = sameKind.filter((t) => t.purpose === purpose);
+  return matching.length ? matching : sameKind.filter((t) => !t.purpose);
+}
+
+/** Where FormEditorCards link out to, inside the wizard: its own steps, not the old event pages. */
+export const wizardLink = (eventId: string, target: 'floor-map' | 'add-ons') =>
+  target === 'floor-map'
+    ? { href: `/admin/events/${eventId}/setup?step=floor-map`, label: 'Go to the Floor map step' }
+    : { href: `/admin/events/${eventId}/setup?step=collect-more`, label: 'Collect more step' };
 
 const always = () => true;
 

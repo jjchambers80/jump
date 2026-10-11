@@ -10,7 +10,7 @@ import { useState } from 'react';
 import type { AdminForm, FormPurpose } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
 import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
-import { PURPOSE_LABEL } from '../applicationSteps';
+import { PURPOSE_LABEL, wizardLink } from '../applicationSteps';
 import { hintClass, inputClass, labelClass } from '../ui';
 
 interface Props {
@@ -38,7 +38,7 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
       setError((err as Error)?.message || "Couldn't save");
     }
   };
-  const purposeLocked = form.applicationCount > 0;
+  const purposeLocked = !!form.purposeLocked;
 
   return (
     <div className="space-y-4">
@@ -70,11 +70,12 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
           {error}
         </p>
       )}
-      <SettingsCard form={form} canEdit={canEdit} onSave={(body) => run('Form settings saved.', () => api.updateForm(form.id, body))} />
+      <SettingsCard form={form} canEdit={canEdit} linkTo={wizardLink} onSave={(body) => run('Form settings saved.', () => api.updateForm(form.id, body))} />
       {form.kind === 'PAID' && (
         <TiersCard
           form={form}
           canEdit={canEdit}
+          linkTo={wizardLink}
           onAdd={(body) => run('Tier added.', () => api.addTier(form.id, body))}
           onUpdate={(tierId, body) => run('Tier saved.', () => api.updateTier(form.id, tierId, body))}
           onDelete={(tierId) => run('Tier deleted.', () => api.deleteTier(form.id, tierId))}
