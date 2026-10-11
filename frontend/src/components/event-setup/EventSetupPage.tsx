@@ -18,7 +18,11 @@ import { StepMenuSheet, StepRail, type MenuItem } from './StepMenu';
 import { isReachable, stepState, type StepKey } from './steps';
 import { useSetupFlow } from './useSetupFlow';
 import { useSetupActions } from './useSetupActions';
-import { takeStepFocus } from './stepFocus';
+import { focusAfterStepChange, takeStepFocus } from './stepFocus';
+import { toSaved } from './useSetupData';
+import { markSetupFinished } from './doneMarker';
+import LoadingFields from './LoadingFields';
+import { LOCKED_REASON_ID } from './SetupFooter';
 import { secondaryButton } from './ui';
 
 function useIsDesktop() {
@@ -34,16 +38,6 @@ function useIsDesktop() {
   return matches;
 }
 
-function LoadingFields() {
-  return (
-    <div aria-busy="true" aria-label="Loading this step" className="mx-auto w-full max-w-[640px] space-y-4 px-4 py-8 sm:px-6">
-      <div className="h-8 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
-      <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-slate-700" />
-      <div className="h-11 animate-pulse rounded-md bg-gray-200 dark:bg-slate-700" />
-    </div>
-  );
-}
-
 export default function EventSetupPage({ eventId = null }: { eventId?: string | null }) {
   const flow = useSetupFlow(eventId);
   const actions = useSetupActions(flow);
@@ -52,6 +46,8 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const isDesktop = useIsDesktop();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // A publish in flight holds the organizer on Review (Back and the step menu wait).
+  const [publishing, setPublishing] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const firstStep = useRef(true);
@@ -121,6 +117,13 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         zone={flow.zone}
         readOnly={readOnly}
         event={saved}
+        review={{ createMode: mode === 'create', flush: saveState.flush, onBusyChange: setPublishing, onFinished: (row) => {
+          data.setSaved(toSaved(row));
+          // Done is for the tab that just finished setup (050-I doneMarker).
+          markSetupFinished(row.id);
+          focusAfterStepChange();
+          flow.router.push(urlFor('done'));
+        } }}
         onVenueCreated={(venue) => {
           data.addVenue({ id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone, city: venue.city, state: venue.state });
           setFields((f) => ({ ...f, venueId: venue.id }));
@@ -142,7 +145,8 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           saving={saveState.status === 'saving'}
           showMenuButton={ready}
           menuButtonClass={railed ? 'xl:hidden' : ''}
-          onMenu={() => setMenuOpen(true)}
+          menuLockedBy={publishing ? LOCKED_REASON_ID : undefined}
+          onMenu={() => !publishing && setMenuOpen(true)}
           onPreview={() => setPreviewOpen(true)}
           onExit={actions.onExit}
         />
@@ -159,14 +163,15 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           />
         )
       }
-      rail={ready && railed ? <StepRail items={items} onGo={actions.go} /> : undefined}
+      rail={ready && railed ? <StepRail items={items} onGo={actions.go} lockedBy={publishing ? LOCKED_REASON_ID : undefined} /> : undefined}
       footer={
         ready && !done && (
           <SetupFooter
             onBack={actions.onBack}
+            locked={publishing ? 'Publishing… Back and the step menu return when it finishes.' : undefined}
             onSkip={actions.onSkip}
             onSave={actions.onSave}
-            onNext={() => void actions.onNext()}
+            onNext={current === 'review' ? undefined : () => void actions.onNext()}
             nextLabel={actions.nextLabel}
             busy={actions.creating}
           />

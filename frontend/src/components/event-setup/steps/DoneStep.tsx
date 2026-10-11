@@ -15,6 +15,7 @@ import { eventPath } from '@/lib/publicPaths';
 import type { EventOverview } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { clearSetupFinished } from '../doneMarker';
+import FormResults from '../review/FormResults';
 import { primaryButton, textButton } from '../ui';
 
 const row =
@@ -111,6 +112,8 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
           ? `${event.name} is on sale. Share the link to start selling.`
           : `${event.name} is saved and only staff can see it. Publish it from the event page when you are ready.`}
       </p>
+      {/* What Publish did with each form ticked on Review (050-N). */}
+      <FormResults eventId={event.id} />
 
       <ul className="mt-6 space-y-3">
         <li>

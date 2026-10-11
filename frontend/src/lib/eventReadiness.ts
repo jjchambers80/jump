@@ -64,3 +64,8 @@ export function readinessHref(item: ReadinessItem, eventId: string, orgId: strin
       return `${base}${q}`;
   }
 }
+
+/** In the setup wizard an item opens its own step; org settings fixes keep their settings page. */
+export function wizardReadinessHref(item: ReadinessItem, eventId: string): string {
+  return SETTINGS_FIX[item.code]?.href ?? `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}`;
+}

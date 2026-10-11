@@ -12,6 +12,7 @@ export default function SetupHeader({
   saving,
   showMenuButton,
   menuButtonClass,
+  menuLockedBy,
   onMenu,
   onPreview,
   onExit,
@@ -22,6 +23,8 @@ export default function SetupHeader({
   showMenuButton: boolean;
   /** Breakpoint classes: the edit-mode rail replaces the button from xl. */
   menuButtonClass: string;
+  /** Id of the text saying why the step menu waits; set while a publish is in flight. */
+  menuLockedBy?: string;
   onMenu: () => void;
   onPreview: () => void;
   onExit: () => void;
@@ -29,7 +32,14 @@ export default function SetupHeader({
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-2 dark:border-slate-700 dark:bg-slate-900 sm:px-4">
       {showMenuButton && (
-        <button type="button" onClick={onMenu} aria-label="Setup steps" className={`${iconButton} ${menuButtonClass}`}>
+        <button
+          type="button"
+          onClick={onMenu}
+          aria-label="Setup steps"
+          aria-disabled={menuLockedBy ? true : undefined}
+          aria-describedby={menuLockedBy}
+          className={`${iconButton} ${menuButtonClass} aria-disabled:cursor-not-allowed aria-disabled:opacity-60`}
+        >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
       )}

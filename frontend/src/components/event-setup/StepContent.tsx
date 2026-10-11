@@ -12,6 +12,7 @@ import VenueStep from './steps/VenueStep';
 import DateStep from './steps/DateStep';
 import PendingStep from './steps/PendingStep';
 import DoneStep from './steps/DoneStep';
+import ReviewStep, { type ReviewStepProps } from './review/ReviewStep';
 import StartFromPastEvent from './StartFromPastEvent';
 import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
 import type { SetupVenue } from './steps/types';
@@ -20,6 +21,7 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   name: 'The name buyers will see and search for.',
   venue: 'Where it happens. The venue sets the time zone for every time on this event.',
   date: 'When it starts, and if you like, when it ends.',
+  review: 'Check what buyers will see, then publish.',
 };
 
 interface Props {
@@ -39,6 +41,7 @@ interface Props {
   onVenueCreated: (venue: CreatedVenue) => void;
   /** The server row; null before the date step creates it. */
   event: SavedEvent | null;
+  review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange'>;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
@@ -68,6 +71,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'name' && <NameStep {...form} />}
           {step.key === 'venue' && <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
+          {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
           {!step.built && <PendingStep />}
         </fieldset>
         {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}

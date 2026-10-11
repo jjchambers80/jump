@@ -190,7 +190,7 @@ export const EVENT_STEPS: EventStep[] = [
   { key: 'volunteers', title: 'Volunteers', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
   { key: 'other-applications', title: 'Other applications', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
   { key: 'reminders', title: 'Reminders', rule: 'S', anchor: 'event-hero', built: false, reserved: true, visible: never, complete: never },
-  { key: 'review', title: 'Review and publish', rule: 'R', anchor: 'event-hero', built: false, visible: always, complete: (ctx) => !!ctx.saved?.setupCompletedAt },
+  { key: 'review', title: 'Review and publish', rule: 'R', anchor: 'event-hero', built: true, visible: always, complete: (ctx) => !!ctx.saved?.setupCompletedAt },
   { key: 'done', title: 'Your event is saved', rule: 'R', anchor: 'event-hero', built: false, visible: never, complete: never },
 ];
 
