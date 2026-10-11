@@ -18,3 +18,13 @@ export interface StepFormProps {
   /** The saved row's status: a PUBLISHED event's edits go live (§11.5). */
   status: string | null;
 }
+
+/** Steps that save on their own (image upload, tier dialogs) and then refresh the preview. */
+export interface SavedRowProps {
+  orgId: string;
+  saved: import('../steps').SavedEvent;
+  setSaved: import('react').Dispatch<import('react').SetStateAction<import('../steps').SavedEvent | null>>;
+  /** The saved venue's zone: tier sale windows are typed in it (gotcha 28). */
+  zone: string | null;
+  refreshPreview: () => void;
+}

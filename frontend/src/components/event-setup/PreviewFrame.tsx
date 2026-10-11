@@ -83,7 +83,7 @@ export default function PreviewFrame() {
 
   if (!message || !ready) {
     return (
-      <div aria-busy="true" aria-label="Loading preview" className="min-h-screen bg-gray-50 p-4 dark:bg-slate-900">
+      <div role="status" aria-busy="true" aria-label="Loading preview" className="min-h-screen bg-gray-50 p-4 dark:bg-slate-900">
         <div className="h-56 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-800" />
         <div className="mt-4 h-6 w-2/3 animate-pulse rounded bg-gray-200 dark:bg-slate-800" />
         <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-slate-800" />

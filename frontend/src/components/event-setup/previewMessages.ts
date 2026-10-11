@@ -14,6 +14,8 @@ export interface PreviewOverlay {
   date?: string | null;
   endDate?: string | null;
   venue?: EventVenue | null;
+  /** Step 6: unsaved admission mode (an RSVP preview shows the RSVP pass, not tiers). */
+  admissionMode?: 'TICKETED' | 'RSVP';
 }
 
 export interface PreviewMessage {
@@ -43,6 +45,7 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
   const o = m.overlay as Record<string, unknown> | null;
   if (!o || typeof o !== 'object') return false;
   if (!optionalString(o.name) || !optionalString(o.date) || !optionalString(o.endDate)) return false;
+  if (o.admissionMode !== undefined && o.admissionMode !== 'TICKETED' && o.admissionMode !== 'RSVP') return false;
   const venue = o.venue as Record<string, unknown> | null | undefined;
   if (venue !== undefined && venue !== null && (typeof venue !== 'object' || typeof venue.id !== 'string' || typeof venue.name !== 'string')) return false;
   return true;
