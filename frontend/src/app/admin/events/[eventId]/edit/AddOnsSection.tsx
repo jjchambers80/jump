@@ -150,7 +150,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 basis-64 items-baseline gap-3">
           {step != null && (
-            <span aria-hidden className="font-mono text-xs font-medium tabular-nums text-gray-400 dark:text-slate-500">
+            <span aria-hidden className="font-mono text-xs font-medium tabular-nums text-gray-500 dark:text-slate-400">
               {String(step).padStart(2, '0')}
             </span>
           )}
@@ -195,12 +195,12 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
                   <p className="font-medium text-gray-900 dark:text-white">{a.name}</p>
                   <span className="rounded-full bg-gray-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-gray-600 dark:text-slate-300">{SCOPE_LABEL[a.scope]}</span>
                   {!a.isActive && <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300">Inactive</span>}
-                  {!a.taxable && <span className="text-xs text-gray-400 dark:text-slate-500">untaxed</span>}
+                  {!a.taxable && <span className="text-xs text-gray-500 dark:text-slate-400">untaxed</span>}
                 </div>
                 <p className="text-sm text-gray-600 dark:text-slate-300 mt-0.5">
                   {formatPrice(a.price)}
-                  {a.scope !== 'APPLICATION' && <span className="text-gray-400 dark:text-slate-500"> · buyer pays {formatPrice(allIn.total)} with tickets</span>}
-                  {a.maxPerOrder && <span className="text-gray-400 dark:text-slate-500"> · max {a.maxPerOrder} per order</span>}
+                  {a.scope !== 'APPLICATION' && <span className="text-gray-500 dark:text-slate-400"> · buyer pays {formatPrice(allIn.total)} with tickets</span>}
+                  {a.maxPerOrder && <span className="text-gray-500 dark:text-slate-400"> · max {a.maxPerOrder} per order</span>}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
                   Sold {a.quantitySold}
@@ -323,7 +323,7 @@ function AddOnDialog({ draft: initial, priceTiers, taxRate, taxInclusive, onSave
           <h3 id="add-on-dialog-title" className="text-lg font-semibold text-gray-900 dark:text-white">
             {d.id ? 'Edit add-on' : 'New add-on'}
           </h3>
-          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300" aria-label="Close">✕</button>
+          <button type="button" onClick={onCancel} className="text-gray-500 hover:text-gray-700 dark:hover:text-slate-300" aria-label="Close">✕</button>
         </div>
 
         <div className="px-6 py-4 space-y-4">
