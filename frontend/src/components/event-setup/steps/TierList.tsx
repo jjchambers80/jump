@@ -111,7 +111,7 @@ export default function TierList(props: SavedRowProps & { readOnly?: boolean }) 
         <ul className="space-y-2" aria-label="Ticket tiers">
           {tiers.map((tier, index) => {
             const form = tierToForm(tier, zone);
-            const used = tier.quantitySold + (tier.quantityReserved ?? 0) > 0;
+            const used = (tier.quantitySold ?? 0) + (tier.quantityReserved ?? 0) > 0;
             return (
               <li key={tier.id}>
                 <TierCard
