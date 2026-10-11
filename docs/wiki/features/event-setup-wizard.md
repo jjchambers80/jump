@@ -1,9 +1,9 @@
 # Event Setup Wizard
 
-**Status**: Implemented behind `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` (off in prod). Phase 1 (cards A–O, Q) and phase 2 (R, S) merged; 050-P (owner parity sign-off, flag flip, retire the old paths) pending.
+**Status**: Implemented and the only event editor. Phase 1 (cards A–O, Q) and phase 2 (R, S) merged; the owner signed the parity checklist, the flag went on in prod on 2026-10-11 (deploy 39f00a46), and 050-P removed the flag and the old create page, `EventEditor`, the Details flyouts and the event-level forms configuration pages.
 **Last Updated**: 2026-10-11
 
-Plan: [`specs/050-event-setup-wizard/plan.md`](../../../specs/050-event-setup-wizard/plan.md). Research: [`docs/research/2026-10-10-event-creation-wizard.md`](../../research/2026-10-10-event-creation-wizard.md). Donations hook-up: [`specs/047-donations/plan-d1.md`](../../../specs/047-donations/plan-d1.md) §0. PRs #400, #403, #409, #412–#414, #416, #417, #419–#423, #425, #428–#431.
+Plan: [`specs/050-event-setup-wizard/plan.md`](../../../specs/050-event-setup-wizard/plan.md). Research: [`docs/research/2026-10-10-event-creation-wizard.md`](../../research/2026-10-10-event-creation-wizard.md). Donations hook-up: [`specs/047-donations/plan-d1.md`](../../../specs/047-donations/plan-d1.md) §0. PRs #400, #403, #409, #412–#414, #416, #417, #419–#423, #425, #428–#432, and 050-P.
 
 ## Overview
 
@@ -13,12 +13,11 @@ Every **Create event** opens a Zeffy-style step wizard: name → venue → date 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` | No | Frontend, **build-time**. `true` swaps `/admin/events/new` for the wizard, mounts `setup` / `preview-frame`, points every Details Edit at the wizard, unmounts the Details flyouts and redirects the old editors and the Applications › Forms config pages. Off (default, **and in prod today**): `/admin/events/new` renders `LegacyCreateEventPage.tsx` unchanged, `setup` and `preview-frame` are 404, Details keeps its flyouts. 050-P flips it and then deletes it |
 | `STOREFRONT_PREVIEW_SECRET` | No | Existing (spec 038). Also signs event preview tokens; unset → derived from `AUTH_SECRET` (`ThemePreviewService.previewSecret()`) |
 | `APPLICATIONS_PAYMENTS_ENABLED` | No | Existing. Off: Review cannot open PAID forms at publish (`PAID_FORMS_DISABLED`) |
 | `NEXT_PUBLIC_DONATIONS_ENABLED` | No | Spec 047 D1, not built. `useDonationsEligible()` / `useDonationSuggestion()` return `false` until D1 wires them |
 
-The backend has no flag: the new routes, fields, permissions defaults (050-E), unpublish / close sales / delete draft (050-D), readiness at publish (050-C), previews (050-F), purpose (050-B), lineup (050-Q) and shifts (050-R) are **live in prod for every caller** (old editor, CLI, MCP). Only the wizard UI is dark. Keep the flag off until the owner signs the 050-P parity checklist (PR #431 body + re-review).
+There is no wizard flag any more: `NEXT_PUBLIC_EVENT_WIZARD_ENABLED` was removed in 050-P and the wizard is always on. On the backend, the new routes, fields, permissions defaults (050-E), unpublish / close sales / delete draft (050-D), readiness at publish (050-C), previews (050-F), purpose (050-B), lineup (050-Q) and shifts (050-R) are live for every caller (wizard, CLI, MCP).
 
 ## Steps
 
@@ -52,8 +51,8 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 
 ### Routes and shell
 
-- `/admin/events/new` (flag on) → wizard, steps 1–3, no row. `/admin/events/[eventId]/setup?step=<key>` → wizard on an existing event; no `?step=` resumes at `setupStep`. `/admin/events/preview-frame` → the chrome-less document the preview iframe loads.
-- `AdminLayoutClient` `FULL_SCREEN` matches all three (`new` only with the flag on); they keep `AdminRoute`, `OrgProvider` and the edge guard. `src/middleware.ts` sends `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` for the exact path `/admin/events/preview-frame` only.
+- `/admin/events/new` → wizard, steps 1–3, no row. `/admin/events/[eventId]/setup?step=<key>` → wizard on an existing event; no `?step=` resumes at `setupStep`. `/admin/events/preview-frame` → the chrome-less document the preview iframe loads.
+- `AdminLayoutClient` `FULL_SCREEN` matches all three; they keep `AdminRoute`, `OrgProvider` and the edge guard. `src/middleware.ts` sends `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` for the exact path `/admin/events/preview-frame` only.
 - `EventSetupPage` (container) → `useSetupFlow` / `useSetupData` / `useSetupForms` / `useSetupActions` / `useStepSave`; `SetupShell` (layout), `SetupHeader`, `SetupProgress` (`<ol aria-label="Setup steps">`, `aria-current="step"`, icon + text per state), `StepMenu` ("Jump to edit": 240 px rail from xl, sheet below), `SetupFooter`, `PreviewPane`, `StepContent`, `ErrorSummary`, `SaveIndicator`. `OrgFromUrlGate` selects `?org=` before anything loads.
 - Step change: focus to the step h1 (`tabIndex={-1}`), polite live region "Step n of N, Title". A failed Next renders a focused `role="alert"` summary whose links focus the field, or open the step that owns it. Next is never disabled without a reason.
 - Mobile (below lg): header [Menu] [Eye] [Exit / Save & exit], 44 × 44, labelled. The preview becomes a full-screen dialog (`useDialog`); while closed it is `hidden`, `inert`, `aria-hidden` (the frame keeps its state).
@@ -73,7 +72,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 - **Create at the date step.** Next validates steps 1–3 and posts `{ setup: true, name, slug?, venueId, date, endDate?, admissionMode }` with an `Idempotency-Key` minted into the session draft *before* the request. The backend stores it as `Event.setupRequestId` (unique): a replay returns the existing row with 200, a concurrent replay loses the unique race and reads the winner, a key used by another org is 409. The client compares the returned name / venue / dates with what it sent and PATCHes any difference (lost-response case). Then `router.replace('/admin/events/<id>/setup?step=description')`, session draft cleared, h1 focused after the remount.
 - **`setup: true` relaxes create**: no tiers, `capacity` optional (DB CHECK `Event_capacity_draft_check`: capacity non-null unless DRAFT or RSVP), status DRAFT, `setupCompletedAt: null`. Without it the old create path is unchanged and `setupCompletedAt` takes its column default `now()`; the migration's default backfilled every existing event as set up, so old events never show the linear flow or Continue setup.
 - **`setupStep`** = the furthest step key reached (create mode only, recorded on Next). **`setupCompletedAt`** = set once by Review (publish or Save as draft) or any publish. Keys, not indexes, because visible steps vary per event.
-- **Continue setup** (`continueSetupHref` in `lib/eventWizard.ts`: flag on, DRAFT, `setupCompletedAt === null`; `undefined` from an old payload never matches) replaces Publish on the events list card, the Details hero and the dashboard attention list, and opens `setup?step=<setupStep>`.
+- **Continue setup** (`continueSetupHref` in `lib/eventWizard.ts`: DRAFT, `setupCompletedAt === null`; `undefined` from an old payload never matches) replaces Publish on the events list card, the Details hero and the dashboard attention list, and opens `setup?step=<setupStep>`.
 - **Start from a past event** (step 1, before the row): dialog with a searchable event picker (server `q`, native radios), new name, start typed in the **source** event's venue zone → `POST …/:eventId/duplicate {setup:true}` (only a literal `true`): the copy gets `setupCompletedAt: null`, `setupStep: 'date'`, then opens `setup?step=date`. Duplicate copies tiers (inventory reset), add-ons, forms (with `purpose`, `collectBusiness`, volunteer shifts shifted by the date offset, no picks), image and floor map; never the guest lineup.
 - **Done** (`?step=done`) belongs to the create flow: it needs `setupCompletedAt` set (else it falls back to the resume step) **and** the tab's `jump:event-setup-done:<eventId>` marker (`doneMarker.ts`, set by Review before it opens Done; without it a set-up event is in edit mode and `?step=done` goes to Details). Cards: View / Preview the event page (a draft mints the signed link on arrival so the click is not popup-blocked), Copy the share link (published), Review applications or Set up door check-in; primary **Go to event**. `formResults` from the publish are listed as text.
 
@@ -105,7 +104,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 - RSVP events skip tier, capacity and payments checks (branch on `admissionMode`, gotcha 29).
 - `POST …/publish { openFormIds?: string[] }`: 409 if not DRAFT; runs readiness → **422 `EVENT_NOT_READY`** with `details: { blockers, warnings }`. In one transaction: PUBLISHED, `setupCompletedAt` if null, listed **DRAFT** forms of this event → OPEN. Each listed form is reported in **`formResults`** (`OPEN` or `REFUSED` + code: PAID with the gate off, not a draft, foreign id, or an `_assertCanOpen` 4xx such as no tier / map not ready); a refusal never fails the publish. Malformed `openFormIds` → 400.
 - Review (`components/event-setup/review/`): checklist straight from `/readiness` with "Must fix:" / "Check:" text, each linking `setup?step=` (`wizardReadinessHref`); payments / tax fixes keep their settings link or say an admin must act; `EventTaxSummary` for TICKETED; brand summary read-only from the org context with a link to Settings › Brand; every form with "Open applications when I publish: <form>" (default ticked, disabled with the reason on `PAID_FORMS_DISABLED`); Open full preview; **Publish** + **Save as draft** (create mode), Publish only (edit mode on a DRAFT), status text (live / cancelled). Both actions flush pending edits first; Back and the step menu are `aria-disabled` while a publish is out. A 422 renders the focused `PublishBlockers` with step links and refetches readiness.
-- Details and the list card Publish buttons show the same blockers (`PublishBlockers`, `readinessHref`; wizard links under the flag).
+- Details and the list card Publish buttons show the same blockers (`PublishBlockers`, `readinessHref`: each blocker opens its wizard step, `&org=` added).
 
 ### Edit mode (050-O)
 
@@ -124,8 +123,9 @@ Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard
 | An application form | `step=<purpose step>&form=<id>` (`stepForPurpose`) |
 | New form | `step=vendors` |
 | Floor map | `step=floor-map` while a VENDOR MAP form exists, else the Map tab |
+| Special guests (lineup card: count, first four names, hidden ones marked) | `step=special-guests` |
 
-`AdmissionFlyout`, `ListingFlyout`, `TierFlyout`, `FormSettingsFlyout` never mount under the flag (deleted in 050-P). **Redirects** (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → `vendors`; `applications/forms/<id>` → the form's purpose step + `&form=`. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move.
+The four Details flyouts were deleted in 050-P. **Redirects** (kept for bookmarks and email links) (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → `vendors`; `applications/forms/<id>` → the form's purpose step + `&form=`. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move; the tab's header has **Manage forms** → `step=vendors`, and its empty state links there too. The template editor `/admin/events/templates/<id>` stays, reached from Start from.
 
 Edit-mode extras: **View event** in the header (public page, or a signed preview for a draft), read-only tax summary on Tickets, live-URL warning on Name.
 
@@ -199,8 +199,8 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 
 - Backend: `eventSetupDraft`, `eventReadiness`, `eventPreview`, `eventCloseSales`, `organizerFormConfig` (table-driven over every opened and kept route), `applicationFormPurpose`, `applicationFormDefaults`, `volunteerShifts`, `volunteerShiftRoster`, `eventGuests`, `priceTiers` contract suites; unit `eventSetupSteps`, `eventValidators`, `eventReadiness`, `eventPreviewService`, `applicationFormPurposeMigration`, `eventGuestDataRights`.
 - Vitest: `eventSetupSteps`, `stepSaver`, `tierForm`, `eventWizard`, `eventReadiness`, `shiftEditor`, `returnTo`, `eventHero`.
-- Playwright on the **flag-on server**: `admin-event-setup-{shell,entry,tickets,add-ons,applications,floor-map,review,volunteer-shifts}`, `admin-event-edit-mode`, `event-guest-lineup`. Flag-off server: `admin-event-details` (no setup links, flyouts present), `admin-event-publish-blockers`, `admin-event-close-sales`, `event-sales-closed`, `event-draft-preview`, `event-page-preview-mode`, `get-involved-labels`, `apply-volunteer-shifts`, `applications-shift-roster`.
-- **Flag-on server**: the build-time flag needs its own build, so `playwright.config.ts` starts a **second `next dev`** with `NEXT_PUBLIC_EVENT_WIZARD_ENABLED=true` and `NEXT_DIST_DIR=.next-e2e-wizard` (own `.next`) on `PLAYWRIGHT_WIZARD_PORT` (default **`PLAYWRIGHT_PORT + 103`**; the plan's +2 collided with the fixture API) and exports `PLAYWRIGHT_WIZARD_BASE_URL`. Only wizard specs use it; each `test.skip`s without it. **`PLAYWRIGHT_WIZARD=0`** skips that server locally. CI starts it on all 3 shards (shards split after servers boot). Locally `reuseExistingServer` reuses whatever holds that port, flag on or not.
+- Playwright (one dev server since 050-P): `admin-event-setup-{shell,entry,tickets,add-ons,applications,floor-map,review,volunteer-shifts}`, `admin-event-edit-mode`, `event-guest-lineup`, `admin-venue-flyout` (venue step's New venue), `admin-event-details` (every Edit href into the wizard, Special guests card), `applications-add-ons` and `participants-templates` (form editor, Start from, Save as template and pinned columns on the wizard step), `admin-event-publish-blockers`, `admin-event-close-sales`, `event-sales-closed`, `event-draft-preview`, `event-page-preview-mode`, `get-involved-labels`, `apply-volunteer-shifts`, `applications-shift-roster`. 050-P moved the old editor specs' still-valid checks into the wizard specs (admission radio keys, 24 px reorder targets, image replace / remove, tier quantity floor, add-on sales counts and read-only without `addOns.manage`) and deleted `admin-event-form-layout`.
+- Pages opened in `beforeAll` (no test fixtures) use `BASE_URL` from `e2e/helpers/session.ts`.
 - Wizard specs warm `/admin/events/new`, `setup` and `preview-frame` in `beforeAll` (desktop viewport, else the preview is hidden), run axe with `reducedMotion: 'reduce'` (the `motion-safe` fades otherwise catch axe mid-opacity), wait for Tiptap before scanning the Describe step, and scope assertions to `<main>` or the frame (the preview repeats every name).
 
 ## Key Files
@@ -217,12 +217,12 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 | `frontend/src/components/event-setup/steps/*` | One file per step: Name, Venue, Date, Describe, Image, Tickets (`TierList`, `useTierActions`), CollectMore, Applications (`AddFormDialog`, `FormRow`, `InlineFormEditor`, `ShiftsCard`), FloorMap, Done |
 | `frontend/src/components/event-setup/review/*` | Review: checklist, forms, brand, actions, publish outcome, donation slot |
 | `frontend/src/components/event-setup/lineup/*` | Guest lineup editor |
-| `frontend/src/lib/eventWizard.ts` | Flag, `continueSetupHref`, `wizardStepHref`, `withOrg`, `detailsEditLinks`, `legacyEditStep` |
+| `frontend/src/lib/eventWizard.ts` | `continueSetupHref`, `wizardStepHref`, `withOrg`, `detailsEditLinks`, `legacyEditStep` |
 | `frontend/src/lib/eventReadiness.ts`, `components/events/PublishBlockers.tsx` | Blocker links |
 | `frontend/src/lib/detailsReturn.ts`, `lib/returnTo.ts` | Focus return on Details; safe builder `returnTo` |
-| `frontend/src/app/admin/events/new/page.tsx` (+ `LegacyCreateEventPage.tsx`), `[eventId]/setup/page.tsx`, `preview-frame/page.tsx` | Routes |
+| `frontend/src/app/admin/events/new/page.tsx`, `[eventId]/setup/page.tsx`, `preview-frame/page.tsx` | Routes |
 | `frontend/src/app/events/[eventId]/EventPageView.tsx` + section components, `EventGuests.tsx`, `app/api/events/preview/route.ts`, `components/storefront/EventPreviewBar.tsx` | Event page split, lineup section, signed preview |
-| `frontend/src/components/events/tierForm.ts`, `EventTaxSummary.tsx`, `EventLifecycleDialog.tsx` | Shared with the old editor; lifecycle dialogs |
+| `frontend/src/components/events/tierForm.ts`, `EventTaxSummary.tsx`, `EventLifecycleDialog.tsx` | Tier form helpers, tax summary, lifecycle dialogs |
 | `backend/src/api/validators/eventValidators.js` | `EVENT_SETUP_STEPS`, setup create / PATCH rules |
 | `backend/src/services/EventService.js` | `createSetupEvent`, publish, unpublish, close / reopen sales, delete draft, duplicate `{setup}`, preview payload |
 | `backend/src/services/EventReadinessService.js`, `EventPreviewService.js`, `salesOpen.js` | Readiness, preview tokens, `assertSalesOpen` |
@@ -232,25 +232,24 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 
 ## Gotchas
 
-- **One editor.** With the flag on, `components/event-setup/` is the only form for event fields and event application forms. Never add a flyout or section editor for a field a step owns; link to `setup?step=`.
+- **One editor.** `components/event-setup/` is the only form for event fields and event application forms. Never add a flyout or section editor for a field a step owns; link to `setup?step=`.
 - **PUBLISHED events never autosave**, and navigation never flushes their pending edits (`go()` flushes only DRAFT). Tier / add-on / form / guest / shift dialogs still save immediately, as before the wizard.
 - **Step keys live in three places** (backend `EVENT_SETUP_STEPS`, frontend `StepKey`, the shared fixture); the parity tests fail otherwise. A new step = registry entry + backend key + fixture + `StepContent`.
 - **Visibility is not completion.** Floor map shows on VENDOR + MAP only (a PAID sponsor form with MAP does not add it), while the readiness `MAP_FORM_WITHOUT_PUBLISHED_MAP` warning looks at any PAID MAP form.
-- **The tier-sum ceiling is relaxed on wizard drafts only** (`setupCompletedAt` null) in `PriceTierService` create / update and the `updateEvent` capacity floor; the Tickets step warns inline and publish blocks with `TIERS_EXCEED_CAPACITY`. Completed events, the old editor and the CLI keep the hard 400.
+- **The tier-sum ceiling is relaxed on wizard drafts only** (`setupCompletedAt` null) in `PriceTierService` create / update and the `updateEvent` capacity floor; the Tickets step warns inline and publish blocks with `TIERS_EXCEED_CAPACITY`. Completed events and the CLI keep the hard 400.
 - **Locks.** Unpublish takes `Event FOR UPDATE`; checkout takes `Event FOR SHARE` as the first statement of its transaction and application submit takes `FOR SHARE` + re-checks status and `assertSalesOpen` after it (RSVP create already holds `FOR UPDATE`), so no sale lands between unpublish's count and its write. Tier delete locks the `PriceTier` row (`FOR UPDATE OF pt`) and recounts tickets and order lines (`OrderItem.priceTierId` is `SET NULL`, so a line must never lose its tier). Shift update / delete lock the `VolunteerShift` row, the same lock approval takes (shifts in id order).
 - **Admission lock on the client is derived from the overview**; the server (any order of any kind → 409 `ADMISSION_MODE_LOCKED`) wins.
 - **Preview frame**: same-origin only, under `/admin` (edge guard). Never post with `'*'`, never `scrollIntoView` inside it, never overlay unsanitised HTML.
 - **The preview link lives 1 h**; Review and Done re-mint it, a stale tab gets a plain 404 for the draft.
 - **Duplicate text in Playwright**: the iframe and the mobile / desktop copies repeat names; scope to the form pane or the frame (gotcha 11).
 - **`useSearchParams()`** (`step`, `venueId`, `tier`, `form`, `org`) sits inside `<Suspense>` on every wizard route.
-- **Flag-off leaks** (intended): Details' always-mounted status region and contrast fixes, the venue-zone form open / close times on the old form pages, `?venueId=` on the venue page's Create event link (ignored by the old form).
-- **Known follow-ups for 050-P**: links still on old paths that redirect today (`UpcomingTickets.tsx` `/edit`, `FormEditorCards` `eventPageLink` outside the wizard, `SubmissionsTable` empty state, the Applications Forms switch); a Details lineup card; delete `EventEditor.tsx`, the section editors (keep redirects), the four flyouts, the forms config pages, the flag and the `FULL_SCREEN` flag branch; rewrite the flag-off create / forms e2e specs. The dashboard Needs-attention Publish posts to a route that does not exist (`adminService.publishEvent`, PR #412 review FYI).
+- **Old paths are redirect-only.** `/edit`, `/edit/details`, `/edit/sales` and `applications/forms*` render `WizardRedirect` and nothing else. Link new code straight at `setup?step=` (`wizardStepHref`, `detailsEditLinks`, `readinessHref`). The dashboard Needs-attention Publish posts to a route that does not exist (`adminService.publishEvent`, PR #412 review FYI; still open).
 - **Donations (spec 047 D1)** plug in at the `collect-more` comment slot (`EventGiftSettings`) and `DonationSuggestion` on Review; `useDonationsEligible` is a stub returning `false`.
 
 ## Related Features
 
 - [Event Details](event-details.md) — the read-only home whose Edit controls open the wizard
-- [Event Editor](event-editor.md) — the old create / section editors (flag off; deleted in 050-P)
+- [Event Editor](event-editor.md) — retired in 050-P; what the old routes redirect to
 - [Event Management](event-management.md) — lifecycle and API
 - [Applications](applications.md), [Participants](participants.md) — forms, templates, review
 - [Add-ons](add-ons.md), [Price Tiers](price-tiers.md), [RSVP Events](rsvp-events.md)
