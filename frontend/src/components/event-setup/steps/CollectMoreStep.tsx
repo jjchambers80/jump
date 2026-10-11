@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/services/api';
-import AddOnsSection from '@/app/admin/events/[eventId]/edit/AddOnsSection';
+import AddOnsSection from '@/components/events/add-ons/AddOnsSection';
 import type { EventOverview } from '@/lib/eventOverview';
 import { secondaryButton } from '../ui';
 

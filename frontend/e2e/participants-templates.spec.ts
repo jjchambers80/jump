@@ -231,6 +231,9 @@ test('Add a form in the wizard: Start from offers same-kind saved templates; cre
   await expect(main(page).getByRole('heading', { level: 1, name: 'Vendor applications' })).toBeFocused(COLD);
   await main(page).getByRole('button', { name: 'Add a vendor application' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a vendor application' });
+  // Start from waits for the org's templates; Create form stays off until they arrive.
+  await expect(dialog.getByRole('status').filter({ hasText: 'Loading templates…' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Create form' })).toBeEnabled();
   // A vendor form charges by default → only the paid template; free → only the free one.
   await expect(dialog.getByRole('radio', { name: /Exhibitor booths/ })).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /Press pass/ })).toHaveCount(0);

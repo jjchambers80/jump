@@ -51,11 +51,11 @@ const TEMPLATES = [
   { id: 'tpl-old', name: 'Old free form', kind: 'FREE', purpose: null, tierCount: 0, questionCount: 1, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
 ];
 
-type Calls = { create: Request[]; patch: Request[]; remove: Request[] };
+type Calls = { create: Request[]; patch: Request[]; remove: Request[]; questions: Request[] };
 
 async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
   let forms = structuredClone(initialForms);
-  const calls: Calls = { create: [], patch: [], remove: [] };
+  const calls: Calls = { create: [], patch: [], remove: [], questions: [] };
   const list = `${API}/admin/events/${EVENT_ID}/application-forms`;
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
@@ -79,6 +79,15 @@ async function mockApi(page: Page, initialForms: Record<string, any>[] = []) {
     const created = form(route.request().postDataJSON());
     forms.push(created);
     return route.fulfill(json(created, 201));
+  });
+  await page.route(new RegExp(`${list}/[^/]+/questions$`), (route) => {
+    const id = route.request().url().split('/').slice(-2)[0];
+    const target = forms.find((f) => f.id === id)!;
+    const body = route.request().postDataJSON();
+    calls.questions.push(route.request());
+    const q = { id: `${id}-q${target.questions.length}`, helpText: null, required: false, options: [], pinned: false, displayOrder: target.questions.length, ...body };
+    target.questions.push(q);
+    return route.fulfill(json(q, 201));
   });
   await page.route(new RegExp(`${list}/[^/]+$`), (route) => {
     const id = route.request().url().split('/').pop()!;
@@ -208,6 +217,14 @@ test.describe('desktop', () => {
     await expect(questions.getByText('Emergency contact (name and phone)')).toBeVisible();
     // FREE forms have no tiers card.
     await expect(main(page).getByText('Tiers', { exact: true })).toHaveCount(0);
+
+    // Add a question inline (carried over from the old forms editor spec, 050-P).
+    const add = main(page).getByTestId('question-add');
+    await add.getByLabel('Question').fill('Years volunteering');
+    await add.getByLabel('Type').selectOption('NUMBER');
+    await add.getByRole('button', { name: 'Add question' }).click();
+    await expect.poll(() => calls.questions.map((r) => r.postDataJSON())).toEqual([expect.objectContaining({ label: 'Years volunteering', type: 'NUMBER' })]);
+    await expect(questions.getByText('Years volunteering')).toBeVisible();
   });
 
   test('other applications: a purpose per form, fixed once it has applications; delete or close', async ({ page }) => {

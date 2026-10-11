@@ -46,7 +46,8 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);
+  // null until the org's templates arrive: Start from must not offer a partial list.
+  const [templates, setTemplates] = useState<FormTemplateSummary[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,14 +72,14 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
   }, [moveTo, expanded, pathname, router]);
 
   const loadTemplates = useCallback(() => {
-    if (!canEdit) return;
+    if (!canEdit) return setTemplates([]);
     participants.templates().then((r) => setTemplates(r.data)).catch(() => setTemplates([]));
   }, [participants, canEdit]);
   useEffect(loadTemplates, [loadTemplates]);
   const deleteTemplate = async (template: FormTemplateSummary) => {
     if (!window.confirm(`Delete the "${template.name}" template? Forms already created from it are kept.`)) return false;
     await participants.deleteTemplate(template.id);
-    setTemplates((list) => list.filter((t) => t.id !== template.id));
+    setTemplates((list) => (list ?? []).filter((t) => t.id !== template.id));
     setStatus(`Template ${template.name} deleted.`);
     return true;
   };
@@ -184,7 +185,7 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
                 }}
                 onClose={() => void act(`${form.name} closed.`, () => api.updateForm(form.id, { status: 'CLOSED' }))}
               >
-                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} eventStart={eventStart} eventEnd={eventEnd} templates={templates} onTemplatesChanged={loadTemplates} />
+                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} eventStart={eventStart} eventEnd={eventEnd} templates={templates ?? []} onTemplatesChanged={loadTemplates} />
               </FormRow>
             ))}
           </ul>

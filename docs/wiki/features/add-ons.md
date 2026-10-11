@@ -31,7 +31,7 @@ Derived from the 2026-09-15 Eventeny organizer interview pain point #6 (add-ons 
 | `frontend/src/components/AddOnPicker.tsx` | Quantity steppers shared by the event page, apply form and the admin edit dialog |
 | `frontend/src/app/events/[eventId]/page.tsx`, `checkout/[eventId]/page.tsx`, `orders/[orderId]/page.tsx` | Storefront picker, `?addOns=` cart lines, checkout, confirmation |
 | `frontend/src/app/events/[eventId]/apply/[formSlug]/page.tsx`, `apply/status/[applicationId]/page.tsx` | Apply-form picker + estimated total, itemised status page |
-| `frontend/src/app/admin/events/[eventId]/edit/AddOnsSection.tsx` | Admin add-ons section (presets, dialog, activate / reorder) — saves through the API immediately |
+| `frontend/src/components/events/add-ons/AddOnsSection.tsx` (+ `AddOnRow`, `AddOnDialog`, `addOnDraft`) | Admin add-ons section, mounted by the wizard's Collect more step (presets, dialog, activate / reorder) — saves through the API immediately |
 | `frontend/src/app/admin/events/[eventId]/applications/EditAddOnsDialog.tsx`, `[applicationId]/page.tsx`, `page.tsx`, `forms/[formId]/page.tsx` | Application lines + pre-payment edit, list column + filter, tier "Add-ons offered" |
 | `frontend/src/app/admin/events/[eventId]/analytics/page.tsx` | Add-on sales table + purchasers CSV |
 | `backend/tests/contract/addOns.test.js`, `applicationsAddOns.test.js` | Contract tests (phase 1; phases 2–3) |

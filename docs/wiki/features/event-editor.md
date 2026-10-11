@@ -21,7 +21,7 @@ Every redirect is `components/event-setup/WizardRedirect.tsx`, which carries `?o
 ## What stayed
 
 - `components/events/EventFormLayout.tsx` (`EventFormShell`, `FormCard`, `FormAlert`, `EventFormActions`, `AdmissionModeField`, `RsvpSettingsFields`, the input classes), `EventSaveCard` and `jumpTo` in `EventEditSummary.tsx`: the venue editor and the wizard's Tickets step use them.
-- `components/events/tierForm.ts`, `EventTaxSummary.tsx`, `TierEditDialog`, `TierCard`, `TierPresetMenu`, `EventMediaCard`, `VenueFlyout`, `SlugField`, `AddOnsSection` (still under `edit/`): the wizard's steps compose them.
+- `components/events/tierForm.ts`, `EventTaxSummary.tsx`, `TierEditDialog`, `TierCard`, `TierPresetMenu`, `EventMediaCard`, `VenueFlyout`, `SlugField`, `AddOnsSection` (moved to `components/events/add-ons/`): the wizard's steps compose them.
 - The rule that admin pages never scroll with a plain `#anchor` or `scrollIntoView` (scroll `<main>` with `jumpTo`) still holds; see `frontend/AGENTS.md`.
 
 ## Related Features

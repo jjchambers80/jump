@@ -280,7 +280,7 @@ test.describe('desktop', () => {
     await expect(main(page).getByLabel('Capacity')).toHaveCount(0);
   });
 
-  test('a tier cannot drop below what it has sold', async ({ page }) => {
+  test('a tier edit saves its fields and cannot drop below what it has sold', async ({ page }) => {
     const calls = await mockApi(page, baseEvent({ priceTiers: [tier({ quantitySold: 50, quantityAvailable: 30 })] }));
     await page.goto(setupUrl('step=tickets&tier=t-ga'));
     const dialog = page.getByRole('dialog', { name: 'Edit Tier 1' });
@@ -289,10 +289,15 @@ test.describe('desktop', () => {
     await dialog.getByRole('button', { name: 'Save tier' }).click();
     await expect(dialog.getByRole('alert')).toContainText('Quantity must be at least 50 (sold + reserved)');
     expect(calls.tierPatch).toHaveLength(0);
+    // The old Details tier flyout's check: every edited field reaches the PATCH.
+    await dialog.getByLabel('Tier Name *').fill('VIP');
+    await dialog.getByLabel('Price ($) *').fill('90');
     await dialog.getByLabel('Quantity *').fill('60');
+    await dialog.getByLabel('Refundable').check();
     await dialog.getByRole('button', { name: 'Save tier' }).click();
     await expect(dialog).toHaveCount(0);
-    expect(calls.tierPatch[0].postDataJSON()).toEqual({ quantityTotal: 60 });
+    expect(calls.tierPatch).toHaveLength(1);
+    expect(calls.tierPatch[0].postDataJSON()).toEqual({ name: 'VIP', price: 90, quantityTotal: 60, isRefundable: true });
   });
 
   test('an uploaded image offers replace and remove', async ({ page }) => {

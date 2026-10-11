@@ -31,7 +31,8 @@ export interface NewFormBody {
 interface Props {
   config: ApplicationStepConfig;
   eventName: string;
-  templates: FormTemplateSummary[];
+  /** null while the org's templates are still loading. */
+  templates: FormTemplateSummary[] | null;
   /** May edit and delete templates (the same permission as configuring forms). */
   canManage: boolean;
   /** Confirms, deletes, and resolves true when the template is gone. */
@@ -53,7 +54,8 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
   const [allPurposes, setAllPurposes] = useState(false);
   const freeOnly = FREE_ONLY[purpose];
   const kind: FormKind = paid && !freeOnly ? 'PAID' : 'FREE';
-  const options = allPurposes ? templates.filter((t) => t.kind === kind) : templatesFor(templates, purpose, kind);
+  const loading = templates === null;
+  const options = loading ? [] : allPurposes ? templates.filter((t) => t.kind === kind) : templatesFor(templates, purpose, kind);
   const removeTemplate = async (template: FormTemplateSummary) => {
     setError(null);
     try {
@@ -66,7 +68,7 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || loading) return;
     if (name.trim().length < 2) return setError('Enter a name of at least 2 characters');
     setBusy(true);
     setError(null);
@@ -130,7 +132,12 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
                 <input type="checkbox" checked={allPurposes} onChange={(e) => setAllPurposes(e.target.checked)} className="h-5 w-5 accent-accent-600" />
                 Show templates for all purposes
               </label>
-              <ul className="mt-1 space-y-2">
+              {loading && (
+                <p id="add-form-templates-loading" role="status" className={`${hintClass} mt-2`}>
+                  Loading templates…
+                </p>
+              )}
+              <ul className="mt-1 space-y-2" hidden={loading}>
                 {[{ id: '', name: 'Blank form' }, ...options].map((t) => (
                   <li key={t.id || 'blank'}>
                     <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5 text-sm has-[:checked]:border-accent-500 dark:border-slate-600">
@@ -161,7 +168,14 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
           </div>
           <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-slate-700 sm:px-6">
             <button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>
-            <button type="submit" disabled={busy} className={primaryButton}>{busy ? 'Creating…' : 'Create form'}</button>
+            <button
+              type="submit"
+              disabled={busy || loading}
+              aria-describedby={loading ? 'add-form-templates-loading' : undefined}
+              className={primaryButton}
+            >
+              {busy ? 'Creating…' : 'Create form'}
+            </button>
           </div>
         </form>
       </div>
