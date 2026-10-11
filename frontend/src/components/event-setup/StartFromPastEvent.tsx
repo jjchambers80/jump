@@ -45,7 +45,14 @@ function PastEventDialog({ orgId, onClose }: { orgId: string; onClose: () => voi
     if (!instant) next.date = 'Enter a start date and time';
     else if (instant <= new Date()) next.date = 'Choose a start time in the future';
     setErrors(next);
-    if (Object.keys(next).length || !source || !instant) return;
+    if (Object.keys(next).length || !source || !instant) {
+      // Focus the first invalid field (the event list, else the search box when it is empty).
+      const first = next.source
+        ? document.querySelector<HTMLElement>('input[name="past-event"]') ?? document.getElementById('past-event-search')
+        : document.getElementById(next.name ? 'past-event-name' : 'past-event-date');
+      first?.focus();
+      return;
+    }
     setBusy(true);
     try {
       const copy = await api.post<{ id: string }>(`/organizations/${orgId}/events/${encodeURIComponent(source.id)}/duplicate`, {

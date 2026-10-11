@@ -81,15 +81,15 @@ export default function NeedsAttention({
               </div>
               <ContinueSetupLink event={{ ...event, status: 'DRAFT' }} />
               {!continueSetupHref({ ...event, status: 'DRAFT' }) && (
-              <button
-                type="button"
-                onClick={() => onPublish(event.id)}
-                disabled={publishingId === event.id}
-                aria-label={`Publish ${event.name}`}
-                className="min-h-[2.75rem] shrink-0 rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                {publishingId === event.id ? 'Publishing…' : 'Publish'}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onPublish(event.id)}
+                  disabled={publishingId === event.id}
+                  aria-label={`Publish ${event.name}`}
+                  className="min-h-[2.75rem] shrink-0 rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  {publishingId === event.id ? 'Publishing…' : 'Publish'}
+                </button>
               )}
             </li>
           ))}

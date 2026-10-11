@@ -33,7 +33,9 @@ function adminEvent(patch: Record<string, unknown> = {}) {
 const SOURCE = adminEvent({ id: SOURCE_ID, slug: 'harvest-fair', name: 'Harvest Fair', date: '2026-05-02T15:00:00.000Z', status: 'PUBLISHED', setupStep: null, setupCompletedAt: '2026-01-01T00:00:00Z' });
 const OTHER = adminEvent({ id: 'evt-gala', slug: 'gala', name: 'Winter Gala', date: '2026-01-10T01:00:00.000Z', status: 'PUBLISHED', setupStep: null, setupCompletedAt: '2026-01-01T00:00:00Z' });
 
-async function mockApi(page: Page, copy = adminEvent()) {
+const STORE = 'https://shop.harvest.example';
+
+async function mockApi(page: Page, copy = adminEvent(), forms: { id: string }[] = []) {
   const calls: { duplicate: Request[]; list: URL[] } = { duplicate: [], list: [] };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
@@ -57,7 +59,7 @@ async function mockApi(page: Page, copy = adminEvent()) {
     route.fulfill(json(copy, 201));
   });
   await page.route(`${API}/organizations/${ORG_ID}/events/${COPY_ID}`, (route) => route.fulfill(json({ ...copy, ...route.request().postDataJSON() })));
-  await page.route(`${API}/organizations/${ORG_ID}/events/${COPY_ID}/overview`, (route) => route.fulfill(json({ event: copy, applications: { forms: [] } })));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${COPY_ID}/overview`, (route) => route.fulfill(json({ event: copy, publicUrl: `${STORE}/events/${copy.slug}`, applications: { forms } })));
   await page.route(`${API}/organizations/${ORG_ID}/events/${COPY_ID}/preview-payload`, (route) =>
     route.fulfill(json({ event: copy, organization: { id: ORG_ID, name: 'Entry Org' }, forms: [] }))
   );
@@ -96,6 +98,11 @@ test.beforeEach(async ({ page, baseURL }) => {
   await signInAsStaff(page, STAFF, baseURL!);
 });
 
+/** Review (050-N) marks the event finished in this tab before it opens Done. */
+const finishedInThisTab = (page: Page) =>
+  page.addInitScript((id) => window.sessionStorage.setItem(`jump:event-setup-done:${id}`, '1'), COPY_ID);
+const FINISHED = { setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' };
+
 async function openPastEventDialog(page: Page) {
   await page.goto('/admin/events/new');
   await expect(heading(page, 'Name your event')).toBeVisible(COLD);
@@ -118,16 +125,23 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('button', { name: 'Start from a past event' })).toBeFocused();
     await main(page).getByRole('button', { name: 'Start from a past event' }).click();
 
+    await expect(dialog.getByRole('radio')).toHaveCount(2);
+    await expect(dialog.getByRole('status')).toHaveText('2 events');
     await dialog.getByRole('button', { name: 'Copy and continue' }).click();
     await expect(dialog.getByText('Choose the event to copy')).toBeVisible();
+    // Focus goes to the first invalid field: the event list.
+    await expect(dialog.getByRole('radio').first()).toBeFocused();
     expect(calls.duplicate).toHaveLength(0);
 
     await dialog.getByLabel('Search your events').fill('harv');
     await expect(dialog.getByRole('radio')).toHaveCount(1);
+    await expect(dialog.getByRole('status')).toHaveText('1 event');
     expect(calls.list.at(-1)?.searchParams.get('q')).toBe('harv');
     await dialog.getByRole('radio', { name: /Harvest Fair/ }).check();
     await expect(dialog.getByLabel('New event name')).toHaveValue('Harvest Fair');
     await dialog.getByLabel('New event name').fill('Harvest Fair 2031');
+    await dialog.getByRole('button', { name: 'Copy and continue' }).click();
+    await expect(dialog.getByLabel('Starts')).toBeFocused();
     await dialog.getByLabel('Starts').fill('2031-05-01T10:00');
     await expect(dialog.getByText(/At Red Barn: CDT/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Copy and continue' }).click();
@@ -155,21 +169,38 @@ test.describe('desktop', () => {
 
   test('done: a published event offers the page, the share link and Go to event', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await mockApi(page, adminEvent({ status: 'PUBLISHED', setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' }));
+    await mockApi(page, adminEvent({ status: 'PUBLISHED', ...FINISHED }));
+    await finishedInThisTab(page);
     await page.goto(`/admin/events/${COPY_ID}/setup?step=done`);
     await expect(heading(page, 'Your event is live')).toBeFocused(COLD);
     await expect(page.getByRole('button', { name: 'Next' })).toHaveCount(0);
-    await expect(main(page).getByRole('link', { name: /View the event page/ })).toHaveAttribute('href', '/events/harvest-fair-2031');
+    // The storefront host from the server, never the admin origin.
+    await expect(main(page).getByRole('link', { name: /View the event page/ })).toHaveAttribute('href', `${STORE}/events/harvest-fair-2031`);
+    await expect(main(page).getByRole('link', { name: /Set up door check-in/ })).toHaveAttribute('href', `/admin/events/${COPY_ID}/check-in`);
     await expect(main(page).getByRole('link', { name: 'Go to event' })).toHaveAttribute('href', `/admin/events/${COPY_ID}`);
     await main(page).getByRole('button', { name: 'Copy the share link' }).click();
     await expect(main(page).getByRole('status')).toHaveText('Link copied to the clipboard.');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/events\/harvest-fair-2031$/);
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${STORE}/events/harvest-fair-2031`);
+  });
+
+  test('done: a clipboard failure shows the link in an error', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('denied')) } });
+    });
+    await mockApi(page, adminEvent({ status: 'PUBLISHED', ...FINISHED }));
+    await finishedInThisTab(page);
+    await page.goto(`/admin/events/${COPY_ID}/setup?step=done`);
+    await expect(heading(page, 'Your event is live')).toBeFocused(COLD);
+    await main(page).getByRole('button', { name: 'Copy the share link' }).click();
+    await expect(main(page).getByRole('alert')).toHaveText(`Couldn't copy the link. Copy it from here: ${STORE}/events/harvest-fair-2031`);
   });
 
   test('done: a draft previews through the signed link and has no share link', async ({ page }) => {
-    await mockApi(page, adminEvent({ setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' }));
+    await mockApi(page, adminEvent(FINISHED), [{ id: 'form-1' }]);
+    await finishedInThisTab(page);
     await page.goto(`/admin/events/${COPY_ID}/setup?step=done`);
     await expect(heading(page, 'Saved as draft')).toBeFocused(COLD);
+    await expect(main(page).getByRole('link', { name: /Review applications/ })).toHaveAttribute('href', `/admin/events/${COPY_ID}/applications`);
     await expect(main(page).getByRole('link', { name: /Preview the event page/ })).toHaveAttribute('href', /preview\?token=signed$/);
     await expect(main(page).getByRole('button', { name: 'Copy the share link' })).toHaveCount(0);
   });
@@ -180,6 +211,13 @@ test.describe('desktop', () => {
     await expect(page).toHaveURL(/step=date$/, COLD);
     await expect(heading(page, 'When is it?')).toBeVisible();
   });
+
+  test('done in edit mode goes to the Details page', async ({ page }) => {
+    // Set up earlier, not finished in this tab: edit mode.
+    await mockApi(page, adminEvent({ status: 'PUBLISHED', ...FINISHED }));
+    await page.goto(`/admin/events/${COPY_ID}/setup?step=done`);
+    await expect(page).toHaveURL(new RegExp(`/admin/events/${COPY_ID}$`), COLD);
+  });
 });
 
 test.describe('mobile', () => {
@@ -188,7 +226,8 @@ test.describe('mobile', () => {
   for (const scheme of ['light', 'dark'] as const) {
     test(`past-event dialog and Done pass axe with no horizontal scroll (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await mockApi(page, adminEvent({ status: 'PUBLISHED', setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' }));
+      await mockApi(page, adminEvent({ status: 'PUBLISHED', ...FINISHED }));
+      await finishedInThisTab(page);
       const dialog = await openPastEventDialog(page);
       await expect(dialog.getByRole('radio')).toHaveCount(2);
       expect(await serious(page)).toEqual([]);

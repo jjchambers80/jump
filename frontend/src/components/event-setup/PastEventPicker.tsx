@@ -58,6 +58,9 @@ export default function PastEventPicker({
         Search your events
       </label>
       <input id="past-event-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" className={inputClass} />
+      <p role="status" className="sr-only">
+        {load.status === 'ready' && (load.events.length === 1 ? '1 event' : `${load.events.length} events`)}
+      </p>
       <fieldset aria-describedby={error ? 'past-event-error' : undefined} aria-busy={load.status === 'loading' || undefined}>
         <legend className="sr-only">Event to copy</legend>
         {load.status === 'loading' && (

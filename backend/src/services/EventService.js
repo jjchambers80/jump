@@ -1317,8 +1317,12 @@ class EventService {
         }
       : null;
 
+    // The public page on the org's storefront host (custom domain, store subdomain or platform), for sharing.
+    const { base: storefrontBase } = await storefrontFor(orgId);
+
     return {
       event: this._formatEventDetail(event),
+      publicUrl: `${storefrontBase}/events/${encodeURIComponent(event.slug || event.id)}`,
       money: {
         gross,
         orgReceives: round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'orgReceives'), 0)),

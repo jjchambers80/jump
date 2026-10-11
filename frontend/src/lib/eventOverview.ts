@@ -96,6 +96,8 @@ export interface OverviewMap {
 
 export interface EventOverview {
   event: OverviewEvent;
+  /** Public event page on the org's storefront host (custom domain, store subdomain or platform). */
+  publicUrl?: string;
   money: {
     gross: number;
     orgReceives: number;

@@ -817,3 +817,14 @@ test('pagination nav with aria-current on active page', async ({ page, baseURL }
   await expect(pager.getByRole('button', { name: '2', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(pager.getByRole('button', { name: '1', exact: true })).not.toHaveAttribute('aria-current');
 });
+test('with the wizard flag off, a wizard draft still shows Publish, not Continue setup (050-I)', async ({ page }) => {
+  await mockApi(page);
+  const wizardDraft = { ...sampleEvents[0], id: 'evt-wizard', name: 'Wizard Draft', status: 'DRAFT', setupStep: 'tickets', setupCompletedAt: null };
+  await page.route(`${API}/organizations/${ORG_ID}/events?*`, (route) =>
+    route.fulfill(json({ events: [wizardDraft], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } }))
+  );
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+  const card = page.locator('article', { has: page.getByRole('heading', { name: 'Wizard Draft' }) });
+  await expect(card.getByRole('button', { name: 'Publish' })).toBeVisible();
+  await expect(card.getByRole('link', { name: /Continue setup/ })).toHaveCount(0);
+});
