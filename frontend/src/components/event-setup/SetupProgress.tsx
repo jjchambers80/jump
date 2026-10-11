@@ -3,7 +3,7 @@
 // state is text + icon, never colour alone. Jumping happens in StepMenu.
 
 import { Check, Circle, CircleDot, MinusCircle } from 'lucide-react';
-import type { EventStep, StepState } from './steps';
+import type { StepState } from './steps';
 
 const STATE_TEXT: Record<StepState, string> = {
   complete: 'Completed',
@@ -31,7 +31,7 @@ export default function SetupProgress({
   editMode = false,
   aside,
 }: {
-  steps: EventStep[];
+  steps: { key: string; title: string }[];
   states: StepState[];
   index: number;
   total: number;

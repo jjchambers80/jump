@@ -128,6 +128,8 @@ describe('Event setup drafts (spec 050-A)', () => {
     it('rejects an unknown setupStep and an endDate not after the date', async () => {
       const { body: draft } = await setupCreate();
       expect((await patch(draft.id, { setupStep: 'nope' })).status).toBe(400);
+      // Spec 051: application forms left the event wizard for their own flows.
+      expect((await patch(draft.id, { setupStep: 'vendors' })).status).toBe(400);
       expect((await patch(draft.id, { endDate: '2027-09-01T17:00:00.000Z' })).status).toBe(400);
       // Against the stored date when only endDate is sent, and the stored endDate when only date moves.
       await patch(draft.id, { endDate: '2027-09-01T20:00:00.000Z' });

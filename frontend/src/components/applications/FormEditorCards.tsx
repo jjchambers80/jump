@@ -89,6 +89,9 @@ export function SettingsCard({
   onSave,
   mode = 'form',
   onChange,
+  section,
+  formId,
+  hideSubmit = false,
 }: {
   form: EditorForm;
   canEdit: boolean;
@@ -97,7 +100,18 @@ export function SettingsCard({
   mode?: EditorMode;
   /** Template mode: every change is reported as the settings half of a definition. */
   onChange?: (settings: Record<string, unknown>) => void;
+  /**
+   * Spec 051 setup flows: one step's part of the card (details = name, slug,
+   * intro and window; payment = how a PAID form sells; status). Absent = all.
+   * Every save still sends the whole card, unchanged parts included.
+   */
+  section?: 'details' | 'payment' | 'status';
+  /** id of the <form>, so a wizard footer button can submit it. */
+  formId?: string;
+  /** The wizard's Next saves it instead. */
+  hideSubmit?: boolean;
 }) {
+  const show = (part: 'details' | 'payment' | 'status') => !section || section === part;
   const template = mode === 'template';
   const standing = !template && form.eventId === null;
   const [state, setState] = useState({
@@ -171,14 +185,16 @@ export function SettingsCard({
   const paidBlocked = !template && form.kind === 'PAID' && !form.paymentsEnabled;
 
   return (
-    <form onSubmit={submit} className={card} data-testid="form-settings">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Settings</h2>
-      {paidBlocked && (
+    <form id={formId} onSubmit={submit} className={card} data-testid="form-settings">
+      <h2 className={section ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Settings</h2>
+      {paidBlocked && section !== 'details' && (
         <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
           Paid forms cannot open until application payments are enabled on this platform. You can set everything up now.
         </p>
       )}
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+      <div className={`${section ? '' : 'mt-3 '}grid gap-4 sm:grid-cols-2`}>
+        {show('details') && (
+        <>
         <div>
           <label htmlFor="f-name" className={labelClass}>Name</label>
           <input id="f-name" value={state.name} disabled={!canEdit} onChange={(e) => update({ name: e.target.value })} className={field} />
@@ -193,9 +209,12 @@ export function SettingsCard({
           <label htmlFor="f-intro" className={labelClass}>Intro shown to applicants</label>
           <textarea id="f-intro" rows={3} value={state.intro} disabled={!canEdit} onChange={(e) => update({ intro: e.target.value })} className={field} />
         </div>
+        </>
+        )}
         {!template && (
         <>
-        <div>
+        {show('status') && (
+        <div className={section === 'status' ? 'sm:col-span-2' : undefined}>
           <label htmlFor="f-status" className={labelClass}>Status</label>
           <select id="f-status" value={state.status} disabled={!canEdit} onChange={(e) => update({ status: e.target.value as AdminForm['status'] })} className={field}>
             <option value="DRAFT">Draft (hidden)</option>
@@ -203,7 +222,9 @@ export function SettingsCard({
             <option value="CLOSED">Closed (visible, not accepting)</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        )}
+        {show('details') && (
+        <div className={section ? 'grid gap-3 sm:col-span-2 sm:grid-cols-2' : 'grid grid-cols-2 gap-3'}>
           <div>
             <label htmlFor="f-opens" className={labelClass}>Opens</label>
             <input id="f-opens" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.opensAt} disabled={!canEdit} onChange={(e) => update({ opensAt: e.target.value })} className={field} />
@@ -218,9 +239,10 @@ export function SettingsCard({
             </p>
           )}
         </div>
+        )}
         </>
         )}
-        {standing && (
+        {standing && show('details') && (
           <>
             <div>
               <label htmlFor="f-button" className={labelClass}>Button label</label>
@@ -233,7 +255,7 @@ export function SettingsCard({
             </div>
           </>
         )}
-        {form.kind === 'PAID' && (
+        {form.kind === 'PAID' && show('payment') && (
           <>
             {/* Spec 037 phase 5: vendors apply for free; after approval they choose a space and pay. */}
             <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
@@ -272,8 +294,8 @@ export function SettingsCard({
                   {!template && form.eventId && (
                     <>
                       {' '}
-                      <Link href={wizardLink(form.eventId, 'floor-map').href} className="font-medium text-accent-600 underline dark:text-accent-400">
-                        {wizardLink(form.eventId, 'floor-map').label}
+                      <Link href={wizardLink(form.eventId, 'floor-map', form.id).href} className="font-medium text-accent-600 underline dark:text-accent-400">
+                        {wizardLink(form.eventId, 'floor-map', form.id).label}
                       </Link>
                     </>
                   )}
@@ -337,7 +359,7 @@ export function SettingsCard({
           </>
         )}
       </div>
-      {canEdit && !template && (
+      {canEdit && !template && !hideSubmit && (
         <button type="submit" disabled={saving} className={`${primary} mt-4`}>
           {saving ? 'Saving…' : 'Save settings'}
         </button>

@@ -115,7 +115,7 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto('/admin/events/new');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
-    await expect(page.getByText('Step 1 of 12 — Name your event')).toBeVisible();
+    await expect(page.getByText('Step 1 of 8 — Name your event')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Exit' })).toBeVisible();
 
     const name = main(page).getByLabel('Event name');
@@ -129,7 +129,7 @@ test.describe('desktop', () => {
     await page.keyboard.press('Enter');
 
     await expect(heading(page, 'Where is it?')).toBeFocused();
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 12, Where is it?');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 8, Where is it?');
     await expect(page).toHaveURL(/\/admin\/events\/new\?step=venue$/);
     const venue = main(page).getByLabel('Venue');
     await tabTo(page, venue);
@@ -155,7 +155,7 @@ test.describe('desktop', () => {
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=description$`), COLD);
     // The create remounts the wizard on the event's route: focus and announce anyway.
     await expect(heading(page, 'Describe it')).toBeFocused(COLD);
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 4 of 12, Describe it');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 4 of 8, Describe it');
     await expect(page.getByRole('button', { name: 'Save & exit' })).toBeVisible();
 
     expect(calls.create).toHaveLength(1);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { publishBlockers, readinessHref, readinessSettingsFix } from '@/lib/eventReadiness';
 
-const item = (code: string, step: string) => ({ code, step, message: code });
+const item = (code: string, step: string, formId?: string) => ({ code, step, message: code, ...(formId && { formId }) });
 
 describe('publishBlockers', () => {
   it('reads the blockers of a 422 EVENT_NOT_READY only', () => {
@@ -18,12 +18,20 @@ describe('readinessHref', () => {
   it.each([
     ['NAME_MISSING', 'name', `${base}?step=name&org=o1`],
     ['CAPACITY_MISSING', 'tickets', `${base}?step=tickets&org=o1`],
-    ['FORM_HAS_NO_QUESTIONS', 'vendors', `${base}?step=vendors&org=o1`],
-    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', `${base}?step=floor-map&org=o1`],
     ['PAYMENTS_UNAVAILABLE', 'review', '/admin/settings/payments'],
     ['TAX_RATE_UNRESOLVED', 'review', '/admin/settings/tax'],
   ])('%s opens its wizard step or settings page', (code, step, href) => {
     expect(readinessHref(item(code, step), 'e1', 'o1')).toBe(href);
+  });
+
+  // Spec 051: application items open the form's flow.
+  it.each([
+    ['FORM_HAS_NO_QUESTIONS', 'vendors', 'f1', `${base}/vendors?step=details&form=f1&org=o1`],
+    ['PAID_FORMS_DISABLED', 'special-guests', 'f2', `${base}/special-guests?step=details&form=f2&org=o1`],
+    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'f1', `${base}/vendors?step=floor-map&form=f1&org=o1`],
+    ['FORM_HAS_NO_QUESTIONS', 'other-applications', undefined, `${base}/other-applications?org=o1`],
+  ])('%s on %s opens the form flow', (code, step, formId, href) => {
+    expect(readinessHref(item(code, step, formId), 'e1', 'o1')).toBe(href);
   });
 
   it('omits the org when there is none', () => {

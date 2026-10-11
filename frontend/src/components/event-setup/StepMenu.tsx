@@ -9,17 +9,27 @@ import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useDialog } from '@/lib/useDialog';
 import { StepStateIcon, stateText } from './SetupProgress';
-import type { EventStep, StepKey, StepState } from './steps';
+import type { StepKey, StepState } from './steps';
 import { iconButton } from './ui';
 
-export interface MenuItem {
-  step: EventStep;
+export interface MenuItem<K extends string = StepKey> {
+  step: { key: K; title: string };
   state: StepState;
   href: string;
   reachable: boolean;
 }
 
-function StepLinks({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: StepKey) => void; lockedBy?: string }) {
+interface LinksProps<K extends string> {
+  items: MenuItem<K>[];
+  onGo: (key: K) => void;
+  lockedBy?: string;
+  /** Read after an unreachable step's title. */
+  unreachableText?: string;
+}
+
+const AFTER_DATE = '(available after the date step)';
+
+function StepLinks<K extends string>({ items, onGo, lockedBy, unreachableText = AFTER_DATE }: LinksProps<K>) {
   return (
     <nav aria-label="Jump to edit">
       <ul className="space-y-1">
@@ -57,7 +67,7 @@ function StepLinks({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: S
               ) : (
                 <span className={`${base} text-gray-600 dark:text-slate-400`}>
                   {label}
-                  <span className="sr-only">(available after the date step)</span>
+                  <span className="sr-only">{unreachableText}</span>
                 </span>
               )}
             </li>
@@ -68,7 +78,7 @@ function StepLinks({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: S
   );
 }
 
-export function StepRail({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: StepKey) => void; lockedBy?: string }) {
+export function StepRail<K extends string>({ items, onGo, lockedBy }: LinksProps<K>) {
   return (
     <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 xl:block">
       <StepLinks items={items} onGo={onGo} lockedBy={lockedBy} />
@@ -76,15 +86,12 @@ export function StepRail({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (
   );
 }
 
-export function StepMenuSheet({
+export function StepMenuSheet<K extends string>({
   items,
   onGo,
   onClose,
-}: {
-  items: MenuItem[];
-  onGo: (key: StepKey) => void;
-  onClose: () => void;
-}) {
+  unreachableText,
+}: LinksProps<K> & { onClose: () => void }) {
   const panelRef = useDialog<HTMLDivElement>(true, onClose);
   // useDialog focused the first control; start on the current step instead.
   useEffect(() => {
@@ -112,6 +119,7 @@ export function StepMenuSheet({
         <div className="flex-1 overflow-y-auto p-3">
           <StepLinks
             items={items}
+            unreachableText={unreachableText}
             onGo={(key) => {
               onClose();
               onGo(key);

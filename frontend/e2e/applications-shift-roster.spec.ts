@@ -95,3 +95,25 @@ test('a shared ?shift= link shows in the control', async ({ page, baseURL }) => 
   await expect(page.getByTestId('application-row-app-bo')).toHaveCount(0);
   expect(calls.at(-1)?.searchParams.get('shiftMode')).toBe('assigned');
 });
+
+test('Add a form opens a list of the four application flows; Escape closes it and returns focus (spec 051)', async ({ page, baseURL }) => {
+  await mock(page, baseURL!);
+  await page.goto(`/admin/events/${EVENT_ID}/applications`);
+  await expect(page.getByTestId('applications-table')).toContainText('Cy', { timeout: 30000 });
+  const toggle = page.getByRole('button', { name: 'Add a form' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const flow = (path: string) => new RegExp(`^/admin/events/${EVENT_ID}/setup/${path}`);
+  await expect(page.getByRole('link', { name: 'Add a vendor application' })).toHaveAttribute('href', flow('vendors'));
+  await expect(page.getByRole('link', { name: 'Add special guests' })).toHaveAttribute('href', flow('special-guests\\?step=lineup'));
+  await expect(page.getByRole('link', { name: 'Add a volunteer application' })).toHaveAttribute('href', flow('volunteers'));
+  await expect(page.getByRole('link', { name: 'Add an application' })).toHaveAttribute('href', flow('other-applications'));
+  const a11y = await new AxeBuilder({ page }).include('header').analyze();
+  expect(a11y.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Add a vendor application' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toBeFocused();
+});

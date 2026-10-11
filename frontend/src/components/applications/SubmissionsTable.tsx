@@ -38,8 +38,6 @@ import { useParticipantsApi, type ParticipantsQuery } from '@/components/applica
 import BusinessCell from './BusinessCell';
 import RowActionsMenu from './RowActionsMenu';
 import { formatEventDate } from '@/lib/eventTime';
-import { wizardStepHref, withOrg } from '@/lib/eventWizard';
-import { useOrg } from '@/components/OrgContext';
 
 const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
@@ -107,7 +105,6 @@ function submittedLines(value: string | null) {
 export default function SubmissionsTable({ eventId, standingFormId }: { eventId?: string; standingFormId?: string }) {
   const standing = Boolean(standingFormId);
   const orgWide = !eventId && !standing;
-  const { selectedOrgId } = useOrg();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -594,8 +591,8 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
                         Create a form on an event
                       </Link>
                     ) : (
-                      <Link href={withOrg(wizardStepHref(eventId!, 'vendors'), selectedOrgId)} className="text-accent-600 hover:underline dark:text-accent-300">
-                        Create a form
+                      <Link href={`/admin/events/${eventId}`} className="text-accent-600 hover:underline dark:text-accent-300">
+                        Add a form from the event overview
                       </Link>
                     ))}
                 </td>

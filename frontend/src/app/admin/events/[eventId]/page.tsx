@@ -22,6 +22,7 @@ import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
 import { continueSetupHref, detailsEditLinks } from '@/lib/eventWizard';
+import { AddToEventCard } from '@/components/events/AddToEvent';
 import { rememberEditControl, takeEditControl } from '@/lib/detailsReturn';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
@@ -307,13 +308,8 @@ function EventDetailsContent() {
           ) : (
             <RsvpSection overview={overview} editHref={wizard.tickets} addOnsHref={wizard.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
-          <ApplicationsSection
-            overview={overview}
-            base={`${base}/applications`}
-            formHref={wizard.form}
-            newFormHref={wizard.newForm}
-            delay={80}
-          />
+          <AddToEventCard hrefFor={wizard.addForm} forms={overview.applications.forms} guests={Array.isArray(guests) ? guests.length : null} delay={60} />
+          <ApplicationsSection overview={overview} base={`${base}/applications`} formHref={wizard.form} delay={80} />
           <GuestsCard guests={guests} editHref={wizard.guests} delay={100} />
           <DescriptionSection overview={overview} editHref={wizard.description} editLabel="Edit description" delay={120} />
         </div>

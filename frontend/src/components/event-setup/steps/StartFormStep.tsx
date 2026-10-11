@@ -1,22 +1,24 @@
 'use client';
 
-// "Add a … application" dialog (spec 050 §5.2): name, what the form is for
-// (Other applications only), whether it charges, and where it starts: blank
-// with Jump's defaults for the purpose (backend applicationFormDefaults.js),
-// or one of the org's templates for that purpose ("Show templates for all
-// purposes" widens the list to every template of the same kind). Templates are
-// edited (name, settings, questions) on their editor page and deleted here:
-// there is no template library page (spec 037 D2), and since 050-O this dialog
-// is where the old forms page's Edit / Delete live. Modal: focus trap,
-// Escape, focus back to the opener (useDialog).
+// Start of an application flow (spec 051, from the spec 050 "Add a …
+// application" dialog): name, what the form is for (Other applications only),
+// whether it charges, and where it starts: blank with Jump's defaults for the
+// purpose (backend applicationFormDefaults.js), or one of the org's templates
+// for that purpose ("Show templates for all purposes" widens the list to every
+// template of the same kind). Templates are edited on their editor page and
+// deleted here: there is no template library page (spec 037 D2). The wizard
+// footer's Next submits this form (`START_FORM_ID`); the flow then moves to
+// the new form's details. This event's existing forms of the type are listed
+// above, to continue one instead.
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
-import { Pencil, Trash2, X } from 'lucide-react';
-import { useDialog } from '@/lib/useDialog';
+import { FormEvent, useState } from 'react';
+import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import { FREE_ONLY, PURPOSE_LABEL, templatesFor, type ApplicationStepConfig } from '../applicationSteps';
-import { hintClass, iconButton, inputClass, labelClass, primaryButton, secondaryButton, textButton } from '../ui';
+import { hintClass, inputClass, labelClass, textButton } from '../ui';
+
+export const START_FORM_ID = 'flow-start-form';
 
 /** Purposes whose blank form starts with Jump's suggested questions. */
 const SUGGESTED = new Set<FormPurpose>(['VENDOR', 'SPECIAL_GUEST', 'VOLUNTEER']);
@@ -30,6 +32,10 @@ export interface NewFormBody {
 
 interface Props {
   config: ApplicationStepConfig;
+  /** This event's forms of the type, with their flow links: continue one instead. */
+  existing: { id: string; name: string; status: string; href: string }[];
+  /** Create in flight (the footer's Next waits). */
+  onBusyChange: (busy: boolean) => void;
   eventName: string;
   /** null while the org's templates are still loading. */
   templates: FormTemplateSummary[] | null;
@@ -38,13 +44,11 @@ interface Props {
   /** Confirms, deletes, and resolves true when the template is gone. */
   onDeleteTemplate: (template: FormTemplateSummary) => Promise<boolean>;
   onCreate: (body: NewFormBody) => Promise<void>;
-  onClose: () => void;
 }
 
-export default function AddFormDialog({ config, eventName, templates, canManage, onDeleteTemplate, onCreate, onClose }: Props) {
-  const panelRef = useDialog<HTMLDivElement>(true, onClose);
-  // After useDialog's own first focus (the Close button): start on the Name field.
-  useEffect(() => document.getElementById('add-form-name')?.focus(), []);
+const STATUS: Record<string, string> = { DRAFT: 'Draft', OPEN: 'Open', CLOSED: 'Closed' };
+
+export default function StartFormStep({ config, existing, onBusyChange, eventName, templates, canManage, onDeleteTemplate, onCreate }: Props) {
   const [name, setName] = useState(`${eventName} ${config.nameSuffix}`.trim());
   const [purpose, setPurpose] = useState<FormPurpose>(config.purposes[0]);
   const [paid, setPaid] = useState(config.defaultKind === 'PAID');
@@ -71,29 +75,45 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
     if (busy || loading) return;
     if (name.trim().length < 2) return setError('Enter a name of at least 2 characters');
     setBusy(true);
+    onBusyChange(true);
     setError(null);
     try {
       await onCreate({ name: name.trim(), kind, purpose, ...(chosen && { templateId: chosen }) });
     } catch (err) {
       setError((err as Error)?.message || "Couldn't create the form");
       setBusy(false);
+      onBusyChange(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div aria-hidden className="pointer-events-none fixed inset-0 bg-black/50" />
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="add-form-title" className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-lg bg-white shadow-sm dark:bg-slate-800 sm:max-w-lg sm:rounded-lg">
-        <form onSubmit={submit} noValidate>
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-2 dark:border-slate-700 sm:px-6">
-            <h2 id="add-form-title" className="text-lg font-semibold text-gray-900 dark:text-white">
-              {config.addLabel}
-            </h2>
-            <button type="button" onClick={onClose} aria-label="Close" className={iconButton}>
-              <X className="h-5 w-5" aria-hidden />
-            </button>
-          </div>
-          <div className="space-y-4 px-4 py-4 sm:px-6">
+    <div className="space-y-6">
+      {existing.length > 0 && (
+        <section aria-labelledby="start-existing">
+          <h2 id="start-existing" className="text-sm font-semibold text-gray-900 dark:text-white">
+            Continue a form on this event
+          </h2>
+          <ul className="mt-2 divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-slate-700 dark:border-slate-700">
+            {existing.map((f) => (
+              <li key={f.id}>
+                <Link
+                  href={f.href}
+                  className="flex min-h-12 items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500 dark:hover:bg-slate-800"
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium text-gray-900 dark:text-white">{f.name}</span>
+                  <span className="shrink-0 text-gray-600 dark:text-slate-400">{STATUS[f.status] ?? f.status}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-500 dark:text-slate-400" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <form id={START_FORM_ID} onSubmit={submit} noValidate aria-labelledby="start-new" aria-busy={busy || undefined}>
+        <h2 id="start-new" className={existing.length ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'sr-only'}>
+          {existing.length ? 'Or start a new one' : config.addLabel}
+        </h2>
+          <div className={`space-y-4 ${existing.length ? 'mt-3' : ''}`}>
             {error && (
               <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
                 {error}
@@ -166,19 +186,7 @@ export default function AddFormDialog({ config, eventName, templates, canManage,
               </ul>
             </fieldset>
           </div>
-          <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-slate-700 sm:px-6">
-            <button type="button" onClick={onClose} className={secondaryButton}>Cancel</button>
-            <button
-              type="submit"
-              disabled={busy || loading}
-              aria-describedby={loading ? 'add-form-templates-loading' : undefined}
-              className={primaryButton}
-            >
-              {busy ? 'Creating…' : 'Create form'}
-            </button>
-          </div>
         </form>
-      </div>
     </div>
   );
 }

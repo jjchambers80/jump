@@ -37,12 +37,9 @@ describe('keys', () => {
 });
 
 describe('visible and counting', () => {
-  test('a new ticketed event has 12 steps; floor map and done are hidden', () => {
-    expect(keys(ctx())).toEqual([
-      'name', 'venue', 'date', 'description', 'image', 'tickets', 'collect-more', 'vendors',
-      'special-guests', 'volunteers', 'other-applications', 'review',
-    ]);
-    expect(stepPosition('date', ctx())).toEqual({ index: 3, total: 12 });
+  test('a new ticketed event has 8 steps: applications are their own flows (spec 051)', () => {
+    expect(keys(ctx())).toEqual(['name', 'venue', 'date', 'description', 'image', 'tickets', 'collect-more', 'review']);
+    expect(stepPosition('date', ctx())).toEqual({ index: 3, total: 8 });
   });
 
   test('the count does not move once the row exists', () => {
@@ -55,14 +52,8 @@ describe('visible and counting', () => {
     expect(keys(ctx({ saved: rsvp, donationsEligible: true }))).toContain('collect-more');
   });
 
-  test('a MAP vendor form shows the Floor map step right after Vendors', () => {
-    const list = keys(ctx({ saved: row(), forms: [{ purpose: 'VENDOR', spaceSelection: 'MAP' }] }));
-    expect(list[list.indexOf('vendors') + 1]).toBe('floor-map');
-    expect(stepPosition('review', ctx({ saved: row(), forms: [{ purpose: 'VENDOR', spaceSelection: 'MAP' }] })).total).toBe(13);
-  });
-
-  test('a PAID sponsor form with MAP does not add the Floor map step', () => {
-    expect(keys(ctx({ saved: row(), forms: [{ purpose: 'SPONSOR', spaceSelection: 'MAP' }] }))).not.toContain('floor-map');
+  test('a MAP vendor form adds no step: the floor map is in the vendor flow', () => {
+    expect(keys(ctx({ saved: row(), forms: [{ id: 'f', purpose: 'VENDOR', spaceSelection: 'MAP' }] }))).not.toContain('floor-map');
   });
 
   test('later steps need the server row', () => {
@@ -73,7 +64,7 @@ describe('visible and counting', () => {
 
   test('neighbours skip hidden steps', () => {
     const c = ctx({ saved: row() });
-    expect(neighbours('vendors', c).next?.key).toBe('special-guests');
+    expect(neighbours('collect-more', c).next?.key).toBe('review');
     expect(neighbours('name', c).prev).toBeNull();
     expect(neighbours('review', c).next).toBeNull();
   });
@@ -89,12 +80,14 @@ describe('resume key', () => {
     expect(resumeKey(ctx({ saved: row() }), null)).toBe('description');
   });
 
-  test('a saved step resumes there', () => {
-    expect(resumeKey(ctx({ saved: row() }), 'tickets')).toBe('tickets');
+  test('a draft saved on a former application step resumes at Review (spec 051)', () => {
+    for (const old of ['vendors', 'floor-map', 'special-guests', 'volunteers', 'other-applications']) {
+      expect(resumeKey(ctx({ saved: row() }), old)).toBe('review');
+    }
   });
 
-  test('a step hidden since resumes at the next visible one', () => {
-    expect(resumeKey(ctx({ saved: row() }), 'floor-map')).toBe('special-guests');
+  test('a saved step resumes there', () => {
+    expect(resumeKey(ctx({ saved: row() }), 'tickets')).toBe('tickets');
   });
 
   test('an unknown key falls back to the first step', () => {
@@ -141,13 +134,13 @@ describe('state', () => {
     expect(stepState(stepByKey('name')!, 'tickets', c)).toBe('complete');
     expect(stepState(stepByKey('tickets')!, 'tickets', c)).toBe('current');
     expect(stepState(stepByKey('description')!, 'tickets', c)).toBe('skipped');
-    expect(stepState(stepByKey('vendors')!, 'tickets', c)).toBe('todo');
+    expect(stepState(stepByKey('collect-more')!, 'tickets', c)).toBe('todo');
   });
   test('Collect more is complete with an add-on, skipped without one once passed', () => {
-    const passed = (addOnCount?: number) => ctx({ saved: row({ setupStep: 'vendors', addOnCount }) });
-    expect(stepState(stepByKey('collect-more')!, 'vendors', passed(2))).toBe('complete');
-    expect(stepState(stepByKey('collect-more')!, 'vendors', passed(0))).toBe('skipped');
-    expect(stepState(stepByKey('collect-more')!, 'vendors', passed())).toBe('skipped');
+    const passed = (addOnCount?: number) => ctx({ saved: row({ setupStep: 'review', addOnCount }) });
+    expect(stepState(stepByKey('collect-more')!, 'review', passed(2))).toBe('complete');
+    expect(stepState(stepByKey('collect-more')!, 'review', passed(0))).toBe('skipped');
+    expect(stepState(stepByKey('collect-more')!, 'review', passed())).toBe('skipped');
   });
 });
 

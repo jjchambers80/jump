@@ -1,13 +1,13 @@
 # Event Setup Wizard
 
 **Status**: Implemented and the only event editor. Phase 1 (cards A–O, Q) and phase 2 (R, S) merged; the owner signed the parity checklist, the flag went on in prod on 2026-10-11 (deploy 39f00a46), and 050-P removed the flag and the old create page, `EventEditor`, the Details flyouts and the event-level forms configuration pages.
-**Last Updated**: 2026-10-11
+**Last Updated**: 2026-10-11 (spec 051: application forms moved to their own flows)
 
 Plan: [`specs/050-event-setup-wizard/plan.md`](../../../specs/050-event-setup-wizard/plan.md). Research: [`docs/research/2026-10-10-event-creation-wizard.md`](../../research/2026-10-10-event-creation-wizard.md). Donations hook-up: [`specs/047-donations/plan-d1.md`](../../../specs/047-donations/plan-d1.md) §0. PRs #400, #403, #409, #412–#414, #416, #417, #419–#423, #425, #428–#432, and 050-P.
 
 ## Overview
 
-Every **Create event** opens a Zeffy-style step wizard: name → venue → date (which creates the draft) → description, image, tickets or RSVP, add-ons, application forms by purpose, an optional floor map, review and publish. The same wizard, run non-linearly, is the one editor for an existing event: each Edit control on the event's Details page opens `/admin/events/<id>/setup?step=<key>`. A live preview of the real event page (phone or desktop) sits beside the form, and a signed link opens the themed draft page in a new tab. Mobile first, WCAG 2.1 AA.
+Every **Create event** opens a Zeffy-style step wizard: name → venue → date (which creates the draft) → description, image, tickets or RSVP, add-ons, review and publish. Application forms (vendors with their floor map, special guests, volunteers, other applications) are set up afterwards, one form at a time, in their own [application setup flows](application-setup-flows.md) (spec 051), started from the event's Overview. The same wizard, run non-linearly, is the one editor for an existing event: each Edit control on the event's Details page opens `/admin/events/<id>/setup?step=<key>`. A live preview of the real event page (phone or desktop) sits beside the form, and a signed link opens the themed draft page in a new tab. Mobile first, WCAG 2.1 AA.
 
 ## Configuration
 
@@ -34,16 +34,11 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 | `attendee-questions` | — | reserved | never | — | — | — |
 | `collect-more` | Collect more | S | **always** (050-O parity: RSVP events keep add-ons for application tiers) | `addOnCount > 0` | `#add-ons` | `AddOnsSection` + `SavedAddOnPicker` (`/organizations/:orgId/events/:eventId/add-ons`); D1 `EventGiftSettings` slot is a comment in `CollectMoreStep.tsx` |
 | `discounts` | — | reserved | never | — | — | — |
-| `vendors` | Vendor applications | S | always | a VENDOR form exists | `#get-involved` | form routes (`/admin/events/:eventId/application-forms*`) |
-| `floor-map` | Floor map | C | some **VENDOR** form has `spaceSelection: MAP` | `mapStatus === 'PUBLISHED'` | `#floor-map` | `POST /admin/maps` or `mapsApi.createFromFloorPlan`; **Open map builder** → `/admin/maps/<id>?returnTo=<wizard URL>` |
-| `special-guests` | Special guests | S | always | a SPECIAL_GUEST form exists | `#guests` | form routes + lineup routes |
-| `volunteers` | Volunteers | S | always | a VOLUNTEER form exists | `#get-involved` | form routes + shift routes |
-| `other-applications` | Other applications | S | always | a SPONSOR / PRESS / PANEL / OTHER form exists | `#get-involved` | form routes, purpose picked per form |
 | `reminders` | — | reserved | never | — | — | — |
 | `review` | Review and publish | R | always | `setupCompletedAt` set | page top | `GET …/readiness`, `POST …/publish {openFormIds}`, `PATCH {setupCompleted:true}` |
 | `done` | Your event is live / Saved as draft | — | never in the list; create flow only, after Review | — | page top | — |
 
-"Step n of N" counts visible steps up to Review (12 for a fresh ticketed event, 13 with a MAP vendor form). A hidden saved `setupStep` (a MAP form turned TIERS) resumes at the next visible step. Unknown keys fall back to the first step.
+"Step n of N" counts visible steps up to Review (8 for a fresh ticketed event). Spec 051 moved the five application steps (`vendors`, `floor-map`, `special-guests`, `volunteers`, `other-applications`) into their own flows: a draft whose saved `setupStep` is one of them (`FORMER_STEPS` in `steps.ts`) resumes at Review, and `setup?step=<old key>[&form=<id>]` redirects to the form's flow (`legacyFlowHref` in `formFlows.ts`), so emails, bookmarks and readiness items keep working. Unknown keys fall back to the first step.
 
 **Parity fixture:** backend `EVENT_SETUP_STEPS` (`backend/src/api/validators/eventValidators.js`, the keys a `PATCH setupStep` accepts: the registry minus the reserved slots) and the frontend `StepKey` list are asserted against one file, `backend/tests/fixtures/eventSetupSteps.fixtures.json`, from Jest (`tests/unit/eventSetupSteps.test.js`) and Vitest (`tests/unit/eventSetupSteps.test.ts`). Change all three together.
 
@@ -120,31 +115,33 @@ Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard
 | Event details (description), Listing | `step=description` |
 | Sales, Admission, RSVPs | `step=tickets`; a tier `&tier=<id>` |
 | Add-ons ("Edit add-ons" on Sales and RSVPs) | `step=collect-more` |
-| An application form | `step=<purpose step>&form=<id>` (`stepForPurpose`) |
-| New form | `step=vendors` |
-| Floor map | `step=floor-map` while a VENDOR MAP form exists, else the Map tab |
-| Special guests (lineup card: count, first four names, hidden ones marked) | `step=special-guests` |
+| An application form | its flow at Form details: `setup/<flow>?step=details&form=<id>` (`formEditHref`) |
+| **Add to this event** (four tiles) | `setup/<flow>` (special guests: `?step=lineup`), `addForm(flow)` |
+| Floor map | the vendor flow's `step=floor-map&form=<id>` while a VENDOR MAP form exists, else the Map tab |
+| Special guests (lineup card: count, first four names, hidden ones marked) | `setup/special-guests?step=lineup` |
 
-The four Details flyouts were deleted in 050-P. **Redirects** (kept for bookmarks and email links) (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → `vendors`; `applications/forms/<id>` → the form's purpose step + `&form=`. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move; the tab's header has **Manage forms** → `step=vendors`, and its empty state links there too. The template editor `/admin/events/templates/<id>` stays, reached from Start from.
+The four Details flyouts were deleted in 050-P. **Redirects** (kept for bookmarks and email links) (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → the vendor flow; `applications/forms/<id>` → the form's flow at Form details. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move; the tab's header has **Add a form** (a disclosure listing the four flows), and its empty state links to the Overview. The template editor `/admin/events/templates/<id>` stays, reached from Start from.
 
 Edit-mode extras: **View event** in the header (public page, or a signed preview for a draft), read-only tax summary on Tickets, live-URL warning on Name.
 
-### Application steps by purpose (050-B, 050-L)
+### Application forms by purpose (050-B, 050-L; flows since spec 051)
+
+The rules below still hold; the editing UI moved to the [application setup flows](application-setup-flows.md). `ApplicationsStep`, `FormRow`, `InlineFormEditor` and `AddFormDialog` were removed (Start step = `steps/StartFormStep.tsx`).
 
 - `ApplicationForm.purpose` (enum `VENDOR SPONSOR PRESS PANEL SPECIAL_GUEST VOLUNTEER OTHER`, default OTHER) places a form in a step: `vendors` (VENDOR), `special-guests` (SPECIAL_GUEST), `volunteers` (VOLUNTEER), `other-applications` (SPONSOR / PRESS / PANEL / OTHER; null → OTHER). `GetInvolved` labels come from `PURPOSE_CTA` (`lib/applications.ts`), not the form name.
-- One `ApplicationsStep` container renders all four. **Several forms per step**: list (`FormRow`: name, purpose chip, status, kind, counts), add dialog (`AddFormDialog`: name prefilled `<Event> Vendor Application`, **Start from** Blank or the org's templates for that purpose + kind, falling back to same-kind templates without a purpose, "Show templates for all purposes", template **Edit** / **Delete**, "Charge for space" on vendors, purpose picker on Other applications), inline editor (`InlineFormEditor` over the unforked `FormEditorCards` `SettingsCard` / `TiersCard` / `QuestionsCard`, plus Created from, View applications, Save as template, View public form). `&form=<id>` expands a form (and moves to the right step). Delete only with no applications, else Close with the reason in text.
+- *(spec 050, replaced by spec 051)* One `ApplicationsStep` container rendered all four. **Several forms per step**: list (`FormRow`: name, purpose chip, status, kind, counts), add dialog (`AddFormDialog`: name prefilled `<Event> Vendor Application`, **Start from** Blank or the org's templates for that purpose + kind, falling back to same-kind templates without a purpose, "Show templates for all purposes", template **Edit** / **Delete**, "Charge for space" on vendors, purpose picker on Other applications), inline editor (`InlineFormEditor` over the unforked `FormEditorCards` `SettingsCard` / `TiersCard` / `QuestionsCard`, plus Created from, View applications, Save as template, View public form). `&form=<id>` expands a form (and moves to the right step). Delete only with no applications, else Close with the reason in text.
 - Vendors choose **How vendors pick a space** (TIERS / MAP, spec 039) in `SettingsCard`; MAP adds the Floor map step at once.
 - Rules (backend): SPECIAL_GUEST and VOLUNTEER are FREE only (400 `PURPOSE_KIND_MISMATCH`); purpose is fixed once a non-DRAFT application exists (409 `PURPOSE_LOCKED`); `collectBusiness: false` allowed on FREE event forms only (PAID → 400). `createForm` with no template and no questions applies `applicationFormDefaults.js` per purpose (VOLUNTEER: business step off; VENDOR: products, power, tables; SPECIAL_GUEST: fee, travel, A/V, availability). Templates snapshot `purpose` and `collectBusiness`.
 - Form open / close times are edited on the **venue's** clock with the zone shown (`FormEditorCards`, also on the old pages); standing forms and templates have no venue and keep the browser clock.
 - Preview: `preview-payload` returns DRAFT forms too, so new forms show in the pane's Get involved strip.
 
-### Floor map step (050-M)
+### Floor map step (050-M, a vendor flow step since spec 051)
 
-Visible only while a VENDOR form has `spaceSelection: MAP`. No map: **Create a blank map** (`POST /admin/maps`) or **Start from a floor plan** (`mapsApi.createFromFloorPlan`) — the same calls as Event › Map. With a map: name, Draft / Published, booth count, bound tiers, `MAP_FORM_WITHOUT_PUBLISHED_MAP` text, **Open map builder** → `/admin/maps/<id>?returnTo=<encoded wizard URL>`. The builder's Back ("Back to setup"), its **Done** and its error-screen button honour `returnTo` through `safeAdminReturnTo` (`lib/returnTo.ts`: same-origin `/admin…` path only after normalisation) and leave through `useLeaveAfterSave` (waits for the in-flight autosave, saves, stays on failure).
+Visible only while the vendor form has `spaceSelection: MAP`. No map: **Create a blank map** (`POST /admin/maps`) or **Start from a floor plan** (`mapsApi.createFromFloorPlan`) — the same calls as Event › Map. With a map: name, Draft / Published, booth count, bound tiers, `MAP_FORM_WITHOUT_PUBLISHED_MAP` text, **Open map builder** → `/admin/maps/<id>?returnTo=<encoded flow URL>` (`FloorMapStep` takes `returnTo`). The builder's Back ("Back to setup"), its **Done** and its error-screen button honour `returnTo` through `safeAdminReturnTo` (`lib/returnTo.ts`: same-origin `/admin…` path only after normalisation) and leave through `useLeaveAfterSave` (waits for the in-flight autosave, saves, stays on failure).
 
 ### Guest lineup (050-Q)
 
-`EventGuest` rows (name ≤ 120, role ≤ 80, plain-text bio ≤ 600, image, links validated with `SETTINGS_GROUPS.social`, `isVisible`, `displayOrder`, optional `applicationId` **unique**). Edited in the Special guests step (`lineup/*`: add by hand without any form, edit, up / down reorder announced in `role="status"`, visibility, delete); **Add to lineup** on an APPROVED SPECIAL_GUEST application's detail copies name, description → bio, first photo (its own `Image` row), passing links (no profile → the applicant's name); 409 `ALREADY_IN_LINEUP`. Public payload `guests: [{ id, name, role, bio, imageUrl, links }]` (visible rows, ordered) → `EventGuests` section `#guests` on the event page; preview payload carries every row. Export lists rows linked to the contact's applications; erasure deletes them; hand-typed rows stay. Not copied by duplicate. A Details lineup card is a 050-P follow-up.
+`EventGuest` rows (name ≤ 120, role ≤ 80, plain-text bio ≤ 600, image, links validated with `SETTINGS_GROUPS.social`, `isVisible`, `displayOrder`, optional `applicationId` **unique**). Edited in the special guests flow's Lineup step (`lineup/*`: add by hand without any form, edit, up / down reorder announced in `role="status"`, visibility, delete); **Add to lineup** on an APPROVED SPECIAL_GUEST application's detail copies name, description → bio, first photo (its own `Image` row), passing links (no profile → the applicant's name); 409 `ALREADY_IN_LINEUP`. Public payload `guests: [{ id, name, role, bio, imageUrl, links }]` (visible rows, ordered) → `EventGuests` section `#guests` on the event page; preview payload carries every row. Export lists rows linked to the contact's applications; erasure deletes them; hand-typed rows stay. Not copied by duplicate. A Details lineup card is a 050-P follow-up.
 
 ### Volunteer shifts (050-R, 050-S)
 
@@ -201,7 +198,7 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 
 - Backend: `eventSetupDraft`, `eventReadiness`, `eventPreview`, `eventCloseSales`, `organizerFormConfig` (table-driven over every opened and kept route), `applicationFormPurpose`, `applicationFormDefaults`, `volunteerShifts`, `volunteerShiftRoster`, `eventGuests`, `priceTiers` contract suites; unit `eventSetupSteps`, `eventValidators`, `eventReadiness`, `eventPreviewService`, `applicationFormPurposeMigration`, `eventGuestDataRights`.
 - Vitest: `eventSetupSteps`, `stepSaver`, `tierForm`, `eventWizard`, `eventReadiness`, `shiftEditor`, `returnTo`, `eventHero`.
-- Playwright (one dev server since 050-P): `admin-event-setup-{shell,entry,tickets,add-ons,applications,floor-map,review,volunteer-shifts}`, `admin-event-edit-mode`, `event-guest-lineup`, `admin-venue-flyout` (venue step's New venue), `admin-event-details` (every Edit href into the wizard, Special guests card), `applications-add-ons` and `participants-templates` (form editor, Start from, Save as template and pinned columns on the wizard step), `admin-event-publish-blockers`, `admin-event-close-sales`, `event-sales-closed`, `event-draft-preview`, `event-page-preview-mode`, `get-involved-labels`, `apply-volunteer-shifts`, `applications-shift-roster`. 050-P moved the old editor specs' still-valid checks into the wizard specs (admission radio keys, 24 px reorder targets, image replace / remove, tier quantity floor, add-on sales counts and read-only without `addOns.manage`) and deleted `admin-event-form-layout`.
+- Playwright (one dev server since 050-P): `admin-event-setup-{shell,entry,tickets,add-ons,floor-map,review,volunteer-shifts}`, `admin-event-application-flows` (spec 051), `admin-event-edit-mode`, `event-guest-lineup`, `admin-venue-flyout` (venue step's New venue), `admin-event-details` (every Edit href into the wizard, Special guests card), `applications-add-ons` and `participants-templates` (form editor, Start from, Save as template and pinned columns on the wizard step), `admin-event-publish-blockers`, `admin-event-close-sales`, `event-sales-closed`, `event-draft-preview`, `event-page-preview-mode`, `get-involved-labels`, `apply-volunteer-shifts`, `applications-shift-roster`. 050-P moved the old editor specs' still-valid checks into the wizard specs (admission radio keys, 24 px reorder targets, image replace / remove, tier quantity floor, add-on sales counts and read-only without `addOns.manage`) and deleted `admin-event-form-layout`.
 - Pages opened in `beforeAll` (no test fixtures) use `BASE_URL` from `e2e/helpers/session.ts`.
 - Wizard specs warm `/admin/events/new`, `setup` and `preview-frame` in `beforeAll` (desktop viewport, else the preview is hidden), run axe with `reducedMotion: 'reduce'` (the `motion-safe` fades otherwise catch axe mid-opacity), wait for Tiptap before scanning the Describe step, and scope assertions to `<main>` or the frame (the preview repeats every name).
 
@@ -210,13 +207,13 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 | File | Purpose |
 |------|---------|
 | `frontend/src/components/event-setup/steps.ts` | Step registry, visibility, completion, resume, `StepKey` |
-| `frontend/src/components/event-setup/contentSteps.ts`, `applicationSteps.ts` | Steps 4–6; application steps by purpose, `formsOnStep`, `stepForPurpose`, `templatesFor` |
+| `frontend/src/components/event-setup/contentSteps.ts`, `applicationSteps.ts` | Steps 4–6; application types by purpose, `formsOnStep`, `stepForPurpose`, `templatesFor` (flows: [application setup flows](application-setup-flows.md)) |
 | `frontend/src/components/event-setup/EventSetupPage.tsx`, `useSetupFlow.ts`, `useSetupData.ts`, `useSetupForms.ts`, `useSetupActions.ts` | Container: load, step state, create, Save & exit, publish hand-off |
 | `frontend/src/components/event-setup/stepSaver.ts`, `useStepSave.ts`, `SaveIndicator.tsx`, `useHistoryGuard.ts` | Autosave / explicit save, indicator, history + link guards |
 | `frontend/src/components/event-setup/SetupShell.tsx`, `SetupHeader.tsx`, `SetupProgress.tsx`, `StepMenu.tsx`, `SetupFooter.tsx`, `StepContent.tsx`, `ErrorSummary.tsx`, `stepFocus.ts` | Shell and a11y plumbing |
 | `frontend/src/components/event-setup/PreviewPane.tsx`, `PreviewFrame.tsx`, `previewMessages.ts`, `usePreviewChannel.ts` | In-pane preview |
 | `frontend/src/components/event-setup/sessionDraft.ts`, `doneMarker.ts`, `StartFromPastEvent.tsx`, `PastEventPicker.tsx`, `ContinueSetupLink.tsx`, `ViewEventLink.tsx`, `OrgFromUrlGate.tsx`, `WizardRedirect.tsx` | Pre-row draft, entry points, redirects |
-| `frontend/src/components/event-setup/steps/*` | One file per step: Name, Venue, Date, Describe, Image, Tickets (`TierList`, `useTierActions`), CollectMore, Applications (`AddFormDialog`, `FormRow`, `InlineFormEditor`, `ShiftsCard`), FloorMap, Done |
+| `frontend/src/components/event-setup/steps/*` | One file per step: Name, Venue, Date, Describe, Image, Tickets (`TierList`, `useTierActions`), CollectMore, Done; the form flows' Start (`StartFormStep`), Review (`ReviewFormStep`), `ShiftsCard`, FloorMap |
 | `frontend/src/components/event-setup/review/*` | Review: checklist, forms, brand, actions, publish outcome, donation slot |
 | `frontend/src/components/event-setup/lineup/*` | Guest lineup editor |
 | `frontend/src/lib/eventWizard.ts` | `continueSetupHref`, `wizardStepHref`, `withOrg`, `detailsEditLinks`, `legacyEditStep` |
@@ -234,10 +231,10 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 
 ## Gotchas
 
-- **One editor.** `components/event-setup/` is the only form for event fields and event application forms. Never add a flyout or section editor for a field a step owns; link to `setup?step=`.
+- **One editor.** `components/event-setup/` is the only form for event fields and event application forms (the form flows live there too, spec 051). Never add a flyout or section editor for a field a step owns; link to `setup?step=` or `formFlowHref`.
 - **PUBLISHED events never autosave**, and navigation never flushes their pending edits (`go()` flushes only DRAFT). Tier / add-on / form / guest / shift dialogs still save immediately, as before the wizard.
 - **Step keys live in three places** (backend `EVENT_SETUP_STEPS`, frontend `StepKey`, the shared fixture); the parity tests fail otherwise. A new step = registry entry + backend key + fixture + `StepContent`.
-- **Visibility is not completion.** Floor map shows on VENDOR + MAP only (a PAID sponsor form with MAP does not add it), while the readiness `MAP_FORM_WITHOUT_PUBLISHED_MAP` warning looks at any PAID MAP form.
+- **Visibility is not completion.** The Floor map step exists only in the vendor flow of a MAP form, while the readiness `MAP_FORM_WITHOUT_PUBLISHED_MAP` warning looks at any PAID MAP form (it carries that form's `formId` since spec 051, so the link opens its flow).
 - **The tier-sum ceiling is relaxed on wizard drafts only** (`setupCompletedAt` null) in `PriceTierService` create / update and the `updateEvent` capacity floor; the Tickets step warns inline and publish blocks with `TIERS_EXCEED_CAPACITY`. Completed events and the CLI keep the hard 400.
 - **Locks.** Unpublish takes `Event FOR UPDATE`; checkout takes `Event FOR SHARE` as the first statement of its transaction and application submit takes `FOR SHARE` + re-checks status and `assertSalesOpen` after it (RSVP create already holds `FOR UPDATE`), so no sale lands between unpublish's count and its write. Tier delete locks the `PriceTier` row (`FOR UPDATE OF pt`) and recounts tickets and order lines (`OrderItem.priceTierId` is `SET NULL`, so a line must never lose its tier). Shift update / delete lock the `VolunteerShift` row, the same lock approval takes (shifts in id order).
 - **Admission lock on the client is derived from the overview**; the server (any order of any kind → 409 `ADMISSION_MODE_LOCKED`) wins.
@@ -245,7 +242,7 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 - **The preview link lives 1 h**; Review and Done re-mint it, a stale tab gets a plain 404 for the draft.
 - **Duplicate text in Playwright**: the iframe and the mobile / desktop copies repeat names; scope to the form pane or the frame (gotcha 11).
 - **`useSearchParams()`** (`step`, `venueId`, `tier`, `form`, `org`) sits inside `<Suspense>` on every wizard route.
-- **Old paths are redirect-only.** `/edit`, `/edit/details`, `/edit/sales` and `applications/forms*` render `WizardRedirect` and nothing else. Link new code straight at `setup?step=` (`wizardStepHref`, `detailsEditLinks`, `readinessHref`). The dashboard Needs-attention Publish posts to a route that does not exist (`adminService.publishEvent`, PR #412 review FYI; still open).
+- **Old paths are redirect-only.** `/edit`, `/edit/details`, `/edit/sales` and `applications/forms*` render `WizardRedirect` and nothing else. Link new code straight at `setup?step=` or a form flow (`wizardStepHref`, `formFlowHref`, `detailsEditLinks`, `readinessHref`). The dashboard Needs-attention Publish posts to a route that does not exist (`adminService.publishEvent`, PR #412 review FYI; still open).
 - **Donations (spec 047 D1)** plug in at the `collect-more` comment slot (`EventGiftSettings`) and `DonationSuggestion` on Review; `useDonationsEligible` is a stub returning `false`.
 
 ## Related Features
@@ -253,6 +250,7 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 - [Event Details](event-details.md) — the read-only home whose Edit controls open the wizard
 - [Event Editor](event-editor.md) — retired in 050-P; what the old routes redirect to
 - [Event Management](event-management.md) — lifecycle and API
+- [Application setup flows](application-setup-flows.md) — spec 051: vendors, special guests, volunteers and other applications, one form per run
 - [Applications](applications.md), [Participants](participants.md) — forms, templates, review
 - [Add-ons](add-ons.md), [Price Tiers](price-tiers.md), [RSVP Events](rsvp-events.md)
 - [Floor Map Builder](map-builder.md), [Vendor Space Selection](vendor-space-selection.md)

@@ -1,11 +1,9 @@
-// Steps 8, 10, 11 and 12 of the event setup wizard (spec 050 §5.2, card
-// 050-L): one ApplicationsStep per purpose group. Forms save on their own
-// (dialogs and the FormEditorCards), so these steps have no event payload.
+// The four application types (spec 050 §5.2), each set up in its own flow
+// since spec 051 (formFlows.ts): purposes, labels and new-form defaults.
 //
-// Pure module, type-only imports from steps.ts (it imports this file).
+// Pure module.
 
 import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
-import type { EventStep, StepCtx } from './steps';
 
 export type ApplicationStepKey = 'vendors' | 'special-guests' | 'volunteers' | 'other-applications';
 
@@ -86,24 +84,11 @@ export function templatesFor(templates: FormTemplateSummary[], purpose: FormPurp
   return matching.length ? matching : sameKind.filter((t) => !t.purpose);
 }
 
-/** Where FormEditorCards link out to, inside the wizard: its own steps, not the old event pages. */
-export const wizardLink = (eventId: string, target: 'floor-map' | 'add-ons') =>
+/** Where FormEditorCards link out to: the vendor flow's Floor map step (spec 051), the event wizard's Collect more. */
+export const wizardLink = (eventId: string, target: 'floor-map' | 'add-ons', formId?: string) =>
   target === 'floor-map'
-    ? { href: `/admin/events/${eventId}/setup?step=floor-map`, label: 'Go to the Floor map step' }
+    ? {
+        href: `/admin/events/${encodeURIComponent(eventId)}/setup/vendors?${new URLSearchParams({ step: 'floor-map', ...(formId && { form: formId }) })}`,
+        label: 'Go to the Floor map step',
+      }
     : { href: `/admin/events/${eventId}/setup?step=collect-more`, label: 'Collect more step' };
-
-const always = () => true;
-
-function step(key: ApplicationStepKey, title: string, rest: Partial<EventStep> = {}): EventStep {
-  return {
-    key, title, rule: 'S', anchor: 'get-involved', built: true, visible: always,
-    complete: (ctx: StepCtx) => formsOnStep(key, ctx.forms).length > 0,
-    ...rest,
-  };
-}
-
-export const VENDORS_STEP = step('vendors', 'Vendor applications');
-// Spec 050-Q: the preview scrolls to the lineup (#guests) rather than the apply pills.
-export const SPECIAL_GUESTS_STEP = step('special-guests', 'Special guests', { anchor: 'guests' });
-export const VOLUNTEERS_STEP = step('volunteers', 'Volunteers');
-export const OTHER_APPLICATIONS_STEP = step('other-applications', 'Other applications');

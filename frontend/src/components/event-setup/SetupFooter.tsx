@@ -16,6 +16,8 @@ export default function SetupFooter({
   onSave,
   onNext,
   nextLabel,
+  nextForm,
+  skipLabel = 'Skip for now',
   busy,
 }: {
   onBack?: () => void;
@@ -25,6 +27,9 @@ export default function SetupFooter({
   /** Absent on Review, whose own Publish is the primary action. */
   onNext?: () => void;
   nextLabel: string;
+  /** Next submits this <form> (by id) instead of calling onNext: the step saves, then moves on. */
+  nextForm?: string;
+  skipLabel?: string;
   busy: boolean;
   /** Why Back waits (a publish in flight); Back stays focusable with aria-disabled. */
   locked?: string;
@@ -51,7 +56,7 @@ export default function SetupFooter({
       <div className="ml-auto flex items-center gap-2">
         {onSkip && (
           <button type="button" onClick={onSkip} className={textButton}>
-            Skip for now
+            {skipLabel}
           </button>
         )}
         {onSave && (
@@ -59,8 +64,8 @@ export default function SetupFooter({
             Save
           </button>
         )}
-        {onNext && (
-          <button type="button" onClick={onNext} disabled={busy} aria-busy={busy || undefined} className={primaryButton}>
+        {(onNext || nextForm) && (
+          <button type={nextForm ? 'submit' : 'button'} form={nextForm} onClick={nextForm ? undefined : onNext} disabled={busy} aria-busy={busy || undefined} className={primaryButton}>
             {nextLabel}
             {!busy && <ChevronRight className="h-4 w-4" aria-hidden />}
           </button>

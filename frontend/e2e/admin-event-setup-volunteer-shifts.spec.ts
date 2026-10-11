@@ -94,7 +94,8 @@ test.use({ viewport: { width: 390, height: 844 }, contextOptions: { reducedMotio
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'shifts-organizer', email: 'shifts-organizer@test.com', role: 'ORGANIZER' as const };
-const URL_ = `/admin/events/${EVENT_ID}/setup?step=volunteers&form=${FORM_ID}`;
+// Spec 051: shifts are a step of the volunteer application flow.
+const URL_ = `/admin/events/${EVENT_ID}/setup/volunteers?step=shifts&form=${FORM_ID}`;
 
 const card = (page: Page) => page.locator('main').getByTestId('setup-shifts');
 const serious = async (page: Page) =>

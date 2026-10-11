@@ -1,6 +1,7 @@
 // Event Details page (spec 037 phase 1): the read-only event home the list
 // card opens. Every Edit opens the setup wizard (spec 050-O/P; the flyouts
 // and section editors are gone). Mocked API, signInAsStaff.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
@@ -128,12 +129,14 @@ test('shows the event read-only, with an Edit link per section into the wizard',
     ['Edit date and venue', 'step=date'],
     ['Edit admission', 'step=tickets'],
     ['Edit listing', 'step=description'],
-    ['Edit form Vendors', 'step=other-applications&form=form-1'],
-    ['Edit special guests', 'step=special-guests'],
   ];
   for (const [name, query] of edits) {
     await expect(page.getByRole('link', { name, exact: true }).first()).toHaveAttribute('href', setup(query));
   }
+  // Spec 051: application forms and the lineup open their own flows.
+  const flow = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
+  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', flow(`other-applications?step=details&form=form-1&org=${ORG_ID}`));
+  await expect(page.getByRole('link', { name: 'Edit special guests' })).toHaveAttribute('href', flow(`special-guests?step=lineup&org=${ORG_ID}`));
   // No MAP form, so the floor map is edited from the Map tab.
   await expect(page.getByRole('link', { name: 'Edit floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
   // No link anywhere points at a retired editor.
@@ -151,7 +154,7 @@ test('special guests: count, the first names, which are hidden, and the wizard s
   await expect(card.getByText('Linus Torvalds')).toHaveCount(0);
   await expect(card.getByText('and 1 more')).toBeVisible();
   const edit = card.getByRole('link', { name: 'Edit special guests' });
-  await expect(edit).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=special-guests&org=${ORG_ID}`);
+  await expect(edit).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/special-guests?step=lineup&org=${ORG_ID}`);
   const box = (await edit.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
 });
@@ -160,7 +163,7 @@ test('special guests: an empty lineup offers to add one; a failed load says so',
   await page.goto(`/admin/events/${RSVP_ID}?orgId=${ORG_ID}`);
   const card = page.getByRole('region', { name: 'Special guests' });
   await expect(card.getByText('No special guests yet.', { exact: false })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Add a special guest' })).toHaveAttribute('href', `/admin/events/${RSVP_ID}/setup?step=special-guests&org=${ORG_ID}`);
+  await expect(card.getByRole('link', { name: 'Add a special guest' })).toHaveAttribute('href', `/admin/events/${RSVP_ID}/setup/special-guests?step=lineup&org=${ORG_ID}`);
 
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/guests`, (route) => route.fulfill(json({ message: 'boom' }, 500)));
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
@@ -212,7 +215,36 @@ test('an RSVP event shows its guests instead of sales', async ({ page }) => {
   const rsvps = page.getByRole('region', { name: 'RSVPs' });
   await expect(rsvps.getByText('of 40 guests')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Event pages' }).getByRole('link', { name: 'Guest list' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Applications' }).getByRole('link', { name: 'Set up an application form' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Applications' }).getByText('This event has none yet.', { exact: false })).toBeVisible();
+});
+
+test('Add to this event starts each application flow, with what is already there', async ({ page }) => {
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  const card = page.getByRole('region', { name: 'Add to this event' });
+  const flow = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
+  const tiles: [string, string][] = [
+    ['Add a vendor application', flow(`vendors?org=${ORG_ID}`)],
+    ['Add special guests', flow(`special-guests?step=lineup&org=${ORG_ID}`)],
+    ['Add a volunteer application', flow(`volunteers?org=${ORG_ID}`)],
+    ['Add an application', flow(`other-applications?org=${ORG_ID}`)],
+  ];
+  for (const [name, href] of tiles) {
+    const link = card.getByRole('link', { name });
+    await expect(link).toHaveAttribute('href', href);
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await expect(card.getByTestId('add-to-event-special-guests')).toContainText('5 guests in the lineup');
+  await expect(card.getByTestId('add-to-event-other-applications')).toContainText('1 form');
+  expect(
+    (await new AxeBuilder({ page }).include('#add-to-event').analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))
+  ).toEqual([]);
+});
+
+test('Add to this event is hidden without form access', async ({ page }) => {
+  await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['dashboard', 'events', 'applications', 'venues', 'maps'], hiddenPaths: [] })));
+  await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
+  await expect(page.getByRole('region', { name: 'Sales' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Add to this event' })).toHaveCount(0);
 });
 
 test('an event of another organization reads as not found', async ({ page }) => {
