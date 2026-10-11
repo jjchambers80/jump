@@ -11,6 +11,7 @@ import type { AdminForm, FormPurpose } from '@/lib/applications';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
 import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { PURPOSE_LABEL, wizardLink } from '../applicationSteps';
+import ShiftsCard from './ShiftsCard';
 import { hintClass, inputClass, labelClass } from '../ui';
 
 interface Props {
@@ -21,9 +22,12 @@ interface Props {
   purposes: FormPurpose[] | null;
   /** After any save: reload the forms and refresh the preview. */
   onSaved: () => void;
+  /** Event start / end (ISO): volunteer shifts outside them get a soft warning (050-S). */
+  eventStart?: string | null;
+  eventEnd?: string | null;
 }
 
-export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved }: Props) {
+export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved, eventStart, eventEnd }: Props) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +86,7 @@ export default function InlineFormEditor({ form, api, canEdit, purposes, onSaved
           onSetAddOns={(tierId, addOnIds) => run('Add-ons saved.', () => api.setTierAddOns(form.id, tierId, addOnIds))}
         />
       )}
+      {form.purpose === 'VOLUNTEER' && <ShiftsCard form={form} api={api} canEdit={canEdit} eventStart={eventStart} eventEnd={eventEnd} onSaved={onSaved} />}
       <QuestionsCard
         form={form}
         canEdit={canEdit}
