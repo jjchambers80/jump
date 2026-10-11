@@ -88,6 +88,7 @@ export const FEATURES = [
       { key: 'settings.tax', label: 'Change tax settings' },
       { key: 'settings.payments', label: 'Change payment settings and the payout account' },
       { key: 'settings.customerAccounts', label: 'Change customer account and refund policy settings' },
+      { key: 'settings.policies', label: 'Edit and publish the store policies (refund, privacy, terms…)' },
       { key: 'settings.applications', label: 'Change application email templates and the digest' },
       { key: 'settings.agentAccess', label: 'Manage AI agent access' },
       { key: 'settings.activity', label: 'View the activity log' },

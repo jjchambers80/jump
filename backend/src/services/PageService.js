@@ -53,14 +53,15 @@ async function publicApplyForm(organizationId, formId, applyLabel) {
 class PageService {
   async list(organizationId) {
     return prisma.page.findMany({
-      where: { organizationId },
+      // Written policies (spec 052) are edited in Settings › Policies only.
+      where: { organizationId, policyType: null },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }
 
   /** One page, only when it belongs to the organization; 404 otherwise. */
   async get(organizationId, pageId) {
-    const page = await prisma.page.findFirst({ where: { id: pageId, organizationId } });
+    const page = await prisma.page.findFirst({ where: { id: pageId, organizationId, policyType: null } });
     if (!page) throw new NotFoundError('Page not found');
     return page;
   }

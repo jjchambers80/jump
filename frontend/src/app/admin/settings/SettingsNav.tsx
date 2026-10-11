@@ -20,6 +20,7 @@ const SECTIONS: Section[] = [
   { href: '/admin/settings/tax', label: 'Tax' },
   { href: '/admin/settings/applications', label: 'Applications' },
   { href: '/admin/settings/customer-accounts', label: 'Customer accounts' },
+  { href: '/admin/settings/policies', label: 'Policies' },
   { href: '/admin/settings/users', label: 'Users', permission: 'settings.users' },
   { href: '/admin/settings/developers', label: 'Developers' },
   // Spec 045: hidden until agent access launches (NEXT_PUBLIC_AGENT_ACCESS_ENABLED)

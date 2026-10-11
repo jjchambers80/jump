@@ -25,6 +25,8 @@ import type { ThemeMode } from '../../../lib/theme';
 import Link from 'next/link';
 import { storefrontHref } from '../../../lib/storefrontPath';
 import { useBuyer } from '../../../lib/useBuyer';
+import { useStorefrontMenus } from '../../../components/storefront/useStorefrontMenus';
+import PolicyLinks from '../../../components/storefront/PolicyLinks';
 import { ChevronDown, ChevronLeft, Lock, Mail } from 'lucide-react';
 import { loadContactDraft, saveCheckoutDraft, saveContactDraft } from '../../../lib/checkoutDraft';
 import { suggestEmail } from '../../../lib/emailTypo';
@@ -206,6 +208,8 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
   // Spec 031: a buyer signed in at this organization gets their details
   // prefilled (still editable) and no "create an account" box — they have one.
   const { buyer } = useBuyer(event?.organizationId ?? null);
+  // Spec 052: the store's published policies, linked under the consent line.
+  const policies = useStorefrontMenus(event?.organizationId ?? null)?.policies;
   useEffect(() => {
     if (!buyer) return;
     setFirstName((current) => current || buyer.firstName || '');
@@ -819,6 +823,11 @@ function CheckoutContent({ params }: { params: { eventId: string } }) {
               )}
               .
             </p>
+            <PolicyLinks
+              policies={policies}
+              className="justify-center"
+              linkClassName="text-xs text-brand-link underline underline-offset-2"
+            />
           </div>
         </section>
       </div>

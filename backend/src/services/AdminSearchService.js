@@ -153,7 +153,7 @@ class AdminSearchService {
           take: 5,
         }),
         prisma.page.findMany({
-          where: { ...directScope, title: contains(term) },
+          where: { ...directScope, policyType: null, title: contains(term) },
           select: { id: true, title: true },
           orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
           take: 3,

@@ -558,6 +558,9 @@ model Organization {
   buyerSignInMethod          BuyerSignInMethod      @default(LINK)
   // Spec 045: an ADMIN must explicitly enable agent grants for this store.
   agentAccessEnabled         Boolean                @default(false)
+  // Spec 052: link the published written policies in the storefront footer
+  // and at checkout (Settings › Policies › ⋯).
+  showPoliciesInFooter       Boolean                @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -621,6 +624,9 @@ model Page {
   // Spec 044D: optional standing application form attached to this page.
   applicationFormId String?
   applyLabel        String?
+  // Spec 052: set on the organization's written policy pages (Settings ›
+  // Policies), which are edited there only and hidden from Content › Pages.
+  policyType        PolicyType?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -628,6 +634,7 @@ model Page {
   applicationForm ApplicationForm? @relation(fields: [applicationFormId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, slug])
+  @@unique([organizationId, policyType])
   @@index([organizationId, createdAt])
 }
 
@@ -1386,6 +1393,17 @@ enum ThemeMode {
 }
 
 // Spec 031: how the self-serve refund fee is computed.
+// Spec 052: Settings › Policies › Written policies, in display order.
+enum PolicyType {
+  REFUND
+  PRIVACY
+  TERMS
+  SHIPPING
+  CONTACT
+  LEGAL_NOTICE
+  ACCESSIBILITY
+}
+
 enum SelfServeRefundFeeType {
   NONE
   FIXED

@@ -95,9 +95,18 @@ export interface PublicMenuItem {
   children: PublicMenuItem[];
 }
 
+/** Spec 052: a published written policy linked under the footer and at checkout. */
+export interface PolicyLink {
+  type: string;
+  title: string;
+  href: string;
+}
+
 export interface PublicMenus {
   main: PublicMenuItem[];
   footer: PublicMenuItem[];
+  /** Empty when none are published or the store turned the links off. */
+  policies?: PolicyLink[];
 }
 
 /** One-line description of where an item links, for the collapsed row. */

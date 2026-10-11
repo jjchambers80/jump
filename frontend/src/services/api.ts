@@ -1204,3 +1204,35 @@ export async function downloadCsv(endpoint: string, filename: string): Promise<v
   document.body.removeChild(a);
   URL.revokeObjectURL(blobUrl);
 }
+
+// Spec 052: Settings › Policies (written store policies)
+export type PolicyType = 'REFUND' | 'PRIVACY' | 'TERMS' | 'SHIPPING' | 'CONTACT' | 'LEGAL_NOTICE' | 'ACCESSIBILITY';
+export type PolicyStatus = 'PUBLISHED' | 'NOT_SET';
+
+export interface PolicySummary {
+  type: PolicyType;
+  title: string;
+  slug: string | null;
+  status: PolicyStatus;
+  updatedAt: string | null;
+}
+
+export interface PolicyList {
+  showInFooter: boolean;
+  policies: PolicySummary[];
+}
+
+export interface PolicyDetail extends PolicySummary {
+  content: string;
+  /** No policy saved yet: title and content are starter text. */
+  starter: boolean;
+}
+
+export const policiesApi = {
+  list: () => api.get<PolicyList>('/admin/settings/policies'),
+  get: (type: PolicyType) => api.get<PolicyDetail>(`/admin/settings/policies/${type}`),
+  save: (type: PolicyType, body: { title: string; content: string }) =>
+    api.put<PolicyDetail>(`/admin/settings/policies/${type}`, body),
+  remove: (type: PolicyType) => api.delete<void>(`/admin/settings/policies/${type}`),
+  setShowInFooter: (showInFooter: boolean) => api.patch<PolicyList>('/admin/settings/policies', { showInFooter }),
+};

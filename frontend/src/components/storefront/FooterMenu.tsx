@@ -10,6 +10,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { PublicMenuItem } from '@/lib/menus';
 import { storefrontHref } from '@/lib/storefrontPath';
+import type { PolicyLink } from '@/lib/menus';
+import PolicyLinks from './PolicyLinks';
 
 export interface FooterMenuProps {
   items: PublicMenuItem[];
@@ -22,6 +24,8 @@ export interface FooterMenuProps {
   before?: ReactNode;
   /** Extra line under the bottom row (legal links, "Powered by"). */
   after?: ReactNode;
+  /** Spec 052: published store policies, one row under the menu. */
+  policies?: PolicyLink[];
 }
 
 function FooterLink({
@@ -55,7 +59,7 @@ function FooterLink({
   );
 }
 
-export default function FooterMenu({ items, organization, host, copyright, before, after }: FooterMenuProps) {
+export default function FooterMenu({ items, organization, host, copyright, before, after, policies }: FooterMenuProps) {
   const plain = items.filter((item) => !item.children.length);
   const groups = items.filter((item) => item.children.length);
   const focusRing =
@@ -117,6 +121,12 @@ export default function FooterMenu({ items, organization, host, copyright, befor
             </ul>
           )}
         </div>
+        <PolicyLinks
+          policies={policies}
+          host={host}
+          className="mt-6"
+          linkClassName={`text-xs text-gray-600 underline-offset-4 hover:text-brand-link hover:underline dark:text-slate-400 ${focusRing}`}
+        />
         {after}
       </nav>
     </footer>
