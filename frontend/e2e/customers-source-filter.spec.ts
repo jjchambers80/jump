@@ -47,7 +47,7 @@ test('Submitted a form switches to all contacts, narrows by form and shows the f
   await page.goto('/admin/customers');
   await expect(page.getByTestId('customer-scope-customers')).toHaveAttribute('aria-pressed', 'true');
 
-  await page.getByLabel('Source').selectOption('form');
+  await page.getByLabel('Source', { exact: true }).selectOption('form');
   await expect(page.getByTestId('customer-scope-all')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => listRequests.some((u) => u.searchParams.get('source') === 'form' && u.searchParams.get('scope') === 'all')).toBe(true);
   await expect(page.locator('li', { hasText: 'Form: Become a vendor' }).locator('visible=true').first()).toBeVisible();
