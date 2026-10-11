@@ -45,7 +45,8 @@ async function mock(page: Page, baseURL: string) {
     const url = new URL(route.request().url());
     listCalls.push(url);
     const shift = url.searchParams.get('shift');
-    const data = ROWS.filter((r) => !shift || r.shifts.some((s) => s.id === shift));
+    const assignedOnly = url.searchParams.get('shiftMode') === 'assigned';
+    const data = ROWS.filter((r) => !shift || r.shifts.some((s) => s.id === shift && (!assignedOnly || s.assigned)));
     return route.fulfill(json({ data, total: data.length, page: 1, pageSize: 50, summary: { APPROVED: 1, SUBMITTED: 2 }, awaitingSpace: 0 }));
   });
   return listCalls;
@@ -62,7 +63,7 @@ test('filters the roster by shift and shows assigned shifts in text', async ({ p
   await expect(page.getByTestId('application-shifts-app-ana')).toContainText('Gate crew · assigned');
   await expect(page.getByTestId('application-shifts-app-cy')).toHaveText('—');
 
-  await page.getByTestId('applications-shift-filter').selectOption({ label: 'On Gate crew' });
+  await page.getByTestId('applications-shift-filter').selectOption({ label: 'Picked or on Gate crew' });
   await expect(page).toHaveURL(/shift=sh-gate/);
   await expect.poll(() => calls.at(-1)?.searchParams.get('shift')).toBe('sh-gate');
   await expect(table).not.toContainText('Bo Vol');
@@ -71,7 +72,26 @@ test('filters the roster by shift and shows assigned shifts in text', async ({ p
   const a11y = await new AxeBuilder({ page }).include('[data-testid="applications-table"]').analyze();
   expect(a11y.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
 
+  // Assigned mode: Ana picked Runner but is not assigned to it.
+  await page.getByTestId('applications-shift-filter').selectOption({ label: 'Assigned to Runner' });
+  await expect(page).toHaveURL(/shiftMode=assigned/);
+  await expect(page).toHaveURL(/shift=sh-runner/);
+  await expect(table).toContainText('No applications match');
+  await page.getByTestId('applications-shift-filter').selectOption({ label: 'Picked or on Runner' });
+  await expect(page).not.toHaveURL(/shiftMode=/);
+  await expect(page.getByTestId('application-row-app-ana')).toBeVisible();
+  await expect(page.getByTestId('application-row-app-bo')).toBeVisible();
+
   await page.getByTestId('applications-shift-filter').selectOption({ label: 'Any shift' });
   await expect(page).not.toHaveURL(/shift=/);
   await expect(table).toContainText('Bo');
+});
+
+test('a shared ?shift= link shows in the control', async ({ page, baseURL }) => {
+  const calls = await mock(page, baseURL!);
+  await page.goto(`/admin/events/${EVENT_ID}/applications?shift=sh-gate&shiftMode=assigned`);
+  await expect(page.getByTestId('applications-table')).toContainText('Ana', { timeout: 30000 });
+  await expect(page.getByTestId('applications-shift-filter')).toHaveValue('sh-gate|assigned');
+  await expect(page.getByTestId('application-row-app-bo')).toHaveCount(0);
+  expect(calls.at(-1)?.searchParams.get('shiftMode')).toBe('assigned');
 });

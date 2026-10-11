@@ -201,7 +201,7 @@ function ShiftRow({
   );
 }
 
-function TimeInput({ id, label, value, zone, error, onChange }: { id: string; label: string; value: string; zone: string | null; error?: string; onChange: (v: string) => void }) {
+function TimeInput({ id, label, value, zone, error, warningId, onChange }: { id: string; label: string; value: string; zone: string | null; error?: string; warningId?: string; onChange: (v: string) => void }) {
   const instant = zonedInputToInstant(value, zone);
   return (
     <div>
@@ -214,7 +214,7 @@ function TimeInput({ id, label, value, zone, error, onChange }: { id: string; la
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={!!error || undefined}
-        aria-describedby={describedBy(id, { hint: true, error })}
+        aria-describedby={[describedBy(id, { hint: true, error }), warningId].filter(Boolean).join(' ') || undefined}
         className={inputClass}
       />
       <p id={`${id}-hint`} className={hintClass}>
@@ -258,6 +258,7 @@ function ShiftEditor({
   const nameRef = useRef<HTMLInputElement>(null);
   const prefix = `setup-shift-${shift?.id ?? `new-${form.id}`}`;
   const ids = { name: `${prefix}-name`, start: `${prefix}-start`, end: `${prefix}-end`, capacity: `${prefix}-capacity` };
+  const warningId = `${prefix}-outside`;
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -319,15 +320,18 @@ function ShiftEditor({
         )}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TimeInput id={ids.start} label="Starts" value={draft.start} zone={zone} error={errors.start} onChange={(start) => set({ start })} />
-        <TimeInput id={ids.end} label="Ends" value={draft.end} zone={zone} error={errors.end} onChange={(end) => set({ end })} />
+        <TimeInput id={ids.start} label="Starts" value={draft.start} zone={zone} error={errors.start} warningId={warning ? warningId : undefined} onChange={(start) => set({ start })} />
+        <TimeInput id={ids.end} label="Ends" value={draft.end} zone={zone} error={errors.end} warningId={warning ? warningId : undefined} onChange={(end) => set({ end })} />
       </div>
-      {warning && (
-        <p className="flex items-start gap-1.5 text-sm text-amber-800 dark:text-amber-300" data-testid="setup-shift-outside-warning">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{warning}</span>
-        </p>
-      )}
+      {/* Always mounted, so the live region announces the warning when it appears. */}
+      <p id={warningId} role="status" className="flex items-start gap-1.5 text-sm text-amber-800 empty:hidden dark:text-amber-300" data-testid="setup-shift-outside-warning">
+        {warning && (
+          <>
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>{warning}</span>
+          </>
+        )}
+      </p>
       <div>
         <label htmlFor={ids.capacity} className={labelClass}>
           Volunteers needed

@@ -216,3 +216,28 @@ test('deletes a free shift; a shift with assigned volunteers shows the 409 in wo
   await expect(card(page).getByRole('heading', { name: 'Shifts and roles' })).toBeFocused();
   expect(await serious(page)).toEqual([]);
 });
+
+test.describe('320 px', () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test('the card and the open editor fit at 320 px: no horizontal scroll, 44 px targets, axe', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(URL_);
+    await expect(card(page)).toBeVisible(COLD);
+    const overflow = () => page.evaluate(() => [document.documentElement, document.querySelector('main')].filter((el) => !!el && el.scrollWidth > el.clientWidth).length);
+    expect(await overflow()).toBe(0);
+    await card(page).getByRole('button', { name: 'Edit Gate crew' }).click();
+    const editor = card(page).getByTestId('setup-shift-editor');
+    await expect(editor.getByLabel('Shift or role name')).toBeFocused();
+    // An outside-the-event time: the warning is a live region the time inputs point at.
+    await editor.getByLabel('Starts').fill('2031-06-01T09:00');
+    const warning = editor.getByTestId('setup-shift-outside-warning');
+    await expect(warning).toHaveAttribute('role', 'status');
+    await expect(warning).toContainText('Starts before the event does');
+    const warningId = await warning.getAttribute('id');
+    await expect(editor.getByLabel('Starts')).toHaveAttribute('aria-describedby', new RegExp(`\\b${warningId}\\b`));
+    for (const name of ['Save shift', 'Cancel']) expect((await editor.getByRole('button', { name }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await overflow()).toBe(0);
+    expect(await serious(page)).toEqual([]);
+  });
+});

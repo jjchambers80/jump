@@ -24,6 +24,8 @@ export interface ListQuery {
   tag?: string;
   /** Spec 050-S: picked or assigned this volunteer shift. */
   shift?: string;
+  /** With `shift`: `assigned` = only volunteers assigned to it on approval. */
+  shiftMode?: 'assigned';
   /** Spec 014 phase 2: `none` = approved on a map-bound tier with no booth yet; `chosen` = owns one. */
   booth?: 'none' | 'chosen';
   q?: string;

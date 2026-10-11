@@ -43,7 +43,7 @@ const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED'
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
 const ORG_PAGE_SIZE = 25;
 type Filters = Omit<ParticipantsQuery, 'page' | 'pageSize'>;
-const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'shift', 'booth', 'q', 'sort'];
+const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'shift', 'shiftMode', 'booth', 'q', 'sort'];
 const DECIDED: Record<Decision, string> = { APPROVE: 'approved', REJECT: 'rejected', WAITLIST: 'waitlisted', WITHDRAW: 'withdrawn' };
 
 /** The subset of a form the filters need, common to the per-event and org-wide form lists. */
@@ -122,6 +122,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
       addOn: searchParams.get('addOn') || undefined,
       tag: searchParams.get('tag') || undefined,
       shift: searchParams.get('shift') || undefined,
+      shiftMode: searchParams.get('shift') && searchParams.get('shiftMode') === 'assigned' ? 'assigned' : undefined,
       booth: (['none', 'chosen'].includes(searchParams.get('booth') ?? '') ? searchParams.get('booth') : undefined) as 'none' | 'chosen' | undefined,
       q: searchParams.get('q') || undefined,
       sort: searchParams.get('sort') || undefined,
@@ -336,8 +337,11 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
   const shiftOptions = useMemo(() => {
     const scoped = query.form ? formOptions.filter((f) => f.id === query.form) : formOptions;
     const many = scoped.filter((f) => (f.shifts ?? []).length > 0).length > 1;
-    return scoped.flatMap((f) => (f.shifts ?? []).map((s) => ({ id: s.id, label: many ? `${s.name} · ${f.name}` : s.name })));
-  }, [formOptions, query.form]);
+    const options = scoped.flatMap((f) => (f.shifts ?? []).map((s) => ({ id: s.id, label: many ? `${s.name} · ${f.name}${orgWide && !query.event && f.event ? ` · ${f.event.name}` : ''}` : s.name })));
+    // A shared link can name a shift outside the current options: keep it visible in the control.
+    if (query.shift && !options.some((o) => o.id === query.shift)) options.push({ id: query.shift, label: 'the selected shift' });
+    return options;
+  }, [formOptions, query.form, query.shift, query.event, orgWide]);
   const showShifts = shiftOptions.length > 0 || (list?.data ?? []).some((r) => (r.shifts ?? []).length > 0);
 
   // Pinned answer columns (spec 019 follow-up): with a Form filter, one column per
@@ -395,7 +399,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
         }}
       >
         {orgWide && (
-          <select aria-label="Event" value={query.event || ''} onChange={(e) => setQuery({ event: e.target.value || undefined, form: undefined, addOn: undefined })} className={select} data-testid="participants-event-filter">
+          <select aria-label="Event" value={query.event || ''} onChange={(e) => setQuery({ event: e.target.value || undefined, form: undefined, addOn: undefined, shift: undefined, shiftMode: undefined })} className={select} data-testid="participants-event-filter">
             <option value="">All events</option>
             {eventOptions.map((ev) => (
               <option key={ev.id} value={ev.id}>
@@ -405,7 +409,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
           </select>
         )}
         {!standing && (
-        <select aria-label="Form" value={query.form || ''} onChange={(e) => setQuery({ form: e.target.value || undefined, shift: undefined })} className={select}>
+        <select aria-label="Form" value={query.form || ''} onChange={(e) => setQuery({ form: e.target.value || undefined, shift: undefined, shiftMode: undefined })} className={select}>
           <option value="">All forms</option>
           {formOptions.map((f) => (
             <option key={f.id} value={f.id}>
@@ -434,13 +438,23 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
             ))}
           </select>
         )}
-        {(shiftOptions.length > 0 || query.shift) && (
-          <select aria-label="Shift" value={query.shift || ''} onChange={(e) => setQuery({ shift: e.target.value || undefined })} className={select} data-testid="applications-shift-filter">
+        {shiftOptions.length > 0 && (
+          <select
+            aria-label="Shift"
+            value={query.shift ? `${query.shift}${query.shiftMode === 'assigned' ? '|assigned' : ''}` : ''}
+            onChange={(e) => {
+              const [shift, mode] = e.target.value.split('|');
+              setQuery({ shift: shift || undefined, shiftMode: mode === 'assigned' ? 'assigned' : undefined });
+            }}
+            className={select}
+            data-testid="applications-shift-filter"
+          >
             <option value="">Any shift</option>
             {shiftOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                On {s.label}
-              </option>
+              <optgroup key={s.id} label={s.label}>
+                <option value={s.id}>Picked or on {s.label}</option>
+                <option value={`${s.id}|assigned`}>Assigned to {s.label}</option>
+              </optgroup>
             ))}
           </select>
         )}

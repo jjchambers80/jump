@@ -537,6 +537,8 @@ export interface OrgForm {
   applicationCount: number;
   pinnedQuestions: { id: string; label: string; type: QuestionType }[];
   addOns: { id: string; name: string }[];
+  /** Spec 050-S: a VOLUNTEER form's shifts, for the Shift filter. */
+  shifts?: { id: string; name: string }[];
   updatedAt: string;
 }
 

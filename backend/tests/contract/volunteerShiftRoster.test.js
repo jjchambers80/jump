@@ -2,6 +2,7 @@
 // submissions list scope takes a `shift` filter (anyone who picked the shift
 // or is assigned to it), rows carry their shifts with the assigned flag, and
 // the same filter narrows the org-wide list and the CSV export.
+// `shiftMode=assigned` keeps only volunteers assigned to the shift.
 
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
@@ -22,14 +23,16 @@ describe('Shift roster filter (spec 050 §6.4, 050-S)', () => {
   let form;
   let gate;
   let setup;
+  let otherShift;
+  let otherApp;
   const apps = {};
 
   const call = (method, path, token = tokens.ORGANIZER, orgId = org.id) =>
     request(app)[method](path).set('Authorization', `Bearer ${token}`).set('X-Jump-Org', orgId);
-  const submit = (shiftIds, email) =>
+  const submit = (shiftIds, email, target = { eventId, slug: null }) =>
     request(app)
-      .post(`/events/${eventId}/applications`)
-      .send({ formSlug: form.slug, contact: { email, firstName: 'Val', lastName: email.split('@')[0] }, acceptances: allAcceptances(), answers: {}, shiftIds });
+      .post(`/events/${target.eventId}/applications`)
+      .send({ formSlug: target.slug ?? form.slug, contact: { email, firstName: 'Val', lastName: email.split('@')[0] }, acceptances: allAcceptances(), answers: {}, shiftIds });
 
   beforeAll(async () => {
     permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: {}, ORGANIZER: {}, disabled: [] } };
@@ -57,18 +60,34 @@ describe('Shift roster filter (spec 050 §6.4, 050-S)', () => {
       apps[key] = r.body.applicationId;
     }
     // Approve "setupOnly" onto Gate: an organizer assignment without a pick still lands on the roster.
+    // ("setupOnly" picked Setup but works Gate: the assigned Setup roster must leave them out.)
     const d = await call('post', `/admin/events/${eventId}/applications/${apps.setupOnly}/decision`).send({ decision: 'APPROVE', sendEmail: false, shiftIds: [gate.id] });
     expect(d.status).toBe(200);
+    // "both" picked Gate and Setup and is assigned to Setup only.
+    const d2 = await call('post', `/admin/events/${eventId}/applications/${apps.both}/decision`).send({ decision: 'APPROVE', sendEmail: false, shiftIds: [setup.id] });
+    expect(d2.status).toBe(200);
+
+    // The other organization has its own volunteer form, shift and application.
+    const otherVenue = await prisma.venue.create({ data: { organizationId: otherOrg.id, name: `${TAG} Barn`, address: '2 Main St', city: 'Raleigh', state: 'NC', timezone: 'America/New_York' } });
+    const otherEventId = (await prisma.event.create({ data: { venueId: otherVenue.id, name: `${TAG} Other Expo`, date: new Date('2027-09-19T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } })).id;
+    const of = await call('post', `/admin/events/${otherEventId}/application-forms`, tokens.OUTSIDER, otherOrg.id).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Other crew', questions: [], collectBusiness: false });
+    expect(of.status).toBe(201);
+    await call('patch', `/admin/events/${otherEventId}/application-forms/${of.body.id}`, tokens.OUTSIDER, otherOrg.id).send({ status: 'OPEN' });
+    otherShift = (await call('post', `/admin/events/${otherEventId}/application-forms/${of.body.id}/shifts`, tokens.OUTSIDER, otherOrg.id).send({ name: 'Gate' })).body;
+    const oa = await submit([otherShift.id], `other@${TAG}.test`, { eventId: otherEventId, slug: of.body.slug });
+    expect(oa.status).toBe(201);
+    otherApp = oa.body.applicationId;
   });
 
   afterAll(async () => {
     permissionService.clearCache();
-    await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.applicationForm.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.legalAcceptance.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.contact.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});
-    await prisma.venue.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
+    const orgs = { in: [org.id, otherOrg.id] };
+    await prisma.application.deleteMany({ where: { organizationId: orgs } }).catch(() => {});
+    await prisma.applicationForm.deleteMany({ where: { organizationId: orgs } }).catch(() => {});
+    await prisma.legalAcceptance.deleteMany({ where: { organizationId: orgs } }).catch(() => {});
+    await prisma.contact.deleteMany({ where: { organizationId: orgs } }).catch(() => {});
+    await prisma.event.deleteMany({ where: { venue: { organizationId: orgs } } }).catch(() => {});
+    await prisma.venue.deleteMany({ where: { organizationId: orgs } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: { in: [org.id, otherOrg.id] } } }).catch(() => {});
     await cleanupStaff(emails);
   });
@@ -88,7 +107,7 @@ describe('Shift roster filter (spec 050 §6.4, 050-S)', () => {
     const row = (id) => res.body.data.find((r) => r.id === id);
     expect(row(apps.both).shifts).toEqual([
       { id: gate.id, name: 'Gate', assigned: false },
-      { id: setup.id, name: 'Setup', assigned: false },
+      { id: setup.id, name: 'Setup', assigned: true },
     ]);
     expect(row(apps.setupOnly).shifts).toEqual([
       { id: gate.id, name: 'Gate', assigned: true },
@@ -97,9 +116,28 @@ describe('Shift roster filter (spec 050 §6.4, 050-S)', () => {
     expect(row(apps.none).shifts).toEqual([]);
   });
 
-  it('combines with the status filter (the assigned roster)', async () => {
+  it('combines with the status filter', async () => {
     const res = await call('get', `/admin/events/${eventId}/applications?shift=${gate.id}&status=APPROVED`);
-    expect(ids(res)).toEqual([apps.setupOnly]);
+    // "both" is approved and picked Gate, though it works Setup: picks count in the default mode.
+    expect(ids(res)).toEqual([apps.setupOnly, apps.both].sort());
+  });
+
+  it('shiftMode=assigned is the assigned roster: picks without an assignment are left out', async () => {
+    const setupRoster = await call('get', `/admin/events/${eventId}/applications?shift=${setup.id}&shiftMode=assigned`);
+    expect(setupRoster.status).toBe(200);
+    // "setupOnly" is approved and picked Setup but is assigned to Gate.
+    expect(ids(setupRoster)).toEqual([apps.both]);
+    const gateRoster = await call('get', `/admin/events/${eventId}/applications?shift=${gate.id}&shiftMode=assigned`);
+    expect(ids(gateRoster)).toEqual([apps.setupOnly]);
+    const csv = await call('get', `/admin/events/${eventId}/applications/export.csv?shift=${setup.id}&shiftMode=assigned`);
+    expect(csv.text.trim().split('\n')).toHaveLength(2);
+  });
+
+  it('the org-wide forms list carries volunteer shifts for the filter', async () => {
+    const res = await call('get', '/admin/application-forms');
+    expect(res.status).toBe(200);
+    expect(res.body.data.find((f) => f.id === form.id).shifts).toEqual([{ id: gate.id, name: 'Gate' }, { id: setup.id, name: 'Setup' }]);
+    expect(res.body.data.some((f) => f.shifts?.some((s) => s.id === otherShift.id))).toBe(false);
   });
 
   it('applies on the org-wide list and the CSV export', async () => {
@@ -111,10 +149,18 @@ describe('Shift roster filter (spec 050 §6.4, 050-S)', () => {
     expect(csv.text.trim().split('\n')).toHaveLength(3);
   });
 
-  it("another organization's member sees nothing for this shift", async () => {
-    const res = await call('get', `/admin/applications?shift=${gate.id}`, tokens.OUTSIDER, otherOrg.id);
-    expect(res.status).toBe(200);
-    expect(res.body.data).toEqual([]);
+  it('the filter never crosses organizations', async () => {
+    // The other org's member: their own shift finds their own volunteer, ours finds nothing.
+    const own = await call('get', `/admin/applications?shift=${otherShift.id}`, tokens.OUTSIDER, otherOrg.id);
+    expect(own.status).toBe(200);
+    expect(ids(own)).toEqual([otherApp]);
+    const ours = await call('get', `/admin/applications?shift=${gate.id}`, tokens.OUTSIDER, otherOrg.id);
+    expect(ours.status).toBe(200);
+    expect(ours.body.data).toEqual([]);
+    // And our member cannot reach their volunteer through their shift id.
+    const theirs = await call('get', `/admin/applications?shift=${otherShift.id}`);
+    expect(theirs.status).toBe(200);
+    expect(theirs.body.data).toEqual([]);
   });
 
   it('an unknown shift id matches nothing', async () => {

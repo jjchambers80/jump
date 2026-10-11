@@ -2501,8 +2501,9 @@ class ApplicationService {
       ];
     }
     if (query.tag) where.tags = { has: String(query.tag) };
-    // Spec 050 §6.4 (050-S): the shift roster — anyone who picked the shift or is assigned to it.
-    if (query.shift) where.shifts = { some: { shiftId: String(query.shift) } };
+    // Spec 050 §6.4 (050-S): the shift roster — anyone who picked the shift or is assigned
+    // to it; `shiftMode=assigned` keeps only the volunteers assigned to it on approval.
+    if (query.shift) where.shifts = { some: { shiftId: String(query.shift), ...(query.shiftMode === 'assigned' && { assigned: true }) } };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
       if (list.length) where.status = { in: list };
