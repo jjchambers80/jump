@@ -89,7 +89,7 @@ const STAFF = { id: 'setup-admin', email: 'setup-admin@test.com', role: 'ADMIN' 
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
   if (!WIZARD_URL) return;
-  const page = await browser.newPage({ baseURL: WIZARD_URL });
+  const page = await browser.newPage({ baseURL: WIZARD_URL, viewport: { width: 1440, height: 900 } });
   await signInAsStaff(page, STAFF, WIZARD_URL);
   await mockApi(page);
   for (const path of ['/admin/events/new', `/admin/events/${EVENT_ID}/setup?step=name`]) {

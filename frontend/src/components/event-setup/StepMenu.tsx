@@ -19,7 +19,7 @@ export interface MenuItem {
   reachable: boolean;
 }
 
-function StepLinks({ items, onGo }: { items: MenuItem[]; onGo: (key: StepKey) => void }) {
+function StepLinks({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: StepKey) => void; lockedBy?: string }) {
   return (
     <nav aria-label="Jump to edit">
       <ul className="space-y-1">
@@ -40,9 +40,11 @@ function StepLinks({ items, onGo }: { items: MenuItem[]; onGo: (key: StepKey) =>
                   // The visible title first (label in name), then its state.
                   aria-label={state === 'current' ? undefined : `${step.title}, ${stateText(state)}`}
                   data-step-link={step.key}
+                  aria-disabled={lockedBy ? true : undefined}
+                  aria-describedby={lockedBy}
                   onClick={(event) => {
                     event.preventDefault();
-                    onGo(step.key);
+                    if (!lockedBy) onGo(step.key);
                   }}
                   className={`${base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 ${
                     state === 'current'
@@ -66,10 +68,10 @@ function StepLinks({ items, onGo }: { items: MenuItem[]; onGo: (key: StepKey) =>
   );
 }
 
-export function StepRail({ items, onGo }: { items: MenuItem[]; onGo: (key: StepKey) => void }) {
+export function StepRail({ items, onGo, lockedBy }: { items: MenuItem[]; onGo: (key: StepKey) => void; lockedBy?: string }) {
   return (
     <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 xl:block">
-      <StepLinks items={items} onGo={onGo} />
+      <StepLinks items={items} onGo={onGo} lockedBy={lockedBy} />
     </aside>
   );
 }

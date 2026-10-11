@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publishBlockers, readinessHref, readinessSettingsFix } from '@/lib/eventReadiness';
+import { publishBlockers, readinessHref, readinessSettingsFix, wizardReadinessHref } from '@/lib/eventReadiness';
 
 const item = (code: string, step: string) => ({ code, step, message: code });
 
@@ -40,5 +40,14 @@ describe('readinessSettingsFix', () => {
     expect(readinessSettingsFix(item('PAYMENTS_UNAVAILABLE', 'review'))).toMatchObject({ permission: 'settings.payments', who: 'An admin needs to finish payments setup.' });
     expect(readinessSettingsFix(item('TAX_RATE_UNRESOLVED', 'review'))).toMatchObject({ permission: 'settings.tax', who: 'An admin needs to finish tax setup.' });
     expect(readinessSettingsFix(item('NO_ACTIVE_TIER', 'tickets'))).toBeNull();
+  });
+});
+
+describe('wizardReadinessHref', () => {
+  it('opens the item’s wizard step, and keeps org settings fixes on their settings page', () => {
+    expect(wizardReadinessHref(item('CAPACITY_MISSING', 'tickets'), 'e1')).toBe('/admin/events/e1/setup?step=tickets');
+    expect(wizardReadinessHref(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map'), 'e1')).toBe('/admin/events/e1/setup?step=floor-map');
+    expect(wizardReadinessHref(item('PAYMENTS_UNAVAILABLE', 'review'), 'e1')).toBe('/admin/settings/payments');
+    expect(wizardReadinessHref(item('TAX_RATE_UNRESOLVED', 'review'), 'e1')).toBe('/admin/settings/tax');
   });
 });
