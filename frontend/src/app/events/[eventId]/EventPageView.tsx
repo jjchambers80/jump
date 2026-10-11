@@ -72,7 +72,7 @@ export default function EventPageView({
   ...on
 }: EventPageViewProps) {
   const state = eventPageState(event);
-  const { isRsvp, isPastEvent, isSoldOut } = state;
+  const { isRsvp, isPastEvent, isSoldOut, salesClosed } = state;
   const zone = event.venue?.timezone;
   const formattedDate = event.date ? formatEventDate(event.date, zone, { weekday: 'long', month: 'long' }) : '';
 
@@ -128,7 +128,7 @@ export default function EventPageView({
           </div>
         </div>
 
-        {!isRsvp && !isPastEvent && !isSoldOut && (
+        {!isRsvp && !isPastEvent && !isSoldOut && !salesClosed && (
           <EventCart cart={cart} preview={preview} onCheckout={on.onCheckout} onToggleLine={on.onToggleLine} onToggleAllLines={on.onToggleAllLines} />
         )}
       </div>

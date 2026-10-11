@@ -53,7 +53,7 @@ export default function EventMobileBar({ state, cart, preview, rsvpSubmitted, on
   const { isRsvp, isPastEvent, rsvpFull, canBuy, fromPrice } = state;
   const rsvpPassInView = useInView('rsvp-pass', isRsvp, 0.25);
   const ticketsInView = useInView('tickets', !isRsvp, 0.1);
-  if (isPastEvent || (isRsvp && rsvpFull)) return null;
+  if (isPastEvent || state.salesClosed || (isRsvp && rsvpFull)) return null;
 
   // Off = preview, or no handler (the wizard pane): focusable, aria-disabled, explained by the note.
   const cartOff = preview || !onOpenCart;
