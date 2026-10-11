@@ -3,8 +3,15 @@
 // Per FR-014, FR-015, FR-016, FR-017
 
 import { prisma } from '@jump/db';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+
+/**
+ * Does the tier-sum ceiling apply? Not while capacity is unset, and not on a
+ * wizard draft (`setupCompletedAt` null, spec 050 §6.1): there the Tickets
+ * step only warns, and publish refuses TIERS_EXCEED_CAPACITY (readiness).
+ */
+export const capacityCeilingApplies = (event) => event.capacity !== null && event.setupCompletedAt !== null;
 
 class PriceTierService {
   /**
@@ -36,8 +43,7 @@ class PriceTierService {
 
     // Capacity validation: sum of all tier quantities must not exceed event capacity
     const existingTotal = event.priceTiers.reduce((sum, t) => sum + t.quantityTotal, 0);
-    // Skipped while capacity is not set (spec 050 draft): setting it later checks the tier sum.
-    if (event.capacity !== null && existingTotal + quantityTotal > event.capacity) {
+    if (capacityCeilingApplies(event) && existingTotal + quantityTotal > event.capacity) {
       throw new ValidationError(
         `Total tier inventory (${existingTotal + quantityTotal}) would exceed event capacity (${event.capacity})`
       );
@@ -123,7 +129,7 @@ class PriceTierService {
         .filter((t) => t.id !== tierId)
         .reduce((sum, t) => sum + t.quantityTotal, 0);
 
-      if (event.capacity !== null && otherTiersTotal + newQuantity > event.capacity) {
+      if (capacityCeilingApplies(event) && otherTiersTotal + newQuantity > event.capacity) {
         throw new ValidationError(
           `Total tier inventory (${otherTiersTotal + newQuantity}) would exceed event capacity (${event.capacity})`
         );
@@ -183,6 +189,38 @@ class PriceTierService {
     });
 
     return this._formatTier(updated);
+  }
+
+  /**
+   * Delete a tier nobody has bought or ordered (spec 050 §5.1, Tickets step).
+   * One transaction: lock the tier row first (checkout's reserve is an UPDATE
+   * on the same row, so whichever comes second waits), then recount every
+   * reference after the wait and delete, or refuse with 409 TIER_IN_USE.
+   * References: tickets, order lines of any status (OrderItem's FK is ON
+   * DELETE SET NULL, so a line must never lose its tier), sales and holds on
+   * the row. Application tiers and booths reference ApplicationTier, not
+   * PriceTier; add-on links cascade.
+   */
+  async deletePriceTier(orgId, eventId, tierId) {
+    await prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw`
+        SELECT pt."id", pt."quantitySold", pt."quantityReserved"
+        FROM "PriceTier" pt
+        JOIN "Event" e ON e."id" = pt."eventId"
+        JOIN "Venue" v ON v."id" = e."venueId"
+        WHERE pt."id" = ${tierId} AND pt."eventId" = ${eventId} AND v."organizationId" = ${orgId}
+        FOR UPDATE OF pt`;
+      if (!row) throw new NotFoundError('Price tier not found');
+      const tickets = await tx.ticket.count({ where: { priceTierId: tierId } });
+      const orderItems = await tx.orderItem.count({ where: { priceTierId: tierId } });
+      if (row.quantitySold > 0 || row.quantityReserved > 0 || tickets > 0 || orderItems > 0) {
+        const error = new ConflictError('This tier has orders, so it can\'t be removed. Turn it off to stop selling it.');
+        error.code = 'TIER_IN_USE';
+        throw error;
+      }
+      await tx.priceTier.delete({ where: { id: tierId } });
+    });
+    logger.info('Price tier deleted', { event: 'price_tier_deleted', eventId, tierId });
   }
 
   /**

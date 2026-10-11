@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Playwright's flag-on dev server (spec 050 wizard) builds beside the default one.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Shared spec 038 theme package (plain ESM JS in packages/theme).
   transpilePackages: ['@jump/theme'],
   async redirects() {

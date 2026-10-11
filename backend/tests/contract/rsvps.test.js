@@ -165,6 +165,9 @@ describe('RSVP events contract', () => {
     const toTicketed = await request(app).patch(`/organizations/${org.id}/events/${rsvpEvent.id}`).set('Authorization', `Bearer ${token}`).send({ admissionMode: 'TICKETED', capacity: 10 });
     expect(toTicketed.status).toBe(409);
     expect(toTicketed.body.code).toBe('ADMISSION_MODE_LOCKED');
+    // Spec 050-J: the overview reports the same lock, with the reason the 409 carries.
+    const overview = await request(app).get(`/organizations/${org.id}/events/${ticketedEvent.id}/overview`).set('Authorization', `Bearer ${token}`);
+    expect(overview.body.admissionLock).toEqual({ locked: true, reason: toRsvp.body.message });
   });
 
   it('lists and exports RSVPs only within the active organization', async () => {

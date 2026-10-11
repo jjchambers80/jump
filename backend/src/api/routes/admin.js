@@ -680,20 +680,20 @@ router.get('/application-forms', wrap(async (req, res) => {
 router.get('/standing-application-forms', wrap(async (req, res) => {
   res.json({ data: await applicationFormService.listStandingForms(await activeOrgFor(req)) });
 }));
-router.post('/standing-application-forms', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
+router.post('/standing-application-forms', requirePermission('applications.standingForms'), validateFormBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.createStandingForm(await activeOrgFor(req), req.body));
 }));
 router.get('/standing-application-forms/:formId', wrap(async (req, res) => {
   res.json(await applicationFormService.getStandingForm(await activeOrgFor(req), req.params.formId));
 }));
-router.patch('/standing-application-forms/:formId', requirePermission('applications.forms'), validateFormBody, wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId', requirePermission('applications.standingForms'), validateFormBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateStandingForm(await activeOrgFor(req), req.params.formId, req.body));
 }));
-router.delete('/standing-application-forms/:formId', requirePermission('applications.forms'), wrap(async (req, res) => {
+router.delete('/standing-application-forms/:formId', requirePermission('applications.standingForms'), wrap(async (req, res) => {
   await applicationFormService.deleteStandingForm(await activeOrgFor(req), req.params.formId);
   res.status(204).end();
 }));
-router.post('/standing-application-forms/:formId/save-as-template', requirePermission('applications.forms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
+router.post('/standing-application-forms/:formId/save-as-template', requirePermission('applications.standingForms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
   const organizationId = await activeOrgFor(req);
   await applicationFormService.getStandingForm(organizationId, req.params.formId);
   const form = await prisma.applicationForm.findUnique({
@@ -703,16 +703,16 @@ router.post('/standing-application-forms/:formId/save-as-template', requirePermi
   const status = req.body.replaceTemplateId ? 200 : 201;
   res.status(status).json(await applicationFormTemplateService.saveFrom(form, organizationId, req.body, { byUserId: req.user.id }));
 }));
-router.post('/standing-application-forms/:formId/questions', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
+router.post('/standing-application-forms/:formId/questions', requirePermission('applications.standingForms'), validateQuestionBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addStandingQuestion(await activeOrgFor(req), req.params.formId, req.body));
 }));
-router.patch('/standing-application-forms/:formId/questions/reorder', requirePermission('applications.forms'), wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId/questions/reorder', requirePermission('applications.standingForms'), wrap(async (req, res) => {
   res.json({ data: await applicationFormService.reorderStandingQuestions(await activeOrgFor(req), req.params.formId, req.body?.ids) });
 }));
-router.patch('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), validateQuestionBody, wrap(async (req, res) => {
+router.patch('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.standingForms'), validateQuestionBody, wrap(async (req, res) => {
   res.json(await applicationFormService.updateStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId, req.body));
 }));
-router.delete('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), wrap(async (req, res) => {
+router.delete('/standing-application-forms/:formId/questions/:questionId', requirePermission('applications.standingForms'), wrap(async (req, res) => {
   res.json(await applicationFormService.removeStandingQuestion(await activeOrgFor(req), req.params.formId, req.params.questionId));
 }));
 router.get('/standing-application-forms/:formId/submissions', wrap(async (req, res) => {

@@ -12,6 +12,7 @@ import { CalendarPlus, Check, Minus, Plus } from 'lucide-react';
 import { rsvpApi } from '../../../services/api';
 import { formatEventDate, formatEventTime } from '@/lib/eventTime';
 import { dateTile } from '@/lib/dateTile';
+import { offProps, OFF_CLASS, PreviewNote } from './PreviewOff';
 import { acceptancesFor, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 
 export interface RsvpPassEvent {
@@ -326,11 +327,17 @@ export default function RsvpPass({ event, isPastEvent, preview = false, legalVer
 
               <button
                 type="submit"
-                disabled={submitting || !legalVersions || preview}
-                className="flex h-12 w-full items-center justify-center rounded-[var(--theme-button-radius,8px)] bg-brand text-base font-bold text-brand-fg transition-colors hover:bg-brand-hover disabled:opacity-50"
+                disabled={submitting || !legalVersions}
+                {...offProps(preview ? 'rsvp-off' : undefined)}
+                className={`flex h-12 w-full items-center justify-center rounded-[var(--theme-button-radius,8px)] bg-brand text-base font-bold text-brand-fg transition-colors hover:bg-brand-hover disabled:opacity-50 ${OFF_CLASS}`}
               >
                 {submitting ? 'Reserving…' : partySize > 1 ? `Reserve ${partySize} spots` : 'Reserve my spot'}
               </button>
+              {preview && (
+                <PreviewNote id="rsvp-off" className="text-center">
+                  RSVP is off in preview
+                </PreviewNote>
+              )}
 
               {/* Legal consent (spec 034 D13) */}
               <p className="text-center text-[11px] leading-relaxed text-gray-500 dark:text-slate-500">

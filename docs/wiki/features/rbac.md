@@ -10,11 +10,15 @@ Staff belong to organizations through `OrganizationMember` with a member role, *
 - **Features** (`customers`, `maps`, `analytics`, `finance`, `onlineStore`, `content`, `developer`, …). Hiding one for a role removes it from that role's menu, redirects its pages to the dashboard and makes its API answer 403. Turning it off **platform-wide** hides it from everyone, Admins and system admins included, and its API answers 404.
 - **Actions** (`orders.refund`, `settings.tax`, `customers.privacy`, …). These are privileged operations inside a feature.
 
-The defaults reproduce the rules from before the catalog existed:
+The defaults:
 
 - both roles see every feature;
 - ADMIN has every action;
-- ORGANIZER has no actions.
+- ORGANIZER has only the event-configuration actions marked `organizer: true` in the catalog: `applications.forms` (event application forms, categories, questions, form templates) and `addOns.manage` (add-ons and saved add-ons). Spec 050-E opened them so an organizer can set up a whole event. Money (`applications.money`, `orders.refund`), every `settings.*` action standing forms (`applications.standingForms`, Content › Forms) and forcing a spot onto an application of another category (`maps.forceAssign`, enforced on `POST /admin/maps/:mapId/booths/:boothId/assign` with `force`) stay ADMIN.
+
+`applications.standingForms` was split out of `applications.forms`. An override of `applications.forms` saved before the split also applies to it until System › Roles saves one of its own (`SPLIT_KEYS` in `PermissionService`).
+
+The frontend stand-in that applies before `GET /admin/permissions` answers grants the same ORGANIZER defaults (`OrgContext.tsx`); keep the two in step.
 
 **SYSTEM_ADMIN** is an account-wide role with no memberships. It bypasses the matrix, though not the platform-wide switches. **UNASSIGNED** grants nothing.
 

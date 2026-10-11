@@ -38,7 +38,12 @@ function overview() {
   };
 }
 
-async function mockApi(page: Page) {
+const notReady = {
+  error: 'UnprocessableEntityError', message: 'This event is not ready to publish', code: 'EVENT_NOT_READY',
+  details: { blockers: [{ code: 'NO_ACTIVE_TIER', step: 'tickets', message: 'Add at least one active ticket tier.' }], warnings: [] },
+};
+
+async function mockApi(page: Page, { refuse = false } = {}) {
   const calls = { publish: 0, overviewTz: '' };
   await page.route(`${API}/**`, (route) => {
     const url = new URL(route.request().url());
@@ -48,9 +53,11 @@ async function mockApi(page: Page) {
       calls.overviewTz = url.searchParams.get('tz') ?? '';
       return route.fulfill(json(overview()));
     }
-    if (url.pathname === '/admin/events/evt-draft/publish') {
+    // Spec 050-C: the org-scoped publish route (the old /admin/events/:id/publish never existed).
+    if (url.pathname === '/organizations/org-dash/events/evt-draft/publish') {
       calls.publish += 1;
-      return route.fulfill(json({ event: { id: 'evt-draft', status: 'PUBLISHED' } }));
+      if (refuse) return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify(notReady) });
+      return route.fulfill(json({ id: 'evt-draft', status: 'PUBLISHED' }));
     }
     return route.fulfill(json({}));
   });
@@ -108,4 +115,18 @@ test('fits a 320px phone with attention before the chart', async ({ page }) => {
   const attentionTop = (await page.getByRole('region', { name: 'Needs attention' }).boundingBox())!.y;
   const chartTop = (await page.getByRole('region', { name: 'Sales, last 14 days' }).boundingBox())!.y;
   expect(attentionTop).toBeLessThan(chartTop);
+});
+
+test('a draft that is not ready shows what to fix instead of publishing', async ({ page }) => {
+  const calls = await mockApi(page, { refuse: true });
+  await page.goto('/admin/dashboard');
+  await page.getByRole('region', { name: 'Needs attention' }).getByRole('button', { name: 'Publish Summer Market' }).click();
+  await expect.poll(() => calls.publish).toBe(1);
+
+  const alert = page.getByRole('alert').filter({ hasText: 'before publishing' });
+  await expect(alert).toBeFocused();
+  await expect(alert.getByRole('link', { name: /Add at least one active ticket tier/ })).toHaveAttribute(
+    'href',
+    '/admin/events/evt-draft/edit/sales?orgId=org-dash#event-price-tiers'
+  );
 });

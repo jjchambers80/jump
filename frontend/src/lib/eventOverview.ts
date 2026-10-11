@@ -96,6 +96,10 @@ export interface OverviewMap {
 
 export interface EventOverview {
   event: OverviewEvent;
+  /** Public event page on the org's storefront host (custom domain, store subdomain or platform). */
+  publicUrl?: string;
+  /** Spec 034 D11 as the server enforces it (spec 050-J): why the admission mode cannot change. */
+  admissionLock?: { locked: boolean; reason: string | null };
   money: {
     gross: number;
     orgReceives: number;

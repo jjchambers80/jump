@@ -141,13 +141,10 @@ describe('Add-ons (spec 012 phase 1)', () => {
       expect(foreignTier.status).toBe(400);
     });
 
-    it('ORGANIZER can read but not write; non-members get 403', async () => {
+    it('ORGANIZER can read (writes: organizerFormConfig.test.js); non-members get 403', async () => {
       const list = await request(app).get(base()).set(auth(organizerToken));
       expect(list.status).toBe(200);
       expect(list.body.addOns).toHaveLength(3);
-
-      const write = await request(app).post(base()).set(auth(organizerToken)).send({ name: 'Nope', price: 1 });
-      expect(write.status).toBe(403);
 
       const outsider = await request(app).get(base()).set(auth(outsiderToken));
       expect(outsider.status).toBe(403);

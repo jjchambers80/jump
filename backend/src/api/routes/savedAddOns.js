@@ -1,6 +1,6 @@
 // Saved add-on Routes (spec 037 phase 4)
 // Nested under /organizations/:orgId/saved-add-ons
-// Reads: any member (ORGANIZER+). Writes: ADMIN. Membership-guarded like the
+// Reads: any member (ORGANIZER+). Writes: addOns.manage (ADMIN and ORGANIZER by default). Membership-guarded like the
 // per-event add-ons router; putting one on an event is
 // POST /organizations/:orgId/events/:eventId/add-ons/attach.
 
@@ -14,7 +14,7 @@ const router = express.Router({ mergeParams: true });
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 const member = [requireAuth, requireOrganizer, requireOrgMembership()];
-const admin = [requireAuth, requirePermission('addOns.manage'), requireOrgMembership()];
+const manage = [requireAuth, requirePermission('addOns.manage'), requireOrgMembership()];
 
 const truthy = (v) => v === '1' || v === 'true';
 
@@ -43,7 +43,7 @@ router.get('/:id', ...member, wrap(async (req, res) => {
 }));
 
 /** POST / — create (409 SAVED_ADD_ON_EXISTS on a case-insensitive duplicate). */
-router.post('/', ...admin, wrap(async (req, res) => {
+router.post('/', ...manage, wrap(async (req, res) => {
   res.status(201).json(await addOnProductService.create(req.params.orgId, req.body || {}));
 }));
 
@@ -51,15 +51,15 @@ router.post('/', ...admin, wrap(async (req, res) => {
  * PATCH /:id — name / description / defaultPrice / scope / taxable. Shared
  * fields are copied to every offering; defaultPrice never changes an event.
  */
-router.patch('/:id', ...admin, wrap(async (req, res) => {
+router.patch('/:id', ...manage, wrap(async (req, res) => {
   res.json(await addOnProductService.update(req.params.orgId, req.params.id, req.body || {}));
 }));
 
-router.post('/:id/archive', ...admin, wrap(async (req, res) => {
+router.post('/:id/archive', ...manage, wrap(async (req, res) => {
   res.json(await addOnProductService.setArchived(req.params.orgId, req.params.id, true));
 }));
 
-router.post('/:id/unarchive', ...admin, wrap(async (req, res) => {
+router.post('/:id/unarchive', ...manage, wrap(async (req, res) => {
   res.json(await addOnProductService.setArchived(req.params.orgId, req.params.id, false));
 }));
 

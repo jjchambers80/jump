@@ -165,23 +165,50 @@ describe('Event setup drafts (spec 050-A)', () => {
   });
 
   describe('null capacity readers', () => {
-    it('adds tiers without a ceiling while capacity is null, then setting capacity checks the sum', async () => {
+    it('a wizard draft takes tiers over capacity (warned, not refused); publish blocks it (050-J)', async () => {
+      const { body: draft } = await setupCreate();
+      const addTier = (quantityTotal) =>
+        request(app).post(`${base()}/${draft.id}/price-tiers`).set('Authorization', `Bearer ${token}`)
+          .send({ name: 'GA', price: 10, quantityTotal });
+      expect((await addTier(80)).status).toBe(201);
+      expect((await patch(draft.id, { capacity: 50 })).status).toBe(200);
+      const extra = await addTier(30);
+      expect(extra.status).toBe(201);
+      const grow = await request(app)
+        .patch(`${base()}/${draft.id}/price-tiers/${extra.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ quantityTotal: 40 });
+      expect(grow.status).toBe(200);
+      const res = await request(app).post(`${base()}/${draft.id}/publish`).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(422);
+      expect(res.body.details.blockers.map((b) => b.code)).toContain('TIERS_EXCEED_CAPACITY');
+    });
+
+    it('once setup is complete the tier-sum ceiling applies again', async () => {
       const { body: draft } = await setupCreate();
       const tier = await request(app)
         .post(`${base()}/${draft.id}/price-tiers`)
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'GA', price: 10, quantityTotal: 80 });
       expect(tier.status).toBe(201);
+      expect((await patch(draft.id, { setupCompleted: true })).status).toBe(200);
       expect((await patch(draft.id, { capacity: 50 })).status).toBe(400);
       expect((await patch(draft.id, { capacity: 80 })).status).toBe(200);
+      const over = await request(app)
+        .post(`${base()}/${draft.id}/price-tiers`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'VIP', price: 20, quantityTotal: 1 });
+      expect(over.status).toBe(400);
     });
 
     it('publish refuses a ticketed draft without capacity', async () => {
       const { body: draft } = await setupCreate({ priceTiers: [{ name: 'GA', price: 10, quantityTotal: 5 }] });
       expect(draft.capacity).toBeNull();
       const res = await request(app).post(`${base()}/${draft.id}/publish`).set('Authorization', `Bearer ${token}`);
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('CAPACITY_REQUIRED');
+      // Spec 050-C: the readiness check replaces 050-A's 400 CAPACITY_REQUIRED.
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('EVENT_NOT_READY');
+      expect(res.body.details.blockers.map((b) => b.code)).toEqual(['CAPACITY_MISSING']);
     });
 
     it('the events summary and list treat null capacity as 0 / null', async () => {
@@ -204,6 +231,26 @@ describe('Event setup drafts (spec 050-A)', () => {
     expect(res.status).toBe(201);
     expect(res.body.endDate).toBe('2027-10-01T21:30:00.000Z');
     expect(res.body.capacity).toBe(10);
+  });
+
+  it('duplicate {setup:true} leaves the copy mid-setup at the date step; without it the copy is complete (spec 050 §7.7)', async () => {
+    const { body: source } = await setupCreate({ capacity: 10 });
+    await patch(source.id, { setupStep: 'review', setupCompleted: true });
+    const dup = (body) =>
+      request(app).post(`${base()}/${source.id}/duplicate`).set('Authorization', `Bearer ${token}`).send(body);
+
+    const wizard = await dup({ date: '2027-11-01T18:00:00.000Z', name: 'Next Year', setup: true });
+    expect(wizard.status).toBe(201);
+    expect(wizard.body).toMatchObject({ name: 'Next Year', status: 'DRAFT', setupStep: 'date', setupCompletedAt: null, capacity: 10 });
+
+    const plain = await dup({ date: '2027-11-02T18:00:00.000Z' });
+    expect(plain.status).toBe(201);
+    expect(plain.body.setupCompletedAt).not.toBeNull();
+    expect(plain.body.setupStep).toBeNull();
+
+    // Only a literal true opts in.
+    const loose = await dup({ date: '2027-11-03T18:00:00.000Z', setup: 'true' });
+    expect(loose.body.setupCompletedAt).not.toBeNull();
   });
 
   it('the DB CHECK refuses null capacity on a PUBLISHED TICKETED event', async () => {

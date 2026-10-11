@@ -15,6 +15,7 @@ export const inputClass =
   'block w-full min-h-11 sm:min-h-10 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500';
 export const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1';
 export const hintClass = 'mt-1 text-xs text-gray-500 dark:text-slate-400';
+const errorClass = 'mt-1 text-sm text-red-700 dark:text-red-400';
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';
@@ -260,7 +261,7 @@ export function AdmissionModeField({
                 onChange={() => onChange(option.value)}
                 className="peer sr-only"
               />
-              <span className="flex min-h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-checked:ring-1 peer-checked:ring-gray-900/5 dark:peer-checked:bg-slate-700 dark:peer-checked:text-white dark:peer-checked:ring-white/10 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 motion-reduce:transition-none">
+              <span className="flex min-h-11 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 dark:text-slate-400 dark:hover:text-slate-100 peer-checked:bg-white peer-checked:text-gray-900 peer-checked:shadow-sm peer-checked:ring-1 peer-checked:ring-gray-900/5 dark:peer-checked:bg-slate-700 dark:peer-checked:text-white dark:peer-checked:ring-white/10 peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 motion-reduce:transition-none">
                 {option.label}
               </span>
             </label>
@@ -279,7 +280,10 @@ export function RsvpSettingsFields({
   onLimitChange,
   maxPartySize,
   onMaxPartySizeChange,
+  errors = {},
 }: {
+  /** Inline messages (setup wizard error summary); the inputs point at them. */
+  errors?: { limit?: string; maxPartySize?: string };
   limitEnabled: boolean;
   onLimitEnabledChange: (enabled: boolean) => void;
   limit: string;
@@ -319,8 +323,11 @@ export function RsvpSettingsFields({
             placeholder="Max headcount"
             min={1}
             max={100000}
+            aria-invalid={!!errors.limit || undefined}
+            aria-describedby={errors.limit ? 'event-rsvp-limit-error' : undefined}
             className={inputClass}
           />
+          {errors.limit && <p id="event-rsvp-limit-error" className={errorClass}>{errors.limit}</p>}
         </div>
       )}
 
@@ -337,12 +344,14 @@ export function RsvpSettingsFields({
           placeholder="1–10"
           min={1}
           max={10}
-          aria-describedby="event-rsvp-party-size-hint"
+          aria-invalid={!!errors.maxPartySize || undefined}
+          aria-describedby={`event-rsvp-party-size-hint${errors.maxPartySize ? ' event-rsvp-party-size-error' : ''}`}
           className={inputClass}
         />
         <p id="event-rsvp-party-size-hint" className={hintClass}>
           How many guests each attendee may bring (including themselves)
         </p>
+        {errors.maxPartySize && <p id="event-rsvp-party-size-error" className={errorClass}>{errors.maxPartySize}</p>}
       </div>
     </div>
   );

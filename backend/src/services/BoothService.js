@@ -318,7 +318,7 @@ class BoothService {
         throw new ConflictError('APPLICATION_HAS_BOOTH — this application already holds another booth');
       }
 
-      // Tier match check (overridable with force by ADMIN)
+      // Tier match check (overridable with force; the route requires maps.forceAssign)
       if (booth.tierId && application.tierId !== booth.tierId && !force) {
         throw new ValidationError('TIER_MISMATCH — the booth belongs to a different tier than the application');
       }

@@ -102,7 +102,7 @@ class DashboardService {
         where: { ...eventWhere, status: 'DRAFT', date: { gte: now } },
         orderBy: { date: 'asc' },
         take: ATTENTION_LIMIT,
-        select: { id: true, name: true, date: true, venue: { select: { timezone: true } } },
+        select: { id: true, name: true, date: true, setupStep: true, setupCompletedAt: true, venue: { select: { timezone: true } } },
       }),
       prisma.application.groupBy({
         by: ['eventId', 'formId'],
@@ -133,7 +133,15 @@ class DashboardService {
       })),
       checkedInLast24h: checkedInToday,
       attention: {
-        draftEvents: draftEvents.map((e) => ({ id: e.id, name: e.name, date: e.date, timezone: e.venue?.timezone ?? null })),
+        draftEvents: draftEvents.map((e) => ({
+          id: e.id,
+          name: e.name,
+          date: e.date,
+          timezone: e.venue?.timezone ?? null,
+          // Spec 050: a draft still in the setup wizard shows "Continue setup".
+          setupStep: e.setupStep ?? null,
+          setupCompletedAt: e.setupCompletedAt ?? null,
+        })),
         applicationsToReview: await this._reviewQueue(toReview),
       },
     };

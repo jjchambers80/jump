@@ -9,12 +9,18 @@
 import React, { useEffect, useMemo, useState, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import EventTaxSummary from '@/components/events/EventTaxSummary';
 import { CalendarDays, ExternalLink, MapPin } from 'lucide-react';
 import api from '@/services/api';
 import { resolveAssetUrl } from '@/lib/assets';
 import { EventMediaCard } from '@/components/events/EventMediaCard';
 import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { TierCard, TierEditDialog, type TierFormData } from '@/components/TierEditDialog';
+import type { TierPreset } from '@/components/events/TierPresetMenu';
+import {
+  capacityOverflow, newTierForm, tierCreateBody, tierFromPreset, tierPatchBody, tierSum, tierToForm,
+  type ApiTier, type TierFormInput,
+} from '@/components/events/tierForm';
 import AddOnsSection from './AddOnsSection';
 import SlugField from '@/components/SlugField';
 import VenueFlyout, { NEW_VENUE_OPTION, type CreatedVenue } from '@/components/VenueFlyout';
@@ -47,95 +53,7 @@ interface Venue {
   timezone?: string | null;
 }
 
-interface TierPreset {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  minPerOrder: number | null;
-  maxPerOrder: number | null;
-  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
-  isRefundable: boolean;
-}
-
-interface PriceTier {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  quantityTotal: number;
-  quantitySold: number;
-  quantityAvailable: number;
-  quantityReserved: number;
-  displayOrder: number;
-  minPerOrder: number | null;
-  maxPerOrder: number | null;
-  isActive: boolean;
-  saleStartDate: string | null;
-  saleEndDate: string | null;
-  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
-  isRefundable: boolean;
-  isOnSale: boolean;
-  saleStatus: 'NOT_STARTED' | 'ON_SALE' | 'ENDED';
-}
-
-interface TierFormInput {
-  key: string; // existing tier id or temp UUID for new tiers
-  isNew: boolean;
-  name: string;
-  description: string;
-  price: string;
-  quantityTotal: string;
-  quantitySold: number; // read-only, for existing tiers
-  quantityReserved: number; // read-only, for existing tiers
-  minPerOrder: string;
-  maxPerOrder: string;
-  saleStartDate: string;
-  saleEndDate: string;
-  visibility: 'PUBLIC' | 'PRIVATE' | 'HIDDEN';
-  isRefundable: boolean;
-  isActive: boolean;
-}
-
-function tierToForm(t: PriceTier, zone: string | null | undefined): TierFormInput {
-  return {
-    key: t.id,
-    isNew: false,
-    name: t.name,
-    description: t.description || '',
-    price: String(Number(t.price)),
-    quantityTotal: String(t.quantityTotal),
-    quantitySold: t.quantitySold,
-    quantityReserved: t.quantityReserved ?? 0,
-    minPerOrder: t.minPerOrder != null ? String(t.minPerOrder) : '',
-    maxPerOrder: t.maxPerOrder != null ? String(t.maxPerOrder) : '',
-    saleStartDate: toDatetimeLocal(t.saleStartDate ?? '', zone),
-    saleEndDate: toDatetimeLocal(t.saleEndDate ?? '', zone),
-    visibility: t.visibility,
-    isRefundable: t.isRefundable,
-    isActive: t.isActive,
-  };
-}
-
-function newTierForm(): TierFormInput {
-  return {
-    key: crypto.randomUUID(),
-    isNew: true,
-    name: '',
-    description: '',
-    price: '',
-    quantityTotal: '',
-    quantitySold: 0,
-    quantityReserved: 0,
-    minPerOrder: '1',
-    maxPerOrder: '10',
-    saleStartDate: '',
-    saleEndDate: '',
-    visibility: 'PUBLIC',
-    isRefundable: false,
-    isActive: true,
-  };
-}
+type PriceTier = ApiTier & { quantityAvailable: number; isOnSale: boolean; saleStatus: 'NOT_STARTED' | 'ON_SALE' | 'ENDED' };
 
 interface EventDetail {
   id: string;
@@ -163,35 +81,6 @@ interface EventDetail {
   taxInclusivePricing?: boolean;
   priceTiers: PriceTier[];
 }
-
-function formatTaxRate(rate: number): string {
-  return `${(rate * 100).toFixed(3).replace(/\.?0+$/, '')}%`;
-}
-
-/** "Tax: 8.25% · Stripe Tax · NC" with a link to Settings › Tax. */
-function EventTaxSummary({ tax }: { tax: NonNullable<EventDetail['tax']> }) {
-  const parts = [formatTaxRate(tax.rate)];
-  if (tax.source === 'STRIPE') parts.push('Stripe Tax');
-  else if (tax.source === 'MANUAL') parts.push('Manual rate');
-  else parts.push('Not collecting');
-  if (tax.region) parts.push(tax.region);
-  return (
-    <p className="mt-1 text-xs text-gray-600 dark:text-slate-400" data-testid="event-tax-summary">
-      Tax: {parts.join(' · ')}
-      {' · '}
-      <Link href="/admin/settings/tax" className="font-medium text-accent-600 hover:underline dark:text-accent-300">
-        Settings › Tax
-      </Link>
-      {!tax.region && ' — set the venue\'s state to collect tax'}
-    </p>
-  );
-}
-
-// Spec 033: the form shows and reads the venue's wall clock, never the browser's.
-function toDatetimeLocal(iso: string, zone: string | null | undefined): string {
-  return instantToZonedInput(iso, zone);
-}
-
 
 export type EditorScope = 'details' | 'sales';
 
@@ -293,7 +182,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
         setName(event.name);
         setDescription(event.description || '');
         setVenueId(event.venue?.id || '');
-        setDate(toDatetimeLocal(event.date, event.venue?.timezone));
+        setDate(instantToZonedInput(event.date, event.venue?.timezone));
         setCapacity(event.capacity === null ? '' : String(event.capacity));
         setCategory(event.category || '');
         setLogoUrl(event.logoUrl || null);
@@ -402,28 +291,9 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
   };
 
   const addTierFromPreset = (preset: TierPreset) => {
-    const key = crypto.randomUUID();
-    setPriceTiers([
-      ...priceTiers,
-      {
-        key,
-        isNew: true,
-        name: preset.name,
-        description: preset.description || '',
-        price: String(preset.price),
-        quantityTotal: '',
-        quantitySold: 0,
-        quantityReserved: 0,
-        minPerOrder: preset.minPerOrder ? String(preset.minPerOrder) : '1',
-        maxPerOrder: preset.maxPerOrder ? String(preset.maxPerOrder) : '10',
-        saleStartDate: '',
-        saleEndDate: '',
-        visibility: preset.visibility,
-        isRefundable: preset.isRefundable,
-        isActive: true,
-      },
-    ]);
-    setEditingTierKey(key);
+    const tier = tierFromPreset(preset);
+    setPriceTiers([...priceTiers, tier]);
+    setEditingTierKey(tier.key);
   };
 
   const handleLogoUpload = async (file: File) => {
@@ -490,10 +360,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
   const editingTier = editingTierKey ? priceTiers.find((t) => t.key === editingTierKey) : null;
   const editingTierIndex = editingTierKey ? priceTiers.findIndex((t) => t.key === editingTierKey) : -1;
 
-  const totalTierQuantity = priceTiers.reduce(
-    (sum, t) => sum + (parseInt(t.quantityTotal) || 0),
-    0
-  );
+  const totalTierQuantity = tierSum(priceTiers);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -510,7 +377,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
       if (slug !== (eventData?.slug || '')) payload.slug = slug;
       if (description !== (eventData?.description || '')) payload.description = description || null;
       if (venueId !== eventData?.venue?.id) payload.venueId = venueId;
-      if (date !== toDatetimeLocal(eventData?.date || '', venueZone))
+      if (date !== instantToZonedInput(eventData?.date || '', venueZone))
         payload.date = zonedInputToIso(date, venueZone);
       if (category !== (eventData?.category || '')) payload.category = category || null;
 
@@ -537,18 +404,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
       // Create new tiers
       for (const tier of priceTiers.filter((t) => t.isNew)) {
         if (!tier.name || !tier.price || !tier.quantityTotal) continue;
-        await api.post(tierBase, {
-          name: tier.name,
-          description: tier.description || undefined,
-          price: parseFloat(tier.price),
-          quantityTotal: parseInt(tier.quantityTotal),
-          minPerOrder: tier.minPerOrder ? parseInt(tier.minPerOrder) : undefined,
-          maxPerOrder: tier.maxPerOrder ? parseInt(tier.maxPerOrder) : undefined,
-          saleStartDate: zonedInputToIso(tier.saleStartDate, venueZone),
-          saleEndDate: zonedInputToIso(tier.saleEndDate, venueZone),
-          visibility: tier.visibility,
-          isRefundable: tier.isRefundable,
-        });
+        await api.post(tierBase, tierCreateBody(tier, venueZone));
         tiersChanged = true;
       }
 
@@ -557,21 +413,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
       for (const tier of priceTiers.filter((t) => !t.isNew)) {
         const orig = originalTiers.find((o) => o.id === tier.key);
         if (!orig) continue;
-        const patch: Record<string, unknown> = {};
-        if (tier.name !== orig.name) patch.name = tier.name;
-        if (tier.description !== (orig.description || '')) patch.description = tier.description || null;
-        if (parseFloat(tier.price) !== Number(orig.price)) patch.price = parseFloat(tier.price);
-        if (parseInt(tier.quantityTotal) !== orig.quantityTotal) patch.quantityTotal = parseInt(tier.quantityTotal);
-        if ((tier.minPerOrder ? parseInt(tier.minPerOrder) : null) !== orig.minPerOrder)
-          patch.minPerOrder = tier.minPerOrder ? parseInt(tier.minPerOrder) : null;
-        if ((tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null) !== orig.maxPerOrder)
-          patch.maxPerOrder = tier.maxPerOrder ? parseInt(tier.maxPerOrder) : null;
-        const newStart = zonedInputToIso(tier.saleStartDate, venueZone);
-        if (newStart !== orig.saleStartDate) patch.saleStartDate = newStart;
-        const newEnd = zonedInputToIso(tier.saleEndDate, venueZone);
-        if (newEnd !== orig.saleEndDate) patch.saleEndDate = newEnd;
-        if (tier.visibility !== orig.visibility) patch.visibility = tier.visibility;
-        if (tier.isRefundable !== orig.isRefundable) patch.isRefundable = tier.isRefundable;
+        const patch = tierPatchBody(tier, orig, venueZone);
 
         if (Object.keys(patch).length > 0) {
           await api.patch(`${tierBase}/${tier.key}`, patch);
@@ -651,7 +493,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
 
   const isPublished = eventData.status === 'PUBLISHED';
   const capacityNum = parseInt(capacity) || 0;
-  const capacityExceeded = capacityNum > 0 && totalTierQuantity > capacityNum;
+  const capacityExceeded = !!capacityOverflow(capacity, priceTiers);
 
   const logoSrc = resolveAssetUrl(logoUrl);
 
@@ -863,6 +705,7 @@ function EditEventContent({ scope }: { scope: EditorScope }) {
                   <TierEditDialog
                     tier={editingTier}
                     index={editingTierIndex}
+                    zone={venueZone}
                     onSave={saveTierEdit}
                     onCancel={() => setEditingTierKey(null)}
                   />

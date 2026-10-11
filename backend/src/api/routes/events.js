@@ -2,7 +2,7 @@
 // Public: GET /events, GET /events/:eventId
 // Org-scoped: GET/POST /organizations/:orgId/events,
 //             PATCH .../events/:eventId,
-//             POST .../events/:eventId/publish,
+//             POST .../events/:eventId/publish, GET .../events/:eventId/readiness,
 //             POST .../events/:eventId/duplicate,
 //             POST .../events/:eventId/cancel
 // Per FR-050, contracts/api.yaml
@@ -10,6 +10,8 @@
 import express from 'express';
 import { prisma } from '@jump/db';
 import eventService from '../../services/EventService.js';
+import eventReadinessService from '../../services/EventReadinessService.js';
+import { ValidationError } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireOrganizer, requireFeature } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
@@ -221,13 +223,31 @@ orgRouter.post('/:eventId/duplicate', requireAuth, requireOrganizer, requireOrgM
 
 /**
  * POST /organizations/:orgId/events/:eventId/publish
- * Publish an event (DRAFT → PUBLISHED)
+ * Publish an event (DRAFT → PUBLISHED). 422 EVENT_NOT_READY with the readiness
+ * blockers; body { openFormIds? } opens those DRAFT forms (spec 050 §7.2).
  */
 orgRouter.post('/:eventId/publish', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
-    const result = await eventService.publishEvent(orgId, eventId);
+    const { openFormIds } = req.body || {};
+    if (openFormIds !== undefined && (!Array.isArray(openFormIds) || openFormIds.some((id) => typeof id !== 'string'))) {
+      throw new ValidationError('openFormIds must be an array of form ids');
+    }
+    const result = await eventService.publishEvent(orgId, eventId, { openFormIds });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /organizations/:orgId/events/:eventId/readiness
+ * What blocks publishing and what to look at first (spec 050 §7.2).
+ */
+orgRouter.get('/:eventId/readiness', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+  try {
+    const { orgId, eventId } = req.params;
+    res.json(await eventReadinessService.check(orgId, eventId));
   } catch (error) {
     next(error);
   }

@@ -18,6 +18,7 @@ import CancelEventDialog from '@/components/events/CancelEventDialog';
 import EventsSummary, { type EventsSummaryData } from '@/components/events/EventsSummary';
 import EventsToolbar, { type StatusFilter, type SortOption } from '@/components/events/EventsToolbar';
 import DuplicateEventDialog from './DuplicateEventDialog';
+import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 
 interface EventListResponse {
   events: AdminEvent[];
@@ -50,6 +51,7 @@ function EventsListContent() {
   const { status: statusFilter, q: searchQ, category, sort, page } = readUrlParams(searchParams);
 
   const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [blockers, setBlockers] = useState<{ eventId: string; items: ReadinessItem[] } | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [summary, setSummary] = useState<EventsSummaryData | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -178,11 +180,15 @@ function EventsListContent() {
     if (!selectedOrgId) return;
     try {
       setError(null);
+      setBlockers(null);
       await api.post(`/organizations/${selectedOrgId}/events/${eventId}/publish`, {});
       await fetchEvents();
       await fetchSummary();
     } catch (err: any) {
-      setError(err.message || 'Failed to publish event');
+      // Spec 050-C: a 422 lists what to fix on the card itself.
+      const found = publishBlockers(err);
+      if (found) setBlockers({ eventId, items: found });
+      else setError(err.message || 'Failed to publish event');
     }
   };
 
@@ -355,6 +361,7 @@ function EventsListContent() {
                 isExpanded={isExpanded}
                 onToggleExpand={() => toggleExpand(event.id)}
                 onPublish={() => handlePublish(event.id)}
+                publishBlockers={blockers?.eventId === event.id ? blockers.items : undefined}
                 onDuplicate={() => setDuplicating({ id: event.id, name: event.name })}
                 onCancelEvent={() => setCancelling({ id: event.id, name: event.name })}
               />

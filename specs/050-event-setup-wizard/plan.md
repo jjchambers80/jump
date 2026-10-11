@@ -101,7 +101,7 @@ Legend: **R** = required to publish, **S** = skippable ("Skip for now" when empt
 
 | # | Key | Title (h1) | Content | Visible | Rule | Preview anchor | Save call |
 |---|---|---|---|---|---|---|---|
-| 1 | `name` | Name your event | Name, "Edit URL" (`SlugField`) collapsed. Secondary entry: **Start from a past event** (050-I) | create mode only before the row exists; always in edit mode | R | `#event-hero` | Client state. Edit mode: `PATCH /organizations/:orgId/events/:id {name, slug}` |
+| 1 | `name` | Name your event | Name, "Edit URL" (`SlugField`) collapsed. Secondary entry: **Start from a past event** (050-I), shown only before the row exists | always (050-H: stays visible after the row exists, so N is stable and the event can be renamed) | R | `#event-hero` | Client state. Edit mode: `PATCH /organizations/:orgId/events/:id {name, slug}` |
 | 2 | `venue` | Where is it? | Venue select, "+ New venue" (`VenueFlyout`), zone shown read-only (`VenueTimeZoneField`). `?venueId=` preselects | always | R | `#event-venue` | Client state. Edit mode: `PATCH {venueId}` (re-anchors the typed time, research §7) |
 | 3 | `date` | When is it? | Start `datetime-local` in the venue zone + zone label; "+ Add end time" (optional, after start, same zone) | always | R (start) | `#event-date` | Create mode: `POST /organizations/:orgId/events {setup:true,…}`. Edit: `PATCH {date, endDate}` |
 | 4 | `description` | Describe it | `RichTextEditorField`; Listing category select | always | S | `#about` | `PATCH {description, category}` |
@@ -119,7 +119,7 @@ Legend: **R** = required to publish, **S** = skippable ("Skip for now" when empt
 | 13 | `review` | Review and publish | Readiness checklist (blockers link to their step), brand summary (read-only, link to Settings › Brand), resolved tax rate, forms with "Open applications when I publish", donation suggestion (§10), **Open full preview**, **Publish** / **Save as draft** (create) or **Publish** / status (edit) | always | — | page top | `GET …/readiness`; `POST …/publish {openFormIds}`; `PATCH {setupCompleted:true}` |
 | 14 | `done` | Your event is live / Saved as draft | Cards: View page, Copy link, Go to event, Review applications (if forms) or Set up door check-in | create mode only, after Review | — | page top | — |
 
-"Step n of N" counts visible steps 1–13 (Done is not a step). Steps 1–2 are skipped in the count once the row exists in create mode, so the bar never moves backwards.
+"Step n of N" counts visible steps 1–13 (Done is not a step). Steps 1–2 stay in the list and the count after the row exists (050-H), so N never changes under the organizer and the bar never moves backwards; after the create they PATCH like any other step. Only the name step's "Start from a past event" entry is limited to before the row exists.
 
 ### 5.2 Application steps (8, 10, 11, 12)
 
@@ -242,6 +242,9 @@ All event routes stay `requireAuth → requireOrganizer → requireOrgMembership
 
 - `GET /organizations/:orgId/events/:eventId/readiness` → `{ ready, blockers: [{ code, step, message }], warnings: [{ code, step, message }] }`. `EventReadinessService.check(orgId, eventId)` is the only implementation; `publishEvent` calls it and answers 422 `EVENT_NOT_READY` with the same `blockers`.
   - Blockers: `DATE_IN_PAST` (date), `CAPACITY_MISSING` (tickets, TICKETED), `NO_ACTIVE_TIER` (tickets, TICKETED), `TIERS_EXCEED_CAPACITY` (tickets), `END_BEFORE_START` (date).
+    - `NAME_MISSING` (name): the name is blank.
+    - `VENUE_MISSING` (venue): the event has no venue.
+    - `PAYMENTS_UNAVAILABLE` (review, TICKETED): an active tier has a price while Connect is on and `ConnectService.chargeAccountFor` refuses. Settings › Payments fixes it, so organizers without `settings.payments` see "An admin needs to finish payments setup" instead of a link.
   - Warnings: `NO_DESCRIPTION`, `NO_IMAGE`, `MAP_FORM_WITHOUT_PUBLISHED_MAP` (floor-map), `PAID_FORMS_DISABLED` (vendors/other; `APPLICATIONS_PAYMENTS_ENABLED` off), `FORM_HAS_NO_QUESTIONS`, `TAX_RATE_UNRESOLVED` (Review; `TaxService` threw, gotcha 12).
   - RSVP events skip tier and capacity checks (gotcha 29: branch on `admissionMode`).
 - `POST …/publish` body `{ openFormIds?: string[] }`. In one transaction: status PUBLISHED, `setupCompletedAt` if null, listed DRAFT forms → OPEN (PAID refused when the payments gate is off, reported per form in the response, never failing the publish). Tax refresh as today (`EventService.js:432`).
@@ -321,6 +324,7 @@ Form body additions (050-B): `purpose` (enum; immutable once the form has submis
 - `EventPageView({ event, org, preview, cart?, on… })` (presentation) inside `BrandScope` with the org's `brandColor` and `themeMode` (gotchas 6/7, never `setTheme`).
 - Section components: `EventHero` (`#event-hero`, `#event-hero-image`, `#event-date`, `#event-venue`), `EventAbout` (`#about`, via `ContentHtml`), `EventTickets` (`#tickets`, `TierStub`, all-in prices via `computeTierAllInPrice`), `EventRsvp` (`#rsvp-pass`), `EventAddOns` (`#add-ons`), `GetInvolved` (`#get-involved`, label from `purpose`), `FloorMapButton` (`#floor-map`), cart (desktop sticky + mobile sheet), and later `EventGuests` (`#guests`, 050-Q).
 - `preview` disables cart, checkout, RSVP submit and dialogs, and renders unset fields as faded placeholders ("Add a date", "$ –").
+- Ticket steppers stay usable in the 050-F draft preview (the container passes handlers; checkout stays off). Any control whose handler is missing (the wizard pane) is `aria-disabled` and stays focusable, with `aria-describedby` pointing to a visible note ("Checkout is off in preview", "RSVP is off in preview").
 - No visual or behaviour change for buyers. Existing specs (`event-ticket-tiers`, `event-rsvp-pass`, `eventDescriptionHtml`, add-on and checkout specs) are the regression net.
 - End time: the hero renders "4:00 – 8:00 PM EDT" (same zone, `formatEventTime`) when `endDate` is set.
 
@@ -413,7 +417,7 @@ Load the `frontend-ui-engineering` skill before implementing **any** UI card. Th
 - **Touch targets** ≥ 44 × 44 px. `prefers-reduced-motion`: no slide between steps, no smooth scrolling, no progress animation. Motion otherwise ≤ 200 ms, opacity/transform only.
 - **"Jump to edit…" menu:** a `<nav aria-label="Jump to edit">` with a list of links; arrow keys not required (Tab order is the list order), each link names its state ("Tickets, needs attention"). In the mobile sheet, focus starts on the current step.
 - **Preview pane:** `<section aria-label="Live preview of the event page">` with the iframe `title="Event page preview"`. It is not a focus trap; Tab moves past it. When hidden (mobile/tablet, sheet closed) it is `inert` and `aria-hidden`. Preview scrolling happens inside the iframe document only.
-- **Contrast:** text and controls ≥ 4.5:1 (3:1 for large text and UI component boundaries) in light and dark; faded preview placeholders are decorative and marked `aria-hidden` with the real state announced in the form.
+- **Contrast:** text and controls ≥ 4.5:1 (3:1 for large text and UI component boundaries) in light and dark; faded preview placeholders are real text ("Add a date", "$ –"), not `aria-hidden` and not colour alone, and keep 4.5:1 in light and dark.
 - **Language:** plain verbs ("Add", "Publish"), sentence case, no "Oops".
 
 ### 11.5 Save behaviour

@@ -8,7 +8,8 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware/err
 import logger from '../utils/logger.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
-import applicationFormService from './ApplicationFormService.js';
+import applicationFormService, { paymentsEnabled as applicationPaymentsEnabled } from './ApplicationFormService.js';
+import eventReadinessService from './EventReadinessService.js';
 import addOnService from './AddOnService.js';
 import mapService from './MapService.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
@@ -37,6 +38,22 @@ function admissionConflict(message) {
   const error = new ConflictError(message);
   error.code = 'ADMISSION_MODE_LOCKED';
   return error;
+}
+
+/**
+ * Why an event's admission mode cannot change (spec 034 D11), or null. The one
+ * rule: updateEvent refuses with it, the overview reports it (spec 050-J), so
+ * the wizard shows the same reason the server enforces. Ticketed → RSVP needs
+ * no order at all (any status); RSVP → ticketed needs no GOING RSVP.
+ */
+export async function admissionLockReason(eventId, admissionMode) {
+  if (admissionMode === 'RSVP')
+    return (await prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }))
+      ? 'People have RSVP\'d, so this event stays RSVP.'
+      : null;
+  return (await prisma.order.count({ where: { eventId } }))
+    ? 'This event has orders, so it stays ticketed.'
+    : null;
 }
 
 // Everything the public event page renders (getEventById, preview payload).
@@ -220,9 +237,10 @@ class EventService {
    * questions. Orders, tickets and applications are never copied.
    * @param {string} orgId
    * @param {string} eventId
-   * @param {{ name?: string, date: string }} input - new date is required; name defaults to "Copy of <name>"
+   * @param {{ name?: string, date: string, setup?: boolean }} input - new date is required; name defaults to "Copy of <name>".
+   *   `setup: true` (spec 050 §7.7, the wizard's "Start from a past event") leaves the copy mid-setup at the date step.
    */
-  async duplicateEvent(orgId, eventId, { name, date } = {}) {
+  async duplicateEvent(orgId, eventId, { name, date, setup } = {}) {
     const source = await prisma.event.findFirst({
       where: { id: eventId, venue: { organizationId: orgId } },
       include: { priceTiers: { orderBy: { displayOrder: 'asc' } } },
@@ -254,6 +272,7 @@ class EventService {
           rsvpMaxPartySize: source.rsvpMaxPartySize,
           category: source.category,
           status: 'DRAFT',
+          ...(setup === true && { setupCompletedAt: null, setupStep: 'date' }),
           taxRate: source.taxRate,
           taxRateSource: source.taxRateSource,
           priceTiers: {
@@ -322,12 +341,8 @@ class EventService {
     if (updates.admissionMode !== undefined && !['TICKETED', 'RSVP'].includes(updates.admissionMode))
       throw new ValidationError('admissionMode must be TICKETED or RSVP');
     if (updates.admissionMode && updates.admissionMode !== existing.admissionMode) {
-      if (updates.admissionMode === 'RSVP') {
-        if (await prisma.order.count({ where: { eventId } }))
-          throw admissionConflict('An event with orders cannot switch to RSVP admission');
-      } else if (await prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } })) {
-        throw admissionConflict('An event with active RSVPs cannot switch to ticketed admission');
-      }
+      const locked = await admissionLockReason(eventId, existing.admissionMode);
+      if (locked) throw admissionConflict(locked);
       updateData.admissionMode = updates.admissionMode;
     }
     if (updates.rsvpLimit !== undefined) {
@@ -411,9 +426,10 @@ class EventService {
       if (isNaN(cap) || cap < 1 || cap > 100000) {
         throw new ValidationError('Capacity must be between 1 and 100,000');
       }
-      // Capacity floor check: can't go below sum of tier quantities
+      // Capacity floor check: can't go below sum of tier quantities (a wizard
+      // draft only warns; publish refuses it, spec 050 §6.1).
       const totalTierQuantity = existing.priceTiers.reduce((sum, t) => sum + t.quantityTotal, 0);
-      if (cap < totalTierQuantity) {
+      if (existing.setupCompletedAt !== null && cap < totalTierQuantity) {
         throw new ValidationError(
           `Capacity cannot be less than total tier inventory (${totalTierQuantity})`
         );
@@ -482,7 +498,7 @@ class EventService {
    * @param {string} eventId - Event ID
    * @returns {Promise<Object>} Published event
    */
-  async publishEvent(orgId, eventId) {
+  async publishEvent(orgId, eventId, { openFormIds = [] } = {}) {
     const existing = await prisma.event.findFirst({
       where: {
         id: eventId,
@@ -500,26 +516,31 @@ class EventService {
       );
     }
 
-    if (existing.admissionMode === 'TICKETED') {
-      const tierCount = await prisma.priceTier.count({ where: { eventId, isActive: true } });
-      if (tierCount === 0)
-        throw new ValidationError('At least one active price tier is required to publish');
-      // Wizard drafts may not have a capacity yet (spec 050); the DB CHECK refuses it too.
-      if (existing.capacity === null) {
-        const error = new ValidationError('Set a capacity before publishing');
-        error.code = 'CAPACITY_REQUIRED';
-        throw error;
-      }
+    // Spec 050 §7.2: one readiness check, the same blockers GET …/readiness shows.
+    const readiness = await eventReadinessService.check(orgId, eventId);
+    if (!readiness.ready) {
+      const error = new Error('This event is not ready to publish');
+      error.name = 'UnprocessableEntityError';
+      error.statusCode = 422;
+      error.code = 'EVENT_NOT_READY';
+      error.details = { blockers: readiness.blockers, warnings: readiness.warnings };
+      throw error;
     }
 
-    const event = await prisma.event.update({
-      where: { id: eventId },
-      data: { status: 'PUBLISHED' },
-      include: {
-        venue: true,
-        priceTiers: { orderBy: { displayOrder: 'asc' } },
-      },
-    });
+    const formResults = await this._formsToOpen(eventId, openFormIds);
+    const openIds = formResults.filter((r) => r.status === 'OPEN').map((r) => r.formId);
+
+    const [event] = await prisma.$transaction([
+      prisma.event.update({
+        where: { id: eventId },
+        data: { status: 'PUBLISHED', ...(existing.setupCompletedAt === null && { setupCompletedAt: new Date() }) },
+        include: {
+          venue: true,
+          priceTiers: { orderBy: { displayOrder: 'asc' } },
+        },
+      }),
+      prisma.applicationForm.updateMany({ where: { id: { in: openIds }, eventId, status: 'DRAFT' }, data: { status: 'OPEN' } }),
+    ]);
 
     // Refresh tax rate on publish to ensure accuracy
     await this._refreshTaxRate(event);
@@ -529,9 +550,42 @@ class EventService {
       orgId,
       eventId: event.id,
       eventName: event.name,
+      openedForms: openIds.length,
     });
 
-    return this._formatEventDetail(event);
+    return { ...this._formatEventDetail(event), formResults };
+  }
+
+  /**
+   * Spec 050 §3: publish opens only the listed DRAFT forms of this event. A
+   * form that cannot open (PAID while the payments gate is off, no active
+   * tier, map not ready) is reported per form and never fails the publish.
+   */
+  async _formsToOpen(eventId, openFormIds) {
+    const ids = [...new Set((Array.isArray(openFormIds) ? openFormIds : []).filter((id) => typeof id === 'string'))];
+    if (!ids.length) return [];
+    const forms = await prisma.applicationForm.findMany({ where: { id: { in: ids }, eventId }, include: { tiers: true } });
+    const byId = new Map(forms.map((f) => [f.id, f]));
+    const results = [];
+    for (const formId of ids) {
+      const form = byId.get(formId);
+      if (!form || form.status !== 'DRAFT') {
+        results.push({ formId, status: 'REFUSED', code: 'FORM_NOT_DRAFT', message: 'Only draft forms of this event can be opened on publish' });
+        continue;
+      }
+      if (form.kind === 'PAID' && !applicationPaymentsEnabled()) {
+        results.push({ formId, status: 'REFUSED', code: 'PAID_FORMS_DISABLED', message: `${form.name} charges applicants, and paid applications are not available yet` });
+        continue;
+      }
+      try {
+        await applicationFormService._assertCanOpen(form);
+        results.push({ formId, status: 'OPEN' });
+      } catch (error) {
+        if (!error.statusCode || error.statusCode >= 500) throw error;
+        results.push({ formId, status: 'REFUSED', code: error.code || 'FORM_NOT_READY', message: error.message });
+      }
+    }
+    return results;
   }
 
   /**
@@ -1276,8 +1330,14 @@ class EventService {
         }
       : null;
 
+    // The public page on the org's storefront host (custom domain, store subdomain or platform), for sharing.
+    const { base: storefrontBase } = await storefrontFor(orgId);
+    const lockReason = await admissionLockReason(event.id, event.admissionMode);
+
     return {
       event: this._formatEventDetail(event),
+      publicUrl: `${storefrontBase}/events/${encodeURIComponent(event.slug || event.id)}`,
+      admissionLock: { locked: !!lockReason, reason: lockReason },
       money: {
         gross,
         orgReceives: round(kinds.reduce((s, k) => s + sumOf(byKind(k), 'orgReceives'), 0)),

@@ -368,7 +368,7 @@ test('admin detail: answers, notes, waitlist with edited email and history', asy
   await expect(page.getByTestId('application-actions')).not.toContainText('Waitlist');
 });
 
-test('forms: create a free form, edit settings, add a question; ORGANIZER is read-only', async ({ page, baseURL }) => {
+test('forms: create a free form, edit settings, add a question', async ({ page, baseURL }) => {
   const api = await mockAdmin(page, baseURL!);
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms`);
   await expect(page.getByTestId('form-row-press-media')).toContainText('Open');
@@ -399,13 +399,16 @@ test('forms: create a free form, edit settings, add a question; ORGANIZER is rea
   expect(a11y.violations).toEqual([]);
 });
 
-test('ORGANIZER sees forms read-only', async ({ page, baseURL }) => {
+// Spec 050-E: event form configuration is an ORGANIZER default (applications.forms).
+test('ORGANIZER builds forms', async ({ page, baseURL }) => {
   await mockAdmin(page, baseURL!, 'ORGANIZER');
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms`);
-  await expect(page.getByTestId('forms-new')).toHaveCount(0);
+  await expect(page.getByTestId('forms-new')).toBeVisible();
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/form-press`);
-  await expect(page.getByLabel('Status')).toBeDisabled();
-  await expect(page.getByTestId('question-add')).toHaveCount(0);
+  await expect(page.getByLabel('Status')).toBeEnabled();
+  await expect(page.getByTestId('question-add')).toBeVisible();
+  const a11y = await new AxeBuilder({ page }).include('main').analyze();
+  expect(a11y.violations).toEqual([]);
 });
 
 test('settings: application email templates edit and save', async ({ page, baseURL }) => {

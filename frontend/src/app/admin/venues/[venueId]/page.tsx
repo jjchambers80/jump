@@ -368,7 +368,7 @@ function EventsSection({ venue, orgQuery }: { venue: AdminVenueDetails; orgQuery
       delay={40}
       flush={venue.events.length > 0}
       aside={
-        <Link href="/admin/events/new" className={quietLink}>
+        <Link href={`/admin/events/new?venueId=${encodeURIComponent(venue.id)}`} className={quietLink}>
           <Plus className="h-3.5 w-3.5" aria-hidden />
           Create event
         </Link>

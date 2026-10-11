@@ -42,8 +42,8 @@ export default function BoothPanel({
   const [force, setForce] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
-  // Forcing a tier mismatch: application form managers (applications.forms).
-  const isAdmin = useCan('applications.forms');
+  // Forcing a tier mismatch: maps.forceAssign (ADMIN by default).
+  const canForce = useCan('maps.forceAssign');
   const holder = booth.status === 'SOLD' ? booth.holder ?? null : null;
   const hasHolder = holder !== null;
 
@@ -294,8 +294,8 @@ export default function BoothPanel({
               <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Start typing to search approved applications.</p>
             )}
 
-            {/* Force checkbox — ADMIN only */}
-            {isAdmin && (
+            {/* Force checkbox — maps.forceAssign */}
+            {canForce && (
               <label className="mt-3 flex items-center gap-2 text-xs text-gray-700 dark:text-slate-300">
                 <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
                 Force (allow tier mismatch)

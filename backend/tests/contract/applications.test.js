@@ -103,8 +103,6 @@ describe('Applications contract (spec 011 phase 1)', () => {
       expect(freeForm.questions.map((q) => q.label)).toEqual(['Outlet name', 'Coverage type', 'Portfolio URL', 'Press badge photo', 'Agree to media policy']);
       expect(freeForm.tiers).toEqual([]);
 
-      const forbidden = await request(app).post(`/admin/events/${eventId}/application-forms`).set(...auth(organizerToken)).send({ kind: 'FREE', name: 'Nope' });
-      expect(forbidden.status).toBe(403);
       const list = await request(app).get(`/admin/events/${eventId}/application-forms`).set(...auth(organizerToken));
       expect(list.status).toBe(200);
       expect(list.body.data.map((f) => f.id)).toContain(freeForm.id);

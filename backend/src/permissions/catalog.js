@@ -6,8 +6,9 @@
 //   (`requireFeature`). Turned off platform-wide → 404 for everyone, SYSTEM_ADMIN
 //   included. `locked` features hold the admin together and cannot be hidden.
 // - an action (`orders.refund`, …) is a privileged operation inside a feature
-//   (`requirePermission`). Defaults reproduce the pre-catalog rules: ADMIN has
-//   every action, ORGANIZER none.
+//   (`requirePermission`). ADMIN has every action by default; ORGANIZER only
+//   those marked `organizer: true` (event-scoped configuration, spec 050
+//   decision 10). Money movement and settings stay ADMIN.
 //
 // Overrides live in PlatformSetting `roles` (PermissionService); this file is
 // the only list of keys. A key used by a route but missing here throws at boot.
@@ -27,9 +28,9 @@ export const FEATURES = [
     locked: true,
     adminPaths: ['/admin/events', '/admin/create-event'],
     actions: [
-      { key: 'applications.forms', label: 'Build application forms, categories, questions and templates' },
+      { key: 'applications.forms', label: 'Build event application forms, categories, questions and templates', organizer: true },
       { key: 'applications.money', label: 'Refund, waive or record an offline payment on an application' },
-      { key: 'addOns.manage', label: 'Create and edit add-ons and saved add-ons' },
+      { key: 'addOns.manage', label: 'Create and edit add-ons and saved add-ons', organizer: true },
     ],
   },
   { key: 'venues', label: 'Venues', locked: true, adminPaths: ['/admin/venues'], actions: [] },
@@ -50,7 +51,12 @@ export const FEATURES = [
       { key: 'customers.privacy', label: "Export, erase or anonymize a customer's data" },
     ],
   },
-  { key: 'maps', label: 'Maps', adminPaths: ['/admin/maps'], actions: [] },
+  {
+    key: 'maps',
+    label: 'Maps',
+    adminPaths: ['/admin/maps'],
+    actions: [{ key: 'maps.forceAssign', label: 'Assign a spot to an application from a different category' }],
+  },
   { key: 'analytics', label: 'Analytics', adminPaths: ['/admin/analytics'], actions: [] },
   { key: 'finance', label: 'Finance', adminPaths: ['/admin/finance'], actions: [] },
   {
@@ -59,7 +65,12 @@ export const FEATURES = [
     adminPaths: ['/admin/online-store', '/admin/themes'],
     actions: [{ key: 'onlineStore.preferences', label: 'Change store preferences (access, SEO)' }],
   },
-  { key: 'content', label: 'Content', adminPaths: ['/admin/content'], actions: [] },
+  {
+    key: 'content',
+    label: 'Content',
+    adminPaths: ['/admin/content'],
+    actions: [{ key: 'applications.standingForms', label: 'Build standing application forms (Content › Forms)' }],
+  },
   {
     key: 'developer',
     label: 'Developer tools',
@@ -90,10 +101,12 @@ export const FEATURES = [
 export const FEATURE_KEYS = new Set(FEATURES.map((f) => f.key));
 export const ACTION_KEYS = new Set(FEATURES.flatMap((f) => f.actions.map((a) => a.key)));
 
-/** Default value of a key for a member role (pre-catalog behaviour). */
+const ACTIONS = new Map(FEATURES.flatMap((f) => f.actions.map((a) => [a.key, a])));
+
+/** Default value of a key for a member role. */
 export function defaultFor(role, key) {
   if (FEATURE_KEYS.has(key)) return true;
-  return role === 'ADMIN';
+  return role === 'ADMIN' || (role === 'ORGANIZER' && !!ACTIONS.get(key)?.organizer);
 }
 
 /** The fixed value of a locked key for a role, or undefined when it can be changed. */
