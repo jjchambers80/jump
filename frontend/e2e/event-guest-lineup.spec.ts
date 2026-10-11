@@ -1,11 +1,14 @@
 // Special guest lineup (spec 050-Q). Storefront: the #guests section on the
 // public event page (visible guests, photo alt = name, named links, hidden
-// with no guests, placeholder in preview). The API is mocked; assertions are
-// scoped to the #guests section. Axe runs with reduced motion at 390 × 844.
+// with no guests, placeholder in preview). Wizard: the lineup editor in the
+// Special guests step (add by hand, edit, reorder with buttons, hide, delete),
+// on the flag-on dev server. Every API call is mocked; assertions are scoped
+// to #guests or the form pane. Axe runs with reduced motion at 390 × 844.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { mockLegalVersions } from './helpers/legal';
+import { signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -40,9 +43,12 @@ async function mockEvent(page: Page, body: { id: string }) {
 const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
 
-test.use({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+test.use({ viewport: { width: 390, height: 844 }, contextOptions: { reducedMotion: 'reduce' } });
 
 test.describe('storefront lineup', () => {
+  // The first test may compile the event route cold.
+  test.describe.configure({ timeout: 90000 });
+
   test('shows visible guests in order with photo alt, plain-text bio and named links', async ({ page }) => {
     await mockEvent(page, event('e2e-lineup'));
     await page.goto('/events/e2e-lineup');
@@ -73,6 +79,139 @@ test.describe('storefront lineup', () => {
     await page.goto('/events/e2e-lineup-preview');
     const section = page.locator('#guests');
     await expect(section.getByText('Guests you add to the lineup show here')).toBeVisible({ timeout: 30000 });
+    expect(await serious(page)).toEqual([]);
+  });
+});
+
+// ── Wizard: lineup editor in the Special guests step ─────────────────────────
+
+const ORG_ID = 'org-lineup';
+const EVENT_ID = 'evt-lineup';
+const WIZARD_EVENT = {
+  ...event(EVENT_ID, { guests: [] }), status: 'DRAFT', setupStep: 'special-guests', setupCompletedAt: null, rsvpLimit: null, rsvpMaxPartySize: 1,
+  rsvpRemaining: null, tax: { rate: 0, source: null, region: null }, taxInclusivePricing: false, category: null,
+};
+
+type Row = { id: string; name: string; role: string | null; bio: string | null; imageUrl: string | null; links: Record<string, string> | null; isVisible: boolean; displayOrder: number; applicationId: null; imageId: null };
+
+async function mockWizard(page: Page, initial: Partial<Row>[] = []) {
+  let rows: Row[] = initial.map((g, i) => ({ id: `g-${i}`, name: 'Guest', role: null, bio: null, imageUrl: null, links: null, isVisible: true, displayOrder: i, applicationId: null, imageId: null, ...g }));
+  const state = { previews: 0, posts: [] as unknown[], patches: [] as unknown[], reorders: [] as unknown[] };
+  const base = `${API}/organizations/${ORG_ID}/events/${EVENT_ID}/guests`;
+  await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
+  await page.route(`${API}/organizations`, (route) => route.fulfill(json([{ id: ORG_ID, name: 'Lineup Org', slug: 'lineup-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' }])));
+  await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['dashboard', 'events', 'applications', 'applications.forms', 'venues'], hiddenPaths: [] })));
+  await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([{ ...WIZARD_EVENT.venue, city: 'Raleigh', state: 'NC' }])));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
+    route.fulfill(json({ event: WIZARD_EVENT, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
+  );
+  await page.route(`${API}/admin/events/${EVENT_ID}/application-forms`, (route) => route.fulfill(json({ data: [] })));
+  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) => {
+    state.previews += 1;
+    const visible = rows.filter((g) => g.isVisible).map(({ id, name, role, bio, imageUrl, links }) => ({ id, name, role, bio, imageUrl, links }));
+    return route.fulfill(json({ event: { ...WIZARD_EVENT, guests: visible }, organization: { id: ORG_ID, name: 'Lineup Org' }, forms: [], guests: rows }));
+  });
+  await page.route(base, (route) => {
+    if (route.request().method() === 'GET') return route.fulfill(json({ data: rows }));
+    const body = route.request().postDataJSON();
+    state.posts.push(body);
+    const row: Row = { id: `g-${rows.length + 10}`, role: null, bio: null, imageUrl: null, links: null, isVisible: true, displayOrder: rows.length, applicationId: null, imageId: null, ...body };
+    rows.push(row);
+    return route.fulfill(json(row, 201));
+  });
+  await page.route(`${base}/reorder`, (route) => {
+    const { ids } = route.request().postDataJSON();
+    state.reorders.push(ids);
+    rows = ids.map((id: string, i: number) => ({ ...rows.find((g) => g.id === id)!, displayOrder: i }));
+    return route.fulfill(json({ data: rows }));
+  });
+  await page.route(new RegExp(`${base}/[^/]+$`), (route) => {
+    const id = route.request().url().split('/').pop()!;
+    if (id === 'reorder') return route.fallback();
+    if (route.request().method() === 'DELETE') {
+      rows = rows.filter((g) => g.id !== id);
+      return route.fulfill({ status: 204, body: '' });
+    }
+    const body = route.request().postDataJSON();
+    state.patches.push(body);
+    const row = rows.find((g) => g.id === id)!;
+    Object.assign(row, body);
+    return route.fulfill(json(row));
+  });
+  return state;
+}
+
+const WIZARD_URL = process.env.PLAYWRIGHT_WIZARD_BASE_URL;
+const STAFF = { id: 'lineup-organizer', email: 'lineup-organizer@test.com', role: 'ORGANIZER' as const };
+const STEP_URL = `/admin/events/${EVENT_ID}/setup?step=special-guests`;
+
+test.describe('wizard lineup editor', () => {
+  test.skip(!WIZARD_URL, 'needs the flag-on dev server (PLAYWRIGHT_WIZARD_BASE_URL)');
+  test.use({ baseURL: WIZARD_URL });
+  test.describe.configure({ timeout: 120000 });
+
+  test.beforeEach(async ({ page, baseURL }) => {
+    await signInAsStaff(page, STAFF, baseURL!);
+  });
+
+  const editor = (page: Page) => page.locator('main').getByTestId('lineup-editor');
+
+  test('adds a guest by hand with no form, edits, reorders with buttons, hides and deletes', async ({ page }) => {
+    const state = await mockWizard(page);
+    await page.goto(STEP_URL);
+    const pane = editor(page);
+    await expect(pane.getByText('No guests in the lineup yet.')).toBeVisible({ timeout: 90000 });
+
+    // Add by hand: the name is required.
+    await pane.getByRole('button', { name: 'Add a guest' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add a guest' });
+    await expect(dialog.getByLabel('Name')).toBeFocused();
+    await dialog.getByRole('button', { name: 'Add guest' }).click();
+    await expect(dialog.getByText('Enter the guest’s name')).toBeVisible();
+    await dialog.getByLabel('Name').fill('Mara Voss');
+    await dialog.getByLabel(/^Role/).fill('Voice actor');
+    await dialog.getByLabel(/^Bio/).fill('Voice of Captain Rook.');
+    await dialog.getByLabel('Instagram').fill('https://instagram.com/mara');
+    expect(await serious(page)).toEqual([]);
+    await dialog.getByRole('button', { name: 'Add guest' }).click();
+    await expect(dialog).toBeHidden();
+    expect(state.posts).toEqual([{ name: 'Mara Voss', role: 'Voice actor', bio: 'Voice of Captain Rook.', links: { instagram: 'https://instagram.com/mara' } }]);
+
+    await pane.getByRole('button', { name: 'Add a guest' }).click();
+    await page.getByRole('dialog', { name: 'Add a guest' }).getByLabel('Name').fill('Sam Lee');
+    await page.getByRole('dialog', { name: 'Add a guest' }).getByRole('button', { name: 'Add guest' }).click();
+    await expect(pane.getByTestId('lineup-row')).toHaveCount(2);
+
+    // Edit.
+    await pane.getByRole('button', { name: 'Edit Sam Lee' }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit Sam Lee' });
+    await edit.getByLabel(/^Role/).fill('Panel host');
+    await edit.getByRole('button', { name: 'Save guest' }).click();
+    await expect(pane.getByText('Panel host')).toBeVisible();
+
+    // Reorder with the keyboard: focus stays on a move button, the new position is announced.
+    const previewsBefore = state.previews;
+    await pane.getByRole('button', { name: 'Move Sam Lee up' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(pane.getByRole('status')).toHaveText('Sam Lee moved to position 1 of 2');
+    expect(state.reorders.at(-1)).toEqual(['g-11', 'g-10']);
+    await expect(pane.getByTestId('lineup-row').first()).toContainText('Sam Lee');
+    await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^Move Sam Lee/);
+    await expect.poll(() => state.previews).toBeGreaterThan(previewsBefore);
+
+    // Hide, then delete.
+    await pane.getByLabel('Show on event page').first().uncheck();
+    await expect(pane.getByRole('status')).toHaveText('Sam Lee hidden from the event page');
+    expect(state.patches.at(-1)).toEqual({ isVisible: false });
+    page.once('dialog', (d) => d.accept());
+    await pane.getByRole('button', { name: 'Remove Mara Voss' }).click();
+    await expect(pane.getByTestId('lineup-row')).toHaveCount(1);
+    for (const button of await pane.getByRole('button').all()) {
+      const box = await button.boundingBox();
+      if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await serious(page)).toEqual([]);
   });
 });

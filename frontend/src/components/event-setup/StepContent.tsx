@@ -100,7 +100,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
             <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
           )}
           {isApplicationStep(step.key) && props.row && (
-            <ApplicationsStep stepKey={step.key} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
+            <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
           )}
           {!step.built && <PendingStep />}
         </fieldset>

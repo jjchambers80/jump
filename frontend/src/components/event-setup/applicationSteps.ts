@@ -49,7 +49,7 @@ export const APPLICATION_STEPS: Record<ApplicationStepKey, ApplicationStepConfig
   'special-guests': {
     purposes: ['SPECIAL_GUEST'],
     addLabel: 'Add a special guest application',
-    empty: 'Artists, creators and celebrities apply here to appear at your event.',
+    empty: 'Artists, creators and celebrities apply here to appear at your event. A form is optional: you can add guests to the lineup by hand below.',
     nameSuffix: 'Special Guest Application',
     defaultKind: 'FREE',
   },
@@ -103,6 +103,7 @@ function step(key: ApplicationStepKey, title: string, rest: Partial<EventStep> =
 }
 
 export const VENDORS_STEP = step('vendors', 'Vendor applications');
-export const SPECIAL_GUESTS_STEP = step('special-guests', 'Special guests');
+// Spec 050-Q: the preview scrolls to the lineup (#guests) rather than the apply pills.
+export const SPECIAL_GUESTS_STEP = step('special-guests', 'Special guests', { anchor: 'guests' });
 export const VOLUNTEERS_STEP = step('volunteers', 'Volunteers');
 export const OTHER_APPLICATIONS_STEP = step('other-applications', 'Other applications');
