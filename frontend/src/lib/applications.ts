@@ -2,7 +2,7 @@
 // helpers shared by the storefront apply pages, the buyer account and admin.
 
 import { computeOrderFees, roundCurrency } from './fees';
-import { formatEventDateTime, formatEventTime } from './eventTime';
+import { formatEventDate, formatEventDateTime, formatEventTime } from './eventTime';
 
 export type FormKind = 'PAID' | 'FREE';
 export type FormStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
@@ -226,11 +226,14 @@ export interface ApplicationShiftView {
   assignedToApplication: boolean;
 }
 
-/** "Sat, Sep 18, 2027 · 9:00 AM EDT – 1:00 PM EDT" in the venue zone (gotcha 28); null for a role without a time. */
+/** "Sat, Sep 18, 2027 · 9:00 AM EDT – 1:00 PM EDT" in the venue zone (gotcha 28), the end date added past midnight; null for a role without a time. */
 export function shiftWhen(shift: { startsAt: string | null; endsAt: string | null }, zone: string | null | undefined): string | null {
   if (!shift.startsAt) return null;
   const start = formatEventDateTime(shift.startsAt, zone);
-  return shift.endsAt ? `${start} – ${formatEventTime(shift.endsAt, zone)}` : start;
+  if (!shift.endsAt) return start;
+  // A shift past midnight (venue clock) names its end date too.
+  const sameDay = formatEventDate(shift.startsAt, zone) === formatEventDate(shift.endsAt, zone);
+  return `${start} – ${sameDay ? formatEventTime(shift.endsAt, zone) : formatEventDateTime(shift.endsAt, zone)}`;
 }
 
 export interface ProfilePhoto {

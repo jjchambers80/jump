@@ -70,7 +70,7 @@ describe('Volunteer shifts (spec 050 §6.4)', () => {
     await prisma.erasureSuppression.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.legalAcceptance.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.contact.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.event.deleteMany({ where: { id: eventId } }).catch(() => {});
+    await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});
     await prisma.venue.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: { in: [org.id, otherOrg.id] } } }).catch(() => {});
     await cleanupStaff(emails);
@@ -178,7 +178,7 @@ describe('Volunteer shifts (spec 050 §6.4)', () => {
       expect(retry.body.shifts.find((s) => s.id === shifts.roam.id)).toMatchObject({ picked: true, assignedToApplication: true });
     });
 
-    it('a full shift shows as Full but stays pickable; a picked shift cannot be deleted', async () => {
+    it('a full shift shows as Full but stays pickable; an assigned shift cannot be deleted', async () => {
       const pub = await request(app).get(`/events/${eventId}/applications/forms/${volunteer.slug}`);
       expect(pub.body.shifts[0]).toMatchObject({ remaining: 0, full: true });
       expect((await submit([shifts.gate.id])).status).toBe(201);
@@ -186,7 +186,7 @@ describe('Volunteer shifts (spec 050 §6.4)', () => {
       expect(lower.status).toBe(200);
       const back = await call('patch', `${base()}/${shifts.gate.id}`, tokens.ORGANIZER, { capacity: 1 });
       expect(back.status).toBe(200);
-      expect((await call('delete', `${base()}/${shifts.gate.id}`, tokens.ORGANIZER)).body.code).toBe('SHIFT_HAS_PICKS');
+      expect((await call('delete', `${base()}/${shifts.gate.id}`, tokens.ORGANIZER)).body.code).toBe('SHIFT_HAS_ASSIGNED');
     });
 
     it('withdrawing an approved volunteer hands the shift back', async () => {
@@ -216,6 +216,60 @@ describe('Volunteer shifts (spec 050 §6.4)', () => {
     it('PAID-form or non-approve decisions refuse shiftIds', async () => {
       const res = await call('post', `/admin/events/${eventId}/applications/${apps[0]}/decision`, tokens.ORGANIZER, { decision: 'REJECT', shiftIds: [] });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('locks and duplication', () => {
+    const fresh = async (shiftIds) => (await submit(shiftIds)).body.applicationId;
+
+    it('capacity cannot drop below the assigned count (409)', async () => {
+      const bar = (await call('post', base(), tokens.ORGANIZER, { name: 'Bar', capacity: 2 })).body;
+      const [x, y] = [await fresh([bar.id]), await fresh([bar.id])];
+      expect((await approve(x, [bar.id])).status).toBe(200);
+      expect((await approve(y, [bar.id])).status).toBe(200);
+      const res = await call('patch', `${base()}/${bar.id}`, tokens.ORGANIZER, { capacity: 1 });
+      expect([res.status, res.body.code]).toEqual([409, 'SHIFT_CAPACITY_BELOW_ASSIGNED']);
+      expect((await call('patch', `${base()}/${bar.id}`, tokens.ORGANIZER, { capacity: 2, name: 'Bar crew' })).status).toBe(200);
+    });
+
+    it('picks of rejected or withdrawn applications do not block a delete', async () => {
+      const temp = (await call('post', base(), tokens.ORGANIZER, { name: 'Coat check', capacity: 1 })).body;
+      const [r, w] = [await fresh([temp.id]), await fresh([temp.id])];
+      expect((await call('post', `/admin/events/${eventId}/applications/${r}/decision`, tokens.ORGANIZER, { decision: 'REJECT', sendEmail: false })).status).toBe(200);
+      expect((await approve(w, [temp.id])).status).toBe(200);
+      expect((await call('delete', `${base()}/${temp.id}`, tokens.ORGANIZER)).body.code).toBe('SHIFT_HAS_ASSIGNED');
+      expect((await call('post', `/admin/events/${eventId}/applications/${w}/decision`, tokens.ORGANIZER, { decision: 'WITHDRAW', sendEmail: false })).status).toBe(200);
+      expect((await call('delete', `${base()}/${temp.id}`, tokens.ORGANIZER)).status).toBe(204);
+      expect(await prisma.applicationShift.count({ where: { shiftId: temp.id } })).toBe(0);
+    });
+
+    it('approvals taking two shifts in opposite orders never deadlock', async () => {
+      for (let round = 0; round < 3; round += 1) {
+        const a = (await call('post', base(), tokens.ORGANIZER, { name: `Left ${round}`, capacity: 1 })).body;
+        const b = (await call('post', base(), tokens.ORGANIZER, { name: `Right ${round}`, capacity: 1 })).body;
+        const [x, y] = [await fresh([a.id, b.id]), await fresh([b.id, a.id])];
+        const results = await Promise.all([approve(x, [a.id, b.id]), approve(y, [b.id, a.id])]);
+        expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+        expect(results.find((r) => r.status === 409).body.code).toBe('SHIFT_FULL');
+        for (const id of [a.id, b.id]) {
+          await prisma.applicationShift.updateMany({ where: { shiftId: id }, data: { assigned: false } });
+          await prisma.applicationShift.deleteMany({ where: { shiftId: id } });
+          await prisma.volunteerShift.delete({ where: { id } });
+        }
+      }
+    });
+
+    it('duplicating the event copies shifts moved by the date offset, without picks', async () => {
+      const res = await call('post', `/organizations/${org.id}/events/${eventId}/duplicate`, tokens.ADMIN, { date: '2028-09-16T15:00:00.000Z' });
+      expect(res.status).toBe(201);
+      const copyId = res.body.id ?? res.body.event?.id;
+      const copy = await prisma.applicationForm.findFirst({ where: { eventId: copyId, purpose: 'VOLUNTEER' }, include: { shifts: { include: { _count: { select: { picks: true } } } } } });
+      const gate = copy.shifts.find((sh) => sh.name === 'Gate');
+      // Source event 2027-09-18T15:00Z → 2028-09-16T15:00Z: 364 days later.
+      expect(gate.startsAt.toISOString()).toBe('2028-09-16T13:00:00.000Z');
+      expect(gate.endsAt.toISOString()).toBe('2028-09-16T17:00:00.000Z');
+      expect(copy.shifts.find((sh) => sh.name === 'Runner')).toMatchObject({ startsAt: null, endsAt: null });
+      expect(copy.shifts.every((sh) => sh._count.picks === 0)).toBe(true);
     });
   });
 

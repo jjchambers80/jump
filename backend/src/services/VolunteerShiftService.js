@@ -57,23 +57,37 @@ class VolunteerShiftService {
 
   async update(eventId, formId, shiftId, organizationId, body) {
     await this._requireVolunteerForm(eventId, formId, organizationId);
-    const existing = await prisma.volunteerShift.findFirst({ where: { id: shiftId, formId }, ...SHIFTS_INCLUDE_ONE });
-    if (!existing) throw new NotFoundError('Shift not found');
-    const data = this._validate(body, existing, existing.displayOrder);
-    const assigned = existing._count.picks;
-    if (data.capacity != null && data.capacity < assigned) {
-      throw new ValidationError(`capacity cannot be below the ${assigned} volunteers already assigned`);
-    }
-    const shift = await prisma.volunteerShift.update({ where: { id: shiftId }, data, ...SHIFTS_INCLUDE_ONE });
+    const shift = await prisma.$transaction(async (tx) => {
+      // Same lock as approval (`assign`), so the assigned count cannot move under the check.
+      const locked = await tx.$queryRaw`SELECT "id" FROM "VolunteerShift" WHERE "id" = ${shiftId} AND "formId" = ${formId} FOR UPDATE`;
+      if (!locked[0]) throw new NotFoundError('Shift not found');
+      const existing = await tx.volunteerShift.findUnique({ where: { id: shiftId } });
+      const data = this._validate(body, existing, existing.displayOrder);
+      if (data.capacity != null) {
+        const assigned = await tx.applicationShift.count({ where: { shiftId, assigned: true } });
+        if (data.capacity < assigned) {
+          throw coded(new ConflictError(`Capacity cannot be below the ${assigned} volunteers already assigned`, { assigned }), 'SHIFT_CAPACITY_BELOW_ASSIGNED');
+        }
+      }
+      return tx.volunteerShift.update({ where: { id: shiftId }, data, ...SHIFTS_INCLUDE_ONE });
+    });
     return this.serialize(shift);
   }
 
+  /**
+   * Delete under the shift lock. Assigned volunteers block it (409); picks of
+   * rejected or withdrawn applications, and unassigned preferences, go with it.
+   */
   async remove(eventId, formId, shiftId, organizationId) {
     await this._requireVolunteerForm(eventId, formId, organizationId);
-    const shift = await prisma.volunteerShift.findFirst({ where: { id: shiftId, formId }, select: { id: true, _count: { select: { picks: true } } } });
-    if (!shift) throw new NotFoundError('Shift not found');
-    if (shift._count.picks > 0) throw coded(new ConflictError('Volunteers picked this shift; edit it instead of deleting it'), 'SHIFT_HAS_PICKS');
-    await prisma.volunteerShift.delete({ where: { id: shiftId } });
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw`SELECT "id" FROM "VolunteerShift" WHERE "id" = ${shiftId} AND "formId" = ${formId} FOR UPDATE`;
+      if (!locked[0]) throw new NotFoundError('Shift not found');
+      const assigned = await tx.applicationShift.count({ where: { shiftId, assigned: true } });
+      if (assigned > 0) throw coded(new ConflictError('Volunteers are assigned to this shift; move them off it first', { assigned }), 'SHIFT_HAS_ASSIGNED');
+      await tx.applicationShift.deleteMany({ where: { shiftId } });
+      await tx.volunteerShift.delete({ where: { id: shiftId } });
+    });
   }
 
   /**

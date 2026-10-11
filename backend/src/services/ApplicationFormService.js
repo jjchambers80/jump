@@ -349,13 +349,18 @@ class ApplicationFormService {
    * source tier id → copied tier id so add-on attachments can follow (spec 012).
    */
   async copyForms(fromEventId, toEventId, tx = prisma) {
-    const target = await tx.event.findUnique({ where: { id: toEventId }, select: { venue: { select: { organizationId: true } } } });
+    const target = await tx.event.findUnique({ where: { id: toEventId }, select: { date: true, venue: { select: { organizationId: true } } } });
     if (!target) throw new NotFoundError('Event not found');
+    // Spec 050 §6.4: shift times move with the event, like endDate in duplicateEvent.
+    const source = await tx.event.findUnique({ where: { id: fromEventId }, select: { date: true } });
+    const shiftBy = source?.date && target.date ? target.date.getTime() - source.date.getTime() : 0;
+    const moved = (d) => (d ? new Date(d.getTime() + shiftBy) : null);
     const forms = await tx.applicationForm.findMany({
       where: { eventId: fromEventId },
       include: {
         tiers: { orderBy: { displayOrder: 'asc' } },
         questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
+        shifts: { orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }] },
       },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -393,6 +398,12 @@ class ApplicationFormService {
         tiers: f.tiers.map((t) => ({ name: t.name, description: t.description, price: t.price, quantityTotal: t.quantityTotal, displayOrder: t.displayOrder, isActive: t.isActive })),
         questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder, pinned: q.pinned })),
       });
+      // Shifts copy without picks: volunteers apply again for the new edition.
+      if (f.shifts.length) {
+        await tx.volunteerShift.createMany({
+          data: f.shifts.map((sh) => ({ formId: created.id, name: sh.name, description: sh.description, startsAt: moved(sh.startsAt), endsAt: moved(sh.endsAt), capacity: sh.capacity, displayOrder: sh.displayOrder })),
+        });
+      }
       // Tiers were created in source order, so index i of each list is the same tier.
       f.tiers.forEach((t, i) => tierIdMap.set(t.id, tiers[i]?.id));
       copied += 1;
