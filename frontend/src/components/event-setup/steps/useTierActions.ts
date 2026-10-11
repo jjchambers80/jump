@@ -73,6 +73,16 @@ export function useTierActions({ orgId, saved, setSaved, zone, refreshPreview }:
     }
   }
 
+  async function toggleActive(tier: OverviewTier) {
+    const action = tier.isActive ? 'deactivate' : 'activate';
+    try {
+      const updated = await api.post<OverviewTier>(`${base}/${encodeURIComponent(tier.id)}/${action}`, {});
+      commit((list) => list.map((t) => (t.id === tier.id ? { ...t, ...updated } : t)), `${tier.name} is ${updated.isActive ? 'on sale' : 'off sale'}`);
+    } catch (err) {
+      setError(message(err, "Couldn't change the tier"));
+    }
+  }
+
   async function move(index: number, direction: 'up' | 'down') {
     const swap = direction === 'up' ? index - 1 : index + 1;
     if (swap < 0 || swap >= tiers.length) return;
@@ -86,5 +96,5 @@ export function useTierActions({ orgId, saved, setSaved, zone, refreshPreview }:
     }
   }
 
-  return { tiers, notice, error, save, duplicate, remove, move };
+  return { tiers, notice, error, save, duplicate, remove, toggleActive, move };
 }

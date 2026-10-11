@@ -41,7 +41,7 @@ export default function TicketsStep(props: StepFormProps & SavedRowProps & { rea
           describedBy={lock ? LOCK_ID : 'setup-admission-hint'}
         />
         {lock ? (
-          <p id={LOCK_ID} className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+          <p id={LOCK_ID} role="status" className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             {lock}
           </p>
         ) : (
@@ -81,6 +81,7 @@ export default function TicketsStep(props: StepFormProps & SavedRowProps & { rea
             {overflow && (
               <p
                 id={WARNING_ID}
+                role="status"
                 className="mt-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
               >
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

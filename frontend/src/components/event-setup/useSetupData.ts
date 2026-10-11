@@ -38,21 +38,6 @@ export function toSaved(event: OverviewEvent): SavedEvent {
   };
 }
 
-/**
- * The admission lock (spec 034 D11, mirrored from EventService.updateEvent):
- * ticketed stays ticketed once anything was ordered, RSVP stays RSVP while
- * anyone is going. The backend still refuses with 409 ADMISSION_MODE_LOCKED.
- */
-export function admissionLockFrom(overview: EventOverview): string | null {
-  const { event } = overview;
-  if (event.admissionMode === 'RSVP')
-    return (overview.rsvp?.going ?? 0) > 0 ? 'People have RSVP\'d, so this event stays RSVP.' : null;
-  const ordered =
-    (overview.money?.tickets?.orders ?? 0) > 0 ||
-    (overview.tickets?.issued ?? 0) > 0 ||
-    (event.priceTiers ?? []).some((t) => t.quantitySold + (t.quantityReserved ?? 0) > 0);
-  return ordered ? 'Tickets have been ordered, so this event stays ticketed.' : null;
-}
 
 export function useSetupData(orgId: string | null, orgLoading: boolean, eventId: string | null) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
@@ -71,7 +56,7 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
       .then(([venueList, overview]) => {
         if (cancelled) return;
         setVenues(venueList);
-        setSaved(overview ? { ...toSaved(overview.event), admissionLock: admissionLockFrom(overview) } : null);
+        setSaved(overview ? { ...toSaved(overview.event), admissionLock: overview.admissionLock?.reason ?? null } : null);
         setLoad({ status: 'ready' });
       })
       .catch((err) => {

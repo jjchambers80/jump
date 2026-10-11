@@ -119,11 +119,12 @@ export default function TierList(props: SavedRowProps & { readOnly?: boolean }) 
                   index={index}
                   total={tiers.length}
                   canDelete={!used && !props.readOnly}
-                  deleteBlockedReason={used ? `${tier.name} has orders; it can't be removed` : undefined}
+                  deleteBlockedReason={used ? "Has orders, so it can't be removed. Turn it off to stop selling it." : undefined}
                   onEdit={() => open(form, index)}
                   onMove={(direction) => void actions.move(index, direction)}
                   onDelete={() => void actions.remove(tier)}
                   onDuplicate={() => void actions.duplicate(tier)}
+                  onToggleActive={props.readOnly ? undefined : () => void actions.toggleActive(tier)}
                   accentClass={tierAccent(index).bar}
                   priceNote={allIn(Number(tier.price))}
                   editButtonId={editId(tier.id)}

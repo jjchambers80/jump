@@ -36,12 +36,13 @@ function baseEvent(patch: Record<string, unknown> = {}) {
   };
 }
 
-type Calls = { patch: Request[]; tierPost: Request[]; tierPatch: Request[]; tierDelete: Request[] };
+type Calls = { patch: Request[]; tierPost: Request[]; tierPatch: Request[]; tierDelete: Request[]; tierToggle: Request[] };
+type Extra = { lockReason?: string; refuseModeChange?: string };
 
 /** A stateful fake API: PATCH and tier writes change the event later loads return. */
-async function mockApi(page: Page, initial = baseEvent(), extra: { rsvpGoing?: number } = {}) {
+async function mockApi(page: Page, initial = baseEvent(), extra: Extra = {}) {
   const event: Record<string, any> = structuredClone(initial);
-  const calls: Calls = { patch: [], tierPost: [], tierPatch: [], tierDelete: [] };
+  const calls: Calls = { patch: [], tierPost: [], tierPatch: [], tierDelete: [], tierToggle: [] };
   let seq = 0;
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
@@ -52,11 +53,15 @@ async function mockApi(page: Page, initial = baseEvent(), extra: { rsvpGoing?: n
   await page.route(`${API}/organizations/${ORG_ID}/tier-presets`, (route) => route.fulfill(json({ tierPresets: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}`, (route) => {
     calls.patch.push(route.request());
-    Object.assign(event, route.request().postDataJSON());
+    const body = route.request().postDataJSON();
+    // The server's admission lock (EventService.admissionLockReason).
+    if (extra.refuseModeChange && body.admissionMode && body.admissionMode !== event.admissionMode)
+      return route.fulfill(json({ error: 'ConflictError', code: 'ADMISSION_MODE_LOCKED', message: extra.refuseModeChange }, 409));
+    Object.assign(event, body);
     route.fulfill(json(event));
   });
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
-    route.fulfill(json({ event, applications: { forms: [] }, rsvp: { going: extra.rsvpGoing ?? 0, headcount: 0, cancelled: 0, remaining: null } }))
+    route.fulfill(json({ event, applications: { forms: [] }, admissionLock: { locked: !!extra.lockReason, reason: extra.lockReason ?? null } }))
   );
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) =>
     route.fulfill(json({ event, organization: { id: ORG_ID, name: 'Tickets Org' }, forms: [] }))
@@ -67,6 +72,13 @@ async function mockApi(page: Page, initial = baseEvent(), extra: { rsvpGoing?: n
     const created = tier({ ...body, id: `t-new-${++seq}`, quantityAvailable: body.quantityTotal, displayOrder: event.priceTiers.length });
     event.priceTiers.push(created);
     route.fulfill(json(created, 201));
+  });
+  await page.route(new RegExp(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/price-tiers/[^/]+/(activate|deactivate)$`), (route) => {
+    calls.tierToggle.push(route.request());
+    const [id, action] = route.request().url().split('/').slice(-2);
+    const target = event.priceTiers.find((t: { id: string }) => t.id === id);
+    target.isActive = action === 'activate';
+    route.fulfill(json(target));
   });
   await page.route(new RegExp(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/price-tiers/[^/]+$`), (route) => {
     const id = route.request().url().split('/').pop()!;
@@ -205,7 +217,7 @@ test.describe('desktop', () => {
     const dialog = page.getByRole('dialog', { name: 'Edit Tier 1' });
     await expect(dialog).toBeVisible(COLD);
     await expect(dialog.getByLabel('Sale Start')).toHaveValue('2031-05-01T10:00');
-    await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+    await expect(dialog.getByLabel('Tier Name *')).toBeFocused();
     // Tab stays inside the dialog.
     for (let i = 0; i < 15; i++) await page.keyboard.press('Tab');
     expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
@@ -237,10 +249,13 @@ test.describe('desktop', () => {
     await page.goto(setupUrl('step=tickets'));
     await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
     await expect(main(page).getByRole('heading', { name: 'Ticket tiers' })).toBeVisible();
-    await main(page).getByRole('radio', { name: 'RSVP' }).check({ force: true });
+    // Click the visible segment (the radio itself is visually hidden).
+    await main(page).locator('label').filter({ hasText: /^RSVP$/ }).click();
+    await expect(main(page).getByRole('radio', { name: 'RSVP' })).toBeChecked();
     await expect(main(page).getByRole('heading', { name: 'Ticket tiers' })).toHaveCount(0);
     await expect(main(page).getByLabel('Capacity')).toHaveCount(0);
-    await main(page).getByRole('switch', { name: 'Limit RSVPs' }).check({ force: true });
+    await main(page).locator('label').filter({ hasText: /^Limit RSVPs$/ }).click();
+    await expect(main(page).getByRole('switch', { name: 'Limit RSVPs' })).toBeChecked();
     // A limit switched on but empty is an error, so nothing is sent yet.
     await expect(indicator(page)).toHaveText('Not saved: fix 1 field');
     await main(page).getByLabel('RSVP Limit').fill('40');
@@ -251,12 +266,42 @@ test.describe('desktop', () => {
     await expect(indicator(page)).toHaveText('Saved');
   });
 
-  test('the admission mode is locked once people have RSVPd', async ({ page }) => {
-    await mockApi(page, baseEvent({ admissionMode: 'RSVP', capacity: 0, priceTiers: [] }), { rsvpGoing: 3 });
+  test('the admission lock comes from the server, with its reason', async ({ page }) => {
+    const reason = "People have RSVP'd, so this event stays RSVP.";
+    await mockApi(page, baseEvent({ admissionMode: 'RSVP', capacity: 0, priceTiers: [] }), { lockReason: reason });
     await page.goto(setupUrl('step=tickets'));
     await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
     await expect(main(page).getByRole('radio', { name: 'Ticketed' })).toBeDisabled();
-    await expect(main(page).getByText("People have RSVP'd, so this event stays RSVP.")).toBeVisible();
+    await expect(main(page).getByText(reason)).toBeVisible();
+  });
+
+  test('a mode change the server refuses shows its reason and goes back', async ({ page }) => {
+    const reason = 'This event has orders, so it stays ticketed.';
+    const calls = await mockApi(page, baseEvent(), { refuseModeChange: reason });
+    await page.goto(setupUrl('step=tickets'));
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
+    await main(page).locator('label').filter({ hasText: /^RSVP$/ }).click();
+    await expect.poll(() => calls.patch.length, COLD).toBe(1);
+    await expect(main(page).getByText(reason)).toBeVisible();
+    await expect(main(page).getByRole('radio', { name: 'Ticketed' })).toBeChecked();
+    await expect(main(page).getByRole('radio', { name: 'RSVP' })).toBeDisabled();
+    await expect(page.getByText("Couldn't save")).toHaveCount(0);
+  });
+
+  test('a sold tier says why it cannot be removed, and can be turned off and on', async ({ page }) => {
+    const calls = await mockApi(page, baseEvent({ priceTiers: [tier({ quantitySold: 3, quantityAvailable: 77 })] }));
+    await page.goto(setupUrl('step=tickets'));
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible(COLD);
+    const remove = main(page).getByRole('button', { name: 'Remove General Admission' });
+    await expect(remove).toBeDisabled();
+    const reason = main(page).getByText("Has orders, so it can't be removed. Turn it off to stop selling it.");
+    await expect(reason).toBeVisible();
+    await expect(remove).toHaveAttribute('aria-describedby', (await reason.getAttribute('id'))!);
+    await main(page).getByRole('button', { name: 'Turn off General Admission' }).click();
+    await expect(main(page).getByText('Off sale', { exact: true })).toBeVisible();
+    await main(page).getByRole('button', { name: 'Turn on General Admission' }).click();
+    await expect(main(page).getByText('Off sale', { exact: true })).toHaveCount(0);
+    expect(calls.tierToggle.map((r) => r.url().split('/').pop())).toEqual(['deactivate', 'activate']);
   });
 
   for (const scheme of ['light', 'dark'] as const) {

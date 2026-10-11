@@ -121,7 +121,19 @@ export function useSetupFlow(eventId: string | null) {
     invalidCount,
     save: async (patch) => {
       if (!orgId || !saved) return;
-      const updated = await patchEvent(api, { orgId, eventId: saved.id }, patch);
+      let updated: unknown;
+      try {
+        updated = await patchEvent(api, { orgId, eventId: saved.id }, patch);
+      } catch (err) {
+        // Orders or RSVPs arrived since the page loaded: show the server's reason
+        // on the Tickets step and go back to the saved mode (nothing left to retry).
+        const e = err as { code?: string; message?: string };
+        if (e?.code === 'ADMISSION_MODE_LOCKED') {
+          data.setSaved((row) => (row ? { ...row, admissionLock: e.message || 'The admission mode can no longer change.' } : row));
+          setFields((f) => ({ ...f, admissionMode: saved.admissionMode }));
+        }
+        throw err;
+      }
       const next = mergeSaved(saved, toSaved(updated as OverviewEvent));
       // The server sanitises the description (gotcha 20); compare against what was
       // sent, or the editor's HTML would look unsaved forever.

@@ -198,7 +198,7 @@ describe('Event setup drafts (spec 050-A)', () => {
         .post(`${base()}/${draft.id}/price-tiers`)
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'VIP', price: 20, quantityTotal: 1 });
-      expect([400, 422]).toContain(over.status);
+      expect(over.status).toBe(400);
     });
 
     it('publish refuses a ticketed draft without capacity', async () => {

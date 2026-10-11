@@ -193,21 +193,33 @@ class PriceTierService {
 
   /**
    * Delete a tier nobody has bought or ordered (spec 050 §5.1, Tickets step).
-   * A tier with tickets, order lines, sales or holds is 409 TIER_IN_USE:
-   * deactivate it instead, so receipts and reports keep their tier.
+   * One transaction: lock the tier row first (checkout's reserve is an UPDATE
+   * on the same row, so whichever comes second waits), then recount every
+   * reference after the wait and delete, or refuse with 409 TIER_IN_USE.
+   * References: tickets, order lines of any status (OrderItem's FK is ON
+   * DELETE SET NULL, so a line must never lose its tier), sales and holds on
+   * the row. Application tiers and booths reference ApplicationTier, not
+   * PriceTier; add-on links cascade.
    */
   async deletePriceTier(orgId, eventId, tierId) {
-    const tier = await prisma.priceTier.findFirst({
-      where: { id: tierId, eventId, event: { venue: { organizationId: orgId } } },
-      include: { _count: { select: { tickets: true, orderItems: true } } },
+    await prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw`
+        SELECT pt."id", pt."quantitySold", pt."quantityReserved"
+        FROM "PriceTier" pt
+        JOIN "Event" e ON e."id" = pt."eventId"
+        JOIN "Venue" v ON v."id" = e."venueId"
+        WHERE pt."id" = ${tierId} AND pt."eventId" = ${eventId} AND v."organizationId" = ${orgId}
+        FOR UPDATE OF pt`;
+      if (!row) throw new NotFoundError('Price tier not found');
+      const tickets = await tx.ticket.count({ where: { priceTierId: tierId } });
+      const orderItems = await tx.orderItem.count({ where: { priceTierId: tierId } });
+      if (row.quantitySold > 0 || row.quantityReserved > 0 || tickets > 0 || orderItems > 0) {
+        const error = new ConflictError('This tier has orders, so it can\'t be removed. Turn it off to stop selling it.');
+        error.code = 'TIER_IN_USE';
+        throw error;
+      }
+      await tx.priceTier.delete({ where: { id: tierId } });
     });
-    if (!tier) throw new NotFoundError('Price tier not found');
-    if (tier.quantitySold > 0 || tier.quantityReserved > 0 || tier._count.tickets > 0 || tier._count.orderItems > 0) {
-      const error = new ConflictError('This tier has orders. Turn it off instead of deleting it.');
-      error.code = 'TIER_IN_USE';
-      throw error;
-    }
-    await prisma.priceTier.delete({ where: { id: tierId } });
     logger.info('Price tier deleted', { event: 'price_tier_deleted', eventId, tierId });
   }
 
