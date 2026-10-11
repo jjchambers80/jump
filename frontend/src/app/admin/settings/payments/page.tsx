@@ -116,6 +116,25 @@ export default function PaymentsSettingsPage() {
             </p>
           )}
 
+          {connect.enabled && !connect.account?.chargesEnabled && (
+            <section aria-labelledby="stripe-ready-heading" className={cardClass} data-testid="payments-onboarding-checklist">
+              <h3 id="stripe-ready-heading" className="text-base font-semibold text-gray-900 dark:text-white">Have these ready for Stripe</h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                Jump never collects these details. You enter them only on Stripe&apos;s hosted onboarding page.
+              </p>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700 dark:text-slate-300">
+                <li>Your IRS EIN letter (147C, CP 575 or SS-4). Enter the legal name, EIN and address exactly as shown, including punctuation and capitalisation. An EIN issued less than three months ago may need manual review.</li>
+                <li>A street address, not a PO box.</li>
+                <li>A bank account in the organization&apos;s name. Stripe refuses personal accounts.</li>
+                <li>A representative with government photo ID who can take a selfie and provide the last four digits of their SSN. Their entered name must match the ID.</li>
+                <li>A public website or social media page for the organization.</li>
+              </ul>
+              <p className="mt-3 text-sm text-gray-600 dark:text-slate-400">
+                Stripe usually reviews submissions in 24–72 hours. Payments can start once Stripe enables charges. If the EIN remains unverified for about 30 days, payouts pause but payments can continue.
+              </p>
+            </section>
+          )}
+
           {/* Provider */}
           <div className={cardClass} data-testid="payments-provider-card">
             <div className="flex flex-wrap items-center justify-between gap-3">

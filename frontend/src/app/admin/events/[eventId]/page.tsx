@@ -32,6 +32,7 @@ import {
 } from '@/components/events/EventOverviewSections';
 import { formatCount as n, formatMoney, relativeDays, type EventOverview, type OverviewForm, type OverviewTier } from '@/lib/eventOverview';
 import { AdmissionFlyout, FormSettingsFlyout, ListingFlyout, TierFlyout } from '@/components/events/EventFlyouts';
+import type { PaymentSettingsResponse } from '@/app/admin/settings/payments/types';
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900';
@@ -45,6 +46,7 @@ function EventDetailsContent() {
   const orgId = selectedOrgId || searchParams.get('orgId');
 
   const [overview, setOverview] = useState<EventOverview | null>(null);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,8 +66,12 @@ function EventDetailsContent() {
     if (orgLoading || !orgId || !eventId) return;
     try {
       setError(null);
-      const data = await api.get<EventOverview>(`/organizations/${orgId}/events/${eventId}/overview`);
+      const [data, payments] = await Promise.all([
+        api.get<EventOverview>(`/organizations/${orgId}/events/${eventId}/overview`),
+        api.get<PaymentSettingsResponse>('/admin/settings/payments').catch(() => null),
+      ]);
       setOverview(data);
+      setPaymentSettings(payments);
     } catch (err: any) {
       setOverview(null);
       setError(err?.status === 404 ? 'This event is not in the selected organization.' : err?.message || 'Failed to load the event');
@@ -146,6 +152,12 @@ function EventDetailsContent() {
   };
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
   const ticketed = event.admissionMode === 'TICKETED';
+  const connect = paymentSettings?.connect;
+  const paymentsReady =
+    !connect?.enabled || Boolean(connect.account?.detailsSubmitted && connect.account.chargesEnabled && !connect.account.disconnectedAt);
+  const hasPaidTier = ticketed && event.priceTiers.some((tier) => tier.isActive && Number(tier.price) > 0);
+  const hasPaidForm = overview.applications.forms.some((form) => form.kind === 'PAID');
+  const showPaymentsNotice = !paymentsReady && (hasPaidTier || hasPaidForm);
 
   return (
     <PageFrame>
@@ -170,7 +182,7 @@ function EventDetailsContent() {
               <button
                 type="button"
                 onClick={publish}
-                disabled={publishing}
+                disabled={publishing || (hasPaidTier && !paymentsReady)}
                 className={`inline-flex min-h-9 items-center rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 ${focusRing}`}
               >
                 {publishing ? 'Publishing…' : 'Publish'}
@@ -225,6 +237,13 @@ function EventDetailsContent() {
         </p>
       )}
 
+      {showPaymentsNotice && (
+        <div role="status" data-testid="payments-not-ready" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+          Paid ticket sales and paid application forms stay closed until Stripe enables charges for your organization.{' '}
+          <Link href="/admin/settings/payments" className="font-semibold underline">Set up payments</Link>
+        </div>
+      )}
+
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
           {ticketed ? (
@@ -258,7 +277,7 @@ function EventDetailsContent() {
         <TierFlyout orgId={orgId} event={event} tier={flyout.tier} onClose={() => setFlyout(null)} onSaved={reload} />
       )}
       {flyout?.kind === 'form' && (
-        <FormSettingsFlyout event={event} form={flyout.form} onClose={() => setFlyout(null)} onSaved={reload} />
+        <FormSettingsFlyout event={event} form={flyout.form} paymentsReady={paymentsReady} onClose={() => setFlyout(null)} onSaved={reload} />
       )}
 
       {duplicating && (

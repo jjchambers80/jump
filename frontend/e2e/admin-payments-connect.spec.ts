@@ -208,6 +208,10 @@ test('not started: pill, action leads to the connect choice', async ({ page, bas
   await expect(page.getByTestId('payments-payouts-row')).toContainText('Not connected');
   await expect(page.getByText('coming with Stripe Connect')).toHaveCount(0);
   await expect(page.getByTestId('payments-connect-manage')).toHaveCount(0);
+  const checklist = page.getByTestId('payments-onboarding-checklist');
+  await expect(checklist).toBeVisible();
+  await expect(checklist.getByText(/IRS EIN letter/)).toBeVisible();
+  await expect(checklist.getByText(/Jump never collects these details/)).toBeVisible();
 
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
   expect(a11y.violations).toEqual([]);
@@ -223,6 +227,7 @@ test('active: connected pill, Stripe dashboard opens the organization\'s own das
   await page.goto('/admin/settings/payments');
 
   await expect(page.getByTestId('payments-payouts-pill')).toHaveText('Connected');
+  await expect(page.getByTestId('payments-onboarding-checklist')).toHaveCount(0);
   await expect(page.getByTestId('payments-connect-action')).toHaveCount(0);
   await expect(page.getByTestId('payments-payouts-row')).toContainText('Wells Fargo •••• 3544');
 

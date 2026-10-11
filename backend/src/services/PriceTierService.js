@@ -5,6 +5,7 @@
 import { prisma } from '@jump/db';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import { assertPaymentsReady } from './paymentReadiness.js';
 
 class PriceTierService {
   /**
@@ -41,6 +42,10 @@ class PriceTierService {
       throw new ValidationError(
         `Total tier inventory (${existingTotal + quantityTotal}) would exceed event capacity (${event.capacity})`
       );
+    }
+
+    if (event.status === 'PUBLISHED' && Number(data.price) > 0) {
+      await assertPaymentsReady(orgId);
     }
 
     // Determine next display order
@@ -90,6 +95,7 @@ class PriceTierService {
         eventId,
         event: { venue: { organizationId: orgId } },
       },
+      include: { event: { select: { status: true } } },
     });
 
     if (!tier) {
@@ -105,6 +111,10 @@ class PriceTierService {
         throw new ValidationError('Price must be 0 or greater');
       }
       updateData.price = data.price;
+    }
+
+    if (tier.event.status === 'PUBLISHED' && tier.isActive && Number(tier.price) <= 0 && Number(updateData.price) > 0) {
+      await assertPaymentsReady(orgId);
     }
 
     if (data.quantityTotal !== undefined) {
@@ -171,10 +181,15 @@ class PriceTierService {
         eventId,
         event: { venue: { organizationId: orgId } },
       },
+      include: { event: { select: { status: true } } },
     });
 
     if (!tier) {
       throw new NotFoundError('Price tier not found');
+    }
+
+    if (tier.event.status === 'PUBLISHED' && Number(tier.price) > 0) {
+      await assertPaymentsReady(orgId);
     }
 
     const updated = await prisma.priceTier.update({
