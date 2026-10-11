@@ -74,6 +74,7 @@ import { storefrontFor } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
+import { assertSalesOpen } from './salesOpen.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
@@ -332,6 +333,7 @@ class ApplicationService {
   async submit(eventId, body, files = { profilePhotos: [], answerPhotos: {} }, { requestMeta = { ipHash: null, userAgent: null }, organizationId: standingOrganizationId = null } = {}) {
     const event = eventId ? await applicationFormService.requireEvent(eventId) : null;
     if (event && event.status !== 'PUBLISHED') throw new NotFoundError('Event not found');
+    if (event) assertSalesOpen(event);
     const organization = event?.venue?.organization || (standingOrganizationId ? await applicationFormService.requireOrganization(standingOrganizationId) : null);
     if (!organization) throw new NotFoundError('Organization not found');
     const form = await prisma.applicationForm.findFirst({
