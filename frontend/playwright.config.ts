@@ -17,6 +17,19 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${testPort}
 // fixture moves there and only the Next server's own fetches follow it
 // (INTERNAL_API_URL), so browser mocks on :3002 keep matching.
 const fixturePort = process.env.FIXTURE_API_PORT || new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002').port || '3002';
+// Spec 050: the event setup wizard is a build-time flag. A second dev server
+// builds with it on (own port, own distDir) for the wizard specs only, so
+// every other spec keeps the flag-off pages. Specs read the URL from
+// PLAYWRIGHT_WIZARD_BASE_URL (workers inherit this process's env).
+// Default: the app port + 103, clear of the fixture API (3002) and of any
+// small PLAYWRIGHT_PORT offset. Locally, reuseExistingServer reuses whatever holds
+// that port: make sure it is a flag-on server, or set PLAYWRIGHT_WIZARD_PORT.
+// PLAYWRIGHT_WIZARD=0 skips it (the wizard specs then skip themselves).
+const wizardEnabled = process.env.PLAYWRIGHT_WIZARD !== '0';
+const wizardPort = process.env.PLAYWRIGHT_WIZARD_PORT || String(Number(testPort) + 103);
+const wizardURL = `http://localhost:${wizardPort}`;
+if (wizardEnabled) process.env.PLAYWRIGHT_WIZARD_BASE_URL = wizardURL;
+const internalApi: Record<string, string> = process.env.FIXTURE_API_PORT ? { INTERNAL_API_URL: `http://localhost:${fixturePort}` } : {};
 
 export default defineConfig({
   testDir: './',
@@ -58,8 +71,24 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       env: {
         NEXT_PUBLIC_THEME_EDITOR_ENABLED: 'true',
-        ...(process.env.FIXTURE_API_PORT ? { INTERNAL_API_URL: `http://localhost:${fixturePort}` } : {}),
+        ...internalApi,
       },
     },
+    ...(wizardEnabled
+      ? [
+        {
+          command: `npx next dev -p ${wizardPort}`,
+          url: wizardURL,
+          reuseExistingServer: !process.env.CI,
+          env: {
+            NEXT_PUBLIC_THEME_EDITOR_ENABLED: 'true',
+            NEXT_PUBLIC_EVENT_WIZARD_ENABLED: 'true',
+            // Two dev servers must not share .next (next.config.mjs reads this).
+            NEXT_DIST_DIR: '.next-e2e-wizard',
+            ...internalApi,
+          },
+        },
+      ]
+      : []),
   ],
 });

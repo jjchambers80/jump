@@ -1,0 +1,4 @@
+{
+  "_comment": "Spec 050 §5.1: the wizard step keys an event may store as setupStep, in registry order. Asserted by backend/tests/unit/eventSetupSteps.test.js against EVENT_SETUP_STEPS and by frontend/tests/unit/eventSetupSteps.test.ts against components/event-setup/steps.ts (reserved keys excluded). Change all three together.",
+  "keys": ["name", "venue", "date", "description", "image", "tickets", "collect-more", "vendors", "floor-map", "special-guests", "volunteers", "other-applications", "review", "done"]
+}

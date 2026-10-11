@@ -41,6 +41,10 @@ function oauthFrameProtection(response: NextResponse, pathname: string) {
   if (pathname === '/oauth/consent') {
     response.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
     response.headers.set('X-Frame-Options', 'DENY');
+  } else if (pathname === '/admin/events/preview-frame') {
+    // The wizard's preview (spec 050 §8.3) is framed by the admin only.
+    response.headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   return response;
 }
