@@ -20,6 +20,7 @@ import { zoneOffsetMinutes } from '../utils/eventTime.js';
 import { storefrontFor } from '../utils/storefrontUrl.js';
 import rsvpService, { remainingFor } from './RsvpService.js';
 import emailService from './EmailService.js';
+import eventGuestService, { GUESTS_INCLUDE } from './EventGuestService.js';
 
 /**
  * Safe CSV cell: quotes `,`, `"`, newlines, and protects against formula
@@ -67,6 +68,8 @@ const PUBLIC_EVENT_INCLUDE = {
     include: { priceTiers: { select: { priceTierId: true } } },
     orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
   },
+  // Spec 050 §7.6: the special guest lineup; only visible rows reach the payload.
+  guests: { where: { isVisible: true }, ...GUESTS_INCLUDE },
 };
 
 class EventService {
@@ -1739,6 +1742,7 @@ class EventService {
         };
       }),
       ...(event.addOns && { addOns: hideTicketInventory ? [] : event.addOns.map((a) => addOnService.serializePublic(a)) }),
+      ...(event.guests && { guests: event.guests.filter((g) => g.isVisible).map((g) => eventGuestService.serializePublic(g)) }),
       createdAt: event.createdAt,
       updatedAt: event.updatedAt,
     };

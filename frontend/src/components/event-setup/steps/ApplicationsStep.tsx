@@ -21,10 +21,12 @@ import LoadingFields from '../LoadingFields';
 import AddFormDialog, { type NewFormBody } from './AddFormDialog';
 import FormRow, { formHeadingId } from './FormRow';
 import InlineFormEditor from './InlineFormEditor';
+import GuestLineupEditor from '../lineup/GuestLineupEditor';
 import { primaryButton, secondaryButton } from '../ui';
 
 interface Props {
   stepKey: ApplicationStepKey;
+  orgId: string;
   eventId: string;
   eventName: string;
   forms: SetupForms;
@@ -33,7 +35,7 @@ interface Props {
 
 const LIST_HEADING = 'setup-forms-heading';
 
-export default function ApplicationsStep({ stepKey, eventId, eventName, forms, refreshPreview }: Props) {
+export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, forms, refreshPreview }: Props) {
   const config = APPLICATION_STEPS[stepKey];
   const api = useApplicationsApi(eventId);
   const participants = useParticipantsApi();
@@ -105,15 +107,27 @@ export default function ApplicationsStep({ stepKey, eventId, eventName, forms, r
     expand(form.id);
   };
 
-  if (forms.load.status === 'loading') return <LoadingFields />;
+  // Spec 050-Q: the Special guests step also holds the guest lineup, which needs no form (§14 #2).
+  const lineup = stepKey === 'special-guests' && <GuestLineupEditor orgId={orgId} eventId={eventId} refreshPreview={refreshPreview} />;
+
+  if (forms.load.status === 'loading')
+    return (
+      <>
+        <LoadingFields />
+        {lineup}
+      </>
+    );
   if (forms.load.status === 'error')
     return (
+      <>
       <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
         <p>Couldn&apos;t load this event&apos;s application forms: {forms.load.message}</p>
         <button type="button" onClick={forms.retry} className={`${secondaryButton} mt-3`}>
           Try again
         </button>
       </div>
+      {lineup}
+      </>
     );
 
   const addButton = canEdit && (
@@ -166,6 +180,7 @@ export default function ApplicationsStep({ stepKey, eventId, eventName, forms, r
         </>
       )}
       {adding && <AddFormDialog config={config} eventName={eventName} templates={templates} onCreate={create} onClose={() => setAdding(false)} />}
+      {lineup}
     </div>
   );
 }

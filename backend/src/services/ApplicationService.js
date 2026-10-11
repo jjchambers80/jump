@@ -149,6 +149,7 @@ const DETAIL_INCLUDE = {
   contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true, stripeCustomerAccountId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
+  guests: { select: { id: true } }, // spec 050 §7.6: already in the event's lineup
   form: {
     select: {
       id: true,
@@ -1951,6 +1952,8 @@ class ApplicationService {
   async _transition(tx, applicationId, data, { include = DETAIL_INCLUDE, orderData = {} } = {}) {
     // Spec 050 §6.4: only an APPROVED volunteer holds assigned shifts.
     if (data.status && data.status !== 'APPROVED') await volunteerShiftService.unassignAll(tx, applicationId);
+    // Spec 050-Q: a guest who is no longer approved leaves the public lineup (the organizer may show them again by hand).
+    if (data.status && data.status !== 'APPROVED') await tx.eventGuest.updateMany({ where: { applicationId, isVisible: true }, data: { isVisible: false } });
     const row = await tx.application.update({
       where: { id: applicationId },
       data,
@@ -2711,6 +2714,8 @@ class ApplicationService {
       shifts: form.purpose === 'VOLUNTEER'
         ? formShifts.map((sh) => ({ ...volunteerShiftService.serialize(sh), picked: picks.has(sh.id), assignedToApplication: picks.get(sh.id)?.assigned === true }))
         : [],
+      // Spec 050 §7.6: the lineup row made from this application, if any.
+      lineupGuestId: a.guests?.[0]?.id ?? null,
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,

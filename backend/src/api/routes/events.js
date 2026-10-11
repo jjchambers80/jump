@@ -24,6 +24,7 @@ import { gateByEventParam } from '../../middleware/storefrontGate.js';
 import mapService from '../../services/MapService.js';
 import eventPreviewService from '../../services/EventPreviewService.js';
 import applicationFormService from '../../services/ApplicationFormService.js';
+import eventGuestService from '../../services/EventGuestService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { publicOrganizationIdentity } from './organizations.js';
 
@@ -352,13 +353,15 @@ orgRouter.get('/:eventId/preview-payload', requireAuth, requireOrganizer, requir
   try {
     const { orgId, eventId } = req.params;
     const event = await eventService.getPreviewEvent(orgId, eventId);
-    const [organization, forms] = await Promise.all([
+    const [organization, forms, guests] = await Promise.all([
       publicOrganizationIdentity(orgId),
       applicationFormService.publicForms(eventId, { preview: true }),
+      eventGuestService.list(orgId, eventId),
     ]);
     // Ticket add-ons ride on event.addOns; application add-ons on each form's tiers.
-    // ponytail: gifts (047 D1) and guests (050-Q) join this payload when those cards land.
-    res.json({ event, organization, forms });
+    // event.guests is the public (visible) lineup; `guests` is every row with its flags (050-Q).
+    // ponytail: gifts (047 D1) join this payload when that card lands.
+    res.json({ event, organization, forms, guests });
   } catch (error) {
     next(error);
   }

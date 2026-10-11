@@ -89,6 +89,8 @@ class BuyerDataExportService {
           decisions: { select: { action: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
           // Spec 050 §6.4: volunteer shift picks belong to the application.
           shifts: { select: { assigned: true, shift: { select: { name: true, startsAt: true, endsAt: true } } } },
+          // Spec 050 §6.3: lineup rows copied from the application (name, bio, photo, links).
+          guests: { select: { name: true, role: true, bio: true, links: true, isVisible: true, createdAt: true, image: { select: IMAGE_SELECT } } },
         },
       }),
       prisma.applicantProfile.findMany({
@@ -193,6 +195,7 @@ class BuyerDataExportService {
         })),
         decisions: a.decisions,
         shifts: a.shifts.map((p) => ({ name: p.shift.name, startsAt: p.shift.startsAt, endsAt: p.shift.endsAt, assigned: p.assigned })),
+        lineup: a.guests.map((g) => ({ name: g.name, role: g.role, bio: g.bio, links: g.links, photo: imageUrl(g.image), shownOnEventPage: g.isVisible, createdAt: g.createdAt })),
         ...(includeStaffNotes && { internalNote: a.internalNote, tags: a.tags }),
       })),
       legalAcceptances: acceptances,

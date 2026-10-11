@@ -3,6 +3,7 @@
 // every field a draft can leave unset is nullable here and the view renders a
 // placeholder for it in `preview` mode.
 
+import type { EventGuest } from '@/lib/eventGuests';
 import type { StorefrontLogo } from '@/components/OrganizationHeader';
 import type { ThemeMode } from '@/lib/theme';
 import type { AddOn } from '@/lib/addOns';
@@ -66,6 +67,8 @@ export interface EventPageEvent {
   priceTiers: PriceTier[];
   /** Ticket-scope add-ons (spec 012); offered per cart tier. */
   addOns?: AddOn[];
+  /** Special guest lineup (spec 050-Q): visible rows, in order. */
+  guests?: EventGuest[];
   /** Staff draft preview (spec 050 F): set by the backend after it verified X-Event-Preview. */
   preview?: boolean;
   /** Wizard preview (spec 050 L): the event's forms from preview-payload, DRAFT ones too. */

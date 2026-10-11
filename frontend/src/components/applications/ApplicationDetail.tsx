@@ -8,6 +8,7 @@
 // booth, directory or check-in, and may have no business profile.
 'use client';
 
+import AddToLineup from './AddToLineup';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -341,6 +342,14 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
                     </div>
                   ))}
                 </dl>
+              </div>
+            )}
+
+            {/* Special guest lineup (spec 050 §7.6): an approved guest can be put on the event page */}
+            {!standing && app.status === 'APPROVED' && app.form.purpose === 'SPECIAL_GUEST' && (
+              <div className={card}>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Event lineup</h3>
+                <AddToLineup eventId={eventId} applicationId={app.id} guestId={app.lineupGuestId ?? null} onAdded={(id) => setApp({ ...app, lineupGuestId: id })} />
               </div>
             )}
 
