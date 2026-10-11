@@ -75,6 +75,7 @@ export default function PaymentsSettingsPage() {
   const showError = useCallback((message: string) => setError(message), []);
   const connectActions = useConnectActions(applyConnect, showError);
   const connectAction = CONNECT_ACTION[connect.status];
+  const connectedAccount = connect.enabled && connect.account && connect.status !== 'disconnected' ? connect.account : null;
 
   const handleStatementSaved = (next: PaymentSettings) => {
     setData((prev) => (prev ? { ...prev, settings: next } : prev));
@@ -120,7 +121,7 @@ export default function PaymentsSettingsPage() {
             <section aria-labelledby="stripe-ready-heading" className={cardClass} data-testid="payments-onboarding-checklist">
               <h3 id="stripe-ready-heading" className="text-base font-semibold text-gray-900 dark:text-white">Have these ready for Stripe</h3>
               <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-                Jump never collects these details. You enter them only on Stripe&apos;s hosted onboarding page.
+                Eventimus never collects these details. You enter them only on Stripe&apos;s hosted onboarding page.
               </p>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700 dark:text-slate-300">
                 <li>Your IRS EIN letter (147C, CP 575 or SS-4). Enter the legal name, EIN and address exactly as shown, including punctuation and capitalisation. An EIN issued less than three months ago may need manual review.</li>
@@ -274,21 +275,32 @@ export default function PaymentsSettingsPage() {
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Customer billing statement</h3>
                 <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">How your organization appears on a buyer&apos;s card statement.</p>
               </div>
-              <button
-                ref={statementBtnRef}
-                type="button"
-                className={secondaryBtn}
-                disabled={!settings}
-                onClick={() => {
-                  setSavedMessage('');
-                  setEditingStatement(true);
-                }}
-              >
-                {data?.canEdit ? 'Edit' : 'View'}
-              </button>
+              {!connectedAccount && (
+                <button
+                  ref={statementBtnRef}
+                  type="button"
+                  className={secondaryBtn}
+                  disabled={!settings}
+                  onClick={() => {
+                    setSavedMessage('');
+                    setEditingStatement(true);
+                  }}
+                >
+                  {data?.canEdit ? 'Edit' : 'View'}
+                </button>
+              )}
             </div>
             <div className="mt-3 rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-700">
-              {settings ? (
+              {connectedAccount ? (
+                <p className="text-sm text-gray-600 dark:text-slate-400" data-testid="payments-connected-descriptor-note">
+                  Card and bank statements use the statement descriptor set in your organization&apos;s Stripe account.{' '}
+                  {canEdit && (
+                    <a href={connectedAccount.dashboardUrl} target="_blank" rel="noreferrer" className="font-medium text-accent-600 underline dark:text-accent-300">
+                      Stripe dashboard
+                    </a>
+                  )}
+                </p>
+              ) : settings ? (
                 <>
                   <p data-testid="payments-descriptor" className="font-mono text-sm font-medium text-gray-900 dark:text-white">
                     {settings.descriptor.full ?? 'Not available'}
@@ -368,13 +380,13 @@ export default function PaymentsSettingsPage() {
 
           {!connect.enabled && (
             <p className="text-center text-xs text-gray-500 dark:text-slate-400">
-              Payouts to your bank account are coming with Stripe Connect. Until then, the platform settles with you outside Jump.
+              Payouts to your bank account are coming with Stripe Connect. Until then, the platform settles with you outside Eventimus.
             </p>
           )}
         </section>
       </div>
 
-      {editingStatement && settings && (
+      {editingStatement && settings && !connectedAccount && (
         <StatementDescriptorDialog
           settings={settings}
           canEdit={data?.canEdit === true}

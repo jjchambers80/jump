@@ -243,7 +243,7 @@ describe('statusFor', () => {
 });
 
 describe('startOnboarding', () => {
-  const organization = { id: 'org_1', name: 'Roman Skin Care', email: 'owner@roman.test', phoneCountryCode: '+1', phoneNumber: '(919) 555-0100' };
+  const organization = { id: 'org_1', name: 'Roman Skin Care Collective', email: 'owner@roman.test', phoneCountryCode: '+1', phoneNumber: '(919) 555-0100' };
 
   test('creates an account the organization owns (full dashboard) then mints an Account Link', async () => {
     mockOrgFindUnique.mockResolvedValueOnce(organization);
@@ -263,8 +263,8 @@ describe('startOnboarding', () => {
         stripe_dashboard: { type: 'full' },
         requirement_collection: 'stripe',
       },
-      business_profile: { name: 'Roman Skin Care', support_phone: '+19195550100', url: 'https://tickets.example.com/organizations/org_1' },
-      settings: { payouts: { statement_descriptor: 'ROMAN SKIN CARE' } },
+      business_profile: { name: 'Roman Skin Care Collective', support_phone: '+19195550100', url: 'https://tickets.example.com/organizations/org_1' },
+      settings: { payouts: { statement_descriptor: 'ROMAN SKIN CARE COLLEC' } },
       metadata: { organizationId: 'org_1', mode: 'test' },
     });
     expect(mockCreate).toHaveBeenCalledWith({

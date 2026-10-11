@@ -69,8 +69,14 @@ export function deriveDescriptorSuffix(name, prefix) {
   return /[A-Z]/.test(clean) ? clean : null;
 }
 
+/** Full statement descriptor for an account the organization owns. */
+export function deriveStatementDescriptor(name) {
+  const clean = normalizeDescriptorText(name).slice(0, STATEMENT_DESCRIPTOR_MAX).trim();
+  return /[A-Z]/.test(clean) ? clean : null;
+}
+
 /**
- * `application_fee_amount` for a direct charge (spec 047 §4.3): Jump's
+ * `application_fee_amount` for a direct charge (spec 047 §4.3): Eventimus's
  * platform fee in cents — not processing (Stripe bills that to the
  * organization's account) and not tax (the organization collects and remits
  * it). Null when the numbers cannot be right (missing inputs, a fee that is
@@ -203,12 +209,12 @@ class PaymentSettingsService {
    * charge** when the organization has an active connected account: the
    * result carries `stripeAccount` — the caller passes it as the request
    * option `{ stripeAccount }` on every call for this payment, never as a
-   * param — and `payment_intent_data.application_fee_amount` = Jump's platform
+   * param — and `payment_intent_data.application_fee_amount` = Eventimus's platform
    * fee in cents (omitted when 0). No `transfer_data`: the money never passes
-   * through Jump's balance. On the organization's own account its statement
+   * through Eventimus's balance. On the organization's own account its statement
    * descriptor and capabilities apply, so no suffix is sent and the optional
    * methods are filtered by the connected account's active capabilities
-   * (Jump's allowlist still applies).
+   * (Eventimus's allowlist still applies).
    *
    * @param {{ id: string, name: string, statementDescriptorSuffix?: string|null, enabledPaymentMethods?: string[] }} organization
    * @param {{ fees: { platformFee: number }, lineItems: Array<{ price_data: { unit_amount: number }, quantity: number }> }} [charge]

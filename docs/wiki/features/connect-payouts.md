@@ -5,11 +5,11 @@
 
 ## Overview
 
-Each organization takes payments on **its own Stripe account** (spec 047 option C). It either connects an existing Stripe account ("Connect existing Stripe account", Connect OAuth) or creates a new one it owns with the full Stripe dashboard ("Create a Stripe account", Stripe-hosted onboarding). From then on every charge for that organization — ticket checkout, application card setup and charges — is a **direct charge** created on the organization's account with the request option `{ stripeAccount }`; Jump takes its platform fee as `application_fee_amount`. Money never passes through Jump's balance. The organization is the merchant on the buyer's card statement, owns refunds and disputes in its own Stripe dashboard, pays Stripe's processing fees, is the seller of record for sales tax, and is paid out on its own schedule.
+Each organization takes payments on **its own Stripe account** (spec 047 option C). It either connects an existing Stripe account ("Connect existing Stripe account", Connect OAuth) or creates a new one it owns with the full Stripe dashboard ("Create a Stripe account", Stripe-hosted onboarding). From then on every charge for that organization — ticket checkout, application card setup and charges — is a **direct charge** created on the organization's account with the request option `{ stripeAccount }`; Eventimus takes its platform fee as `application_fee_amount`. Money never passes through Eventimus's balance. The organization is the merchant on the buyer's card statement, owns refunds and disputes in its own Stripe dashboard, pays Stripe's processing fees, is the seller of record for sales tax, and is paid out on its own schedule.
 
-Organizations connect from **Settings › Payments › Payout bank account**, and watch balance and payout history under **Finance › Payouts** (`/admin/finance/payouts`, live from Stripe). Bank changes happen in the organization's Stripe dashboard (`account.dashboardUrl`); Jump stores no bank numbers beyond a `last4` snapshot.
+Organizations connect from **Settings › Payments › Payout bank account**, and watch balance and payout history under **Finance › Payouts** (`/admin/finance/payouts`, live from Stripe). Bank changes happen in the organization's Stripe dashboard (`account.dashboardUrl`); Eventimus stores no bank numbers beyond a `last4` snapshot.
 
-While the flag is off, charges land on the platform account exactly as before (`PaymentTransaction.stripeAccountId = null`). Once `STRIPE_CONNECT_ENABLED=true`, an organization must have a connected account with charges enabled. Until then, publishing an event with a paid tier is refused by the readiness check (422 `EVENT_NOT_READY` with a `PAYMENTS_UNAVAILABLE` blocker), and adding or activating a paid tier on a published event or opening a paid application form is refused with 400 `PAYMENTS_NOT_READY` and a Settings › Payments link. Checkout and application payment attempts remain protected by 409 `PAYMENTS_UNAVAILABLE`. Free ticket events, RSVP events, free application forms and drafts do not require Stripe. Jump never falls back to its platform account for buyer money.
+While the flag is off, charges land on the platform account exactly as before (`PaymentTransaction.stripeAccountId = null`). Once `STRIPE_CONNECT_ENABLED=true`, an organization must have a connected account with charges enabled. Until then, publishing an event with a paid tier is refused by the readiness check (422 `EVENT_NOT_READY` with a `PAYMENTS_UNAVAILABLE` blocker), and adding or activating a paid tier on a published event or opening a paid application form is refused with 400 `PAYMENTS_NOT_READY` and a Settings › Payments link. Checkout and application payment attempts remain protected by 409 `PAYMENTS_UNAVAILABLE`. Free ticket events, RSVP events, free application forms and drafts do not require Stripe. Eventimus never falls back to its platform account for buyer money.
 
 ## Key Files
 
@@ -52,7 +52,7 @@ Buyer pays T on the ORGANIZATION's account (Checkout Session, Stripe-Account: ac
   T = subtotal + platformFee + processingFee + tax − absorbedFees     FeeService (spec 047 D0-B)
   payment_intent_data.application_fee_amount = platformFee cents       (omitted when 0: Stripe requires > 0)
   no transfer_data, no on_behalf_of
-→ Stripe sends platformFee to Jump; Stripe's actual processing fee is debited from the organization
+→ Stripe sends platformFee to Eventimus; Stripe's actual processing fee is debited from the organization
 → The organization keeps the rest, including the tax it collected and must remit
 ```
 
@@ -60,15 +60,15 @@ Buyer pays T on the ORGANIZATION's account (Checkout Session, Stripe-Account: ac
 
 ### Who holds what, who owes what, who is liable
 
-| | Organization (its own Stripe account) | Platform (Jump) |
+| | Organization (its own Stripe account) | Platform (Eventimus) |
 |---|---|---|
 | **Merchant of record / card statement** | Yes — the charge is created on its account with its descriptor | No |
 | **Who holds the funds** | Yes, from the start | Only the application fee |
 | **Platform fee** | Pays it | `application_fee_amount` = platform fee |
-| **Stripe processing fees** | Pays them (`controller.fees.payer = account` on accounts Jump creates; its own pricing on OAuth accounts) | No |
+| **Stripe processing fees** | Pays them (`controller.fees.payer = account` on accounts Eventimus creates; its own pricing on OAuth accounts) | No |
 | **Sales tax** | Seller of record: collects it in the charge and remits it; Stripe Tax uses its registrations | No |
-| **Refunds** | The refund is created on its account; Jump returns its fee pro rata (`refund_application_fee: true`) | Loses the refunded share of its fee |
-| **Chargebacks** | Its dispute, its loss; Jump mirrors it into `Dispute` rows and alerts the organizer | No (`losses.payments = stripe` on accounts Jump creates) |
+| **Refunds** | The refund is created on its account; Eventimus returns its fee pro rata (`refund_application_fee: true`) | Loses the refunded share of its fee |
+| **Chargebacks** | Its dispute, its loss; Eventimus mirrors it into `Dispute` rows and alerts the organizer | No (`losses.payments = stripe` on accounts Eventimus creates) |
 | **KYC, bank, 1099-K** | Stripe collects and files (`requirement_collection: stripe`) | No |
 
 ### Routing rule (`ConnectService.chargeAccountFor`)
@@ -80,7 +80,7 @@ A new charge is created on the organization's account only when all of:
 3. `chargesEnabled` (Stripe `charges_enabled`)
 4. not `disconnectedAt`
 
-With Connect on, a missing row, incomplete onboarding, disconnected account, or `chargesEnabled=false` all produce 409 `PAYMENTS_UNAVAILABLE`; only the flag-off legacy path returns null for a platform charge. `payoutsEnabled` and the `transfers` capability are **not** conditions. Optional payment methods are filtered by the connected account's own `activeCapabilities` (and Jump's allowlist), not the platform's; no statement descriptor suffix is sent (the account's own descriptor applies). Orders never move between accounts after creation: `PaymentTransaction.stripeAccountId` records the account (null = a legacy flag-off platform payment) and every later call for that payment — session reads, refunds, dispute lookups, receipts — uses it. A paused or onboarding account remains the seller for Stripe Tax discovery; a missing or disconnected account makes tax status unavailable rather than reading the platform's registrations.
+With Connect on, a missing row, incomplete onboarding, disconnected account, or `chargesEnabled=false` all produce 409 `PAYMENTS_UNAVAILABLE`; only the flag-off legacy path returns null for a platform charge. `payoutsEnabled` and the `transfers` capability are **not** conditions. Optional payment methods are filtered by the connected account's own `activeCapabilities` (and Eventimus's allowlist), not the platform's; no statement descriptor suffix is sent (the account's own descriptor applies). Orders never move between accounts after creation: `PaymentTransaction.stripeAccountId` records the account (null = a legacy flag-off platform payment) and every later call for that payment — session reads, refunds, dispute lookups, receipts — uses it. A paused or onboarding account remains the seller for Stripe Tax discovery; a missing or disconnected account makes tax status unavailable rather than reading the platform's registrations.
 
 ### Account lifecycle
 
@@ -90,22 +90,22 @@ With Connect on, a missing row, incomplete onboarding, disconnected account, or 
 | `onboarding` | row, `detailsSubmitted` false | `Finish setup` / `Continue setup` |
 | `restricted` | details submitted but charges disabled, `disabledReason`, or `currentlyDue` non-empty | `Action required` / `Update details`, outstanding items listed |
 | `active` | details submitted, charges enabled, nothing disabled | `Connected`, *Stripe dashboard* |
-| `disconnected` | `disconnectedAt` set (the organization removed Jump in its dashboard) | `Disconnected`, connect again |
+| `disconnected` | `disconnectedAt` set (the organization removed Eventimus in its dashboard) | `Disconnected`, connect again |
 
 Row state is written only from Stripe Account objects — `syncAccount` and the Connect webhook both go through `applyAccount`. Unknown accounts are ignored, never created.
 
 ### Onboarding
 
-Settings › Payments shows a preparation checklist until `chargesEnabled`: the organization's IRS EIN letter (legal name, EIN and address entered exactly), a street address, an organization-owned bank account, a representative's government ID/selfie/SSN last four, and a public website or social profile. Jump never collects these details; Stripe's hosted onboarding does. The page explains that Stripe usually reviews in 24–72 hours, sales may start as soon as charges are enabled, and payouts can pause later if EIN verification remains incomplete.
+Settings › Payments shows a preparation checklist until `chargesEnabled`: the organization's IRS EIN letter (legal name, EIN and address entered exactly), a street address, an organization-owned bank account, a representative's government ID/selfie/SSN last four, and a public website or social profile. Eventimus never collects these details; Stripe's hosted onboarding does. The page explains that Stripe usually reviews in 24–72 hours, sales may start as soon as charges are enabled, and payouts can pause later if EIN verification remains incomplete.
 
-- **Create a Stripe account** — `startOnboarding` creates the account once with `controller: { stripe_dashboard: { type: 'full' }, fees: { payer: 'account' }, losses: { payments: 'stripe' }, requirement_collection: 'stripe' }` (no capabilities requested: Stripe requests the defaults for a full-dashboard account), stores the row, then mints a single-use Account Link (`account_onboarding`) every time. Stripe returns to `…/payout-bank-account?onboarding=complete` (page syncs and reports) or `?onboarding=refresh`. Stripe refuses Account Links for an account the organization connected with OAuth; that is a 409 telling the organizer to finish in its own dashboard.
+- **Create a Stripe account** — `startOnboarding` creates the account once with `controller: { stripe_dashboard: { type: 'full' }, fees: { payer: 'account' }, losses: { payments: 'stripe' }, requirement_collection: 'stripe' }` (no capabilities requested: Stripe requests the defaults for a full-dashboard account), stores the row, then mints a single-use Account Link (`account_onboarding`) every time. Its payout statement descriptor is the normalized organization name using Stripe's full 22-character limit; there is no Eventimus prefix or reserved prefix budget, and a name without any letters is omitted. Stripe returns to `…/payout-bank-account?onboarding=complete` (page syncs and reports) or `?onboarding=refresh`. Stripe refuses Account Links for an account the organization connected with OAuth; that is a 409 telling the organizer to finish in its own dashboard.
 - **Connect existing Stripe account** — `oauthUrl` returns `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=…&scope=read_write&redirect_uri=…&state=…` (prefilled business name / email). Stripe redirects back with `code` + `state`; the page posts them to `connect/oauth/complete`, which verifies the `state` names this organization and user, calls `stripe.oauth.token({ grant_type: 'authorization_code', code })`, refuses a test/live mismatch and an account already connected to another organization (409), retrieves the account and stores it (replacing the organization's previous row for this mode).
 - Express accounts (the spec 010 phase 2 model) are no longer created; test-mode ones are dropped, production never had any.
 
 ### Refunds, disputes, erasure
 
 - `createStripeRefund({ stripeAccountId })`: on a direct charge `refunds.create({ payment_intent, amount, refund_application_fee: true }, { idempotencyKey, stripeAccount })` — no `reverse_transfer` (there is no transfer). A null account keeps today's platform call. Spec 031 retained fees are unchanged.
-- Disputes are the organization's in Stripe. Jump still mirrors them (`DisputeService`), resolving a charge-only payload with `charges.retrieve` on the event's account.
+- Disputes are the organization's in Stripe. Eventimus still mirrors them (`DisputeService`), resolving a charge-only payload with `charges.retrieve` on the event's account.
 - `ContactErasureService` deletes the applicant's Customer on `Contact.stripeCustomerAccountId`.
 - The refund audit (`npm run report:refunds -- --stripe`) lists refunds on the platform and on every connected account.
 
@@ -124,30 +124,30 @@ Money events of direct charges arrive **here**, with `event.account`, and go thr
 
 ### Payout settings
 
-`PATCH …/connect/payouts { interval, anchor?, statementDescriptor? }` → `accounts.update(acct, { settings: { payouts: { schedule, statement_descriptor } } })`, then the response is re-applied to the row so the page shows what Stripe stored. Rules: `interval ∈ daily|weekly|monthly`; weekly needs a weekday `anchor`, monthly a day `1–31`, daily forbids one; payout name ≤ 22 chars, `[A-Z0-9 ]`, at least one letter (same normaliser as the card descriptor). Refused (409) before `detailsSubmitted`.
+`PATCH …/connect/payouts { interval, anchor?, statementDescriptor? }` → `accounts.update(acct, { settings: { payouts: { schedule, statement_descriptor } } })`, then the response is re-applied to the row so the page shows what Stripe stored. Rules: `interval ∈ daily|weekly|monthly`; weekly needs a weekday `anchor`, monthly a day `1–31`, daily forbids one; payout name ≤ 22 chars, `[A-Z0-9 ]`, at least one letter (same normaliser as the card descriptor). The onboarding default uses that same full 22-character budget. Refused (409) before `detailsSubmitted`.
 
 ### Finance › Payouts
 
-`GET /admin/finance/payouts` returns `{ connect, activity, canEdit }`. `activity` is read live from Stripe **on the connected account** (`stripe.balance.retrieve` + `stripe.payouts.list({ limit: 25, expand: ['data.destination'] })`, both with `{ stripeAccount }`) and mapped to dollars; it is `null` while the flag is off, without a row, before `detailsSubmitted` or after deauthorization, so the page renders its empty state instead of an error. A Stripe outage degrades to `{ balance: null, payouts: [], error }` — the page keeps the schedule/bank card from the row and shows the message. Nothing is cached or stored: payout history is Stripe's record, Jump's ledger stays `PaymentTransaction` (spec 024). This is a **payouts** list (money leaving Stripe to the organization), not an org-wide transactions list — see AGENTS.md gotcha 17.
+`GET /admin/finance/payouts` returns `{ connect, activity, canEdit }`. `activity` is read live from Stripe **on the connected account** (`stripe.balance.retrieve` + `stripe.payouts.list({ limit: 25, expand: ['data.destination'] })`, both with `{ stripeAccount }`) and mapped to dollars; it is `null` while the flag is off, without a row, before `detailsSubmitted` or after deauthorization, so the page renders its empty state instead of an error. A Stripe outage degrades to `{ balance: null, payouts: [], error }` — the page keeps the schedule/bank card from the row and shows the message. Nothing is cached or stored: payout history is Stripe's record, Eventimus's ledger stays `PaymentTransaction` (spec 024). This is a **payouts** list (money leaving Stripe to the organization), not an org-wide transactions list — see AGENTS.md gotcha 17.
 
 ### Connecting the bank account — how and why
 
-The bank account is never typed into Jump. Stripe collects identity, business and bank details on its own hosted onboarding page, and changes happen in the organization's own Stripe dashboard (its own Stripe login and 2FA). Jump only reads back `external_accounts[].bank_name` / `last4` / `currency`. Consequences:
+The bank account is never typed into Eventimus. Stripe collects identity, business and bank details on its own hosted onboarding page, and changes happen in the organization's own Stripe dashboard (its own Stripe login and 2FA). Eventimus only reads back `external_accounts[].bank_name` / `last4` / `currency`. Consequences:
 
-- **No PCI/NACHA scope for Jump** — routing/account numbers, SSNs and documents never touch Jump's servers, logs or database.
+- **No PCI/NACHA scope for Eventimus** — routing/account numbers, SSNs and documents never touch Eventimus's servers, logs or database.
 - **Stripe owns KYC and bank verification** (`requirement_collection: 'stripe'`).
-- **Stripe owns account takeover risk** on bank changes: a compromised Jump admin session cannot redirect payouts.
-- **Stripe, not Jump, carries negative balances** (`losses.payments = stripe`) on accounts Jump creates; OAuth-connected accounts were never Jump's to begin with.
+- **Stripe owns account takeover risk** on bank changes: a compromised Eventimus admin session cannot redirect payouts.
+- **Stripe, not Eventimus, carries negative balances** (`losses.payments = stripe`) on accounts Eventimus creates; OAuth-connected accounts were never Eventimus's to begin with.
 
 Alternatives considered (2026-09-19, research note in the vault: `jump--research--payout-bank-connection.md`):
 
 | Option | Verdict |
 |---|---|
 | **Stripe Connect Express, hosted onboarding + Express dashboard** (spec 010 phase 2) | Replaced 2026-10-09 by the organization's own full-dashboard account (OAuth or created), spec 047 option C |
-| **Stripe Connect embedded components** (`@stripe/connect-js` + `@stripe/react-connect-js`; `account_onboarding`, `account_management` with `external_account_collection`, `payouts`, `balances`, `payouts_list`) | Recommended follow-up. Same security model (Stripe iframe + Stripe login popup for Express accounts, `disable_stripe_user_authentication` is not allowed for `requirement_collection: stripe`), but the bank form and payout list render *inside* Jump's pages instead of a new tab. Needs `POST …/connect/account-session` (returns `client_secret` for the components the user's role may see), the **platform** publishable key on the frontend, CSP `frame-src`/`script-src` for `connect-js.stripe.com` + `js.stripe.com`, and `Cross-Origin-Opener-Policy` left at `unsafe-none` |
+| **Stripe Connect embedded components** (`@stripe/connect-js` + `@stripe/react-connect-js`; `account_onboarding`, `account_management` with `external_account_collection`, `payouts`, `balances`, `payouts_list`) | Recommended follow-up. Same security model (Stripe iframe + Stripe login popup for Express accounts, `disable_stripe_user_authentication` is not allowed for `requirement_collection: stripe`), but the bank form and payout list render *inside* Eventimus's pages instead of a new tab. Needs `POST …/connect/account-session` (returns `client_secret` for the components the user's role may see), the **platform** publishable key on the frontend, CSP `frame-src`/`script-src` for `connect-js.stripe.com` + `js.stripe.com`, and `Cross-Origin-Opener-Policy` left at `unsafe-none` |
 | **Stripe Financial Connections directly** (`financial_connections.sessions` → bank account token → `external_account`) | Only worth it with Custom accounts; Express onboarding already offers the same bank-login flow |
 | **Plaid Auth → Stripe processor token** | Second vendor, second contract and privacy policy, only adds value for non-Stripe rails. No |
-| **Own bank form (`external_account` with raw routing/account numbers)** | Never: puts bank numbers through Jump, moves verification, fraud and liability onto Jump, and needs Custom accounts (Jump becomes responsible for all KYC updates) |
+| **Own bank form (`external_account` with raw routing/account numbers)** | Never: puts bank numbers through Eventimus, moves verification, fraud and liability onto Eventimus, and needs Custom accounts (Eventimus becomes responsible for all KYC updates) |
 
 ## API Endpoints
 
@@ -181,7 +181,7 @@ Alternatives considered (2026-09-19, research note in the vault: `jump--research
 - **Stripe objects do not cross accounts.** A Customer, PaymentMethod or session created on the platform cannot be used on the organization's account and vice versa; `ensureCustomer` re-creates the Customer on the current account and a card saved before the switch must be collected again.
 - **Connected accounts are per Stripe mode.** Rows for the other mode are invisible; re-connect every organization after go-live.
 - **Two webhook endpoints, two secrets**, and since spec 047 the Connect endpoint needs the money events too (launch checklist).
-- **Every unavailable account state is refused** (409 `PAYMENTS_UNAVAILABLE`, "This organizer can't take payments right now"; the tier reservation is released): not connected, onboarding, disconnected, or charges paused. Once Connect is enabled, Jump never becomes merchant of record as a fallback.
+- **Every unavailable account state is refused** (409 `PAYMENTS_UNAVAILABLE`, "This organizer can't take payments right now"; the tier reservation is released): not connected, onboarding, disconnected, or charges paused. Once Connect is enabled, Eventimus never becomes merchant of record as a fallback.
 - **Account Link URLs are single-use and expire in minutes**; `?onboarding=refresh` exists for the expired case. **OAuth codes are single use and expire in 5 minutes**; redeeming one twice revokes the connection.
 - **Reconciliation**: `SELECT "stripeAccountId", "applicationFee", amount FROM "PaymentTransaction" WHERE "stripeAccountId" IS NOT NULL` against Connect › Collected fees in the Stripe dashboard.
 
