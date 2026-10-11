@@ -49,12 +49,13 @@ describe('Store policies contract', () => {
     expect(res.body.policies.every((p) => p.status === 'NOT_SET')).toBe(true);
   });
 
-  it('offers escaped starter text filled from the store details until one is saved', async () => {
+  it('offers escaped starter text filled from the store details, never the store email, until one is saved', async () => {
     const res = await request(app).get(`${PATH}/CONTACT`).set(...auth(adminToken));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ type: 'CONTACT', title: 'Contact information', starter: true, status: 'NOT_SET' });
     expect(res.body.content).toContain('&lt;b&gt;LLC&lt;/b&gt;');
-    expect(res.body.content).toContain('hello@policies-ct.test');
+    expect(res.body.content).not.toContain('hello@policies-ct.test');
+    expect(res.body.content).toContain('Contact us');
 
     expect((await request(app).get(`${PATH}/NOPE`).set(...auth(adminToken))).status).toBe(404);
   });
