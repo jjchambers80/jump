@@ -46,6 +46,8 @@ async function mockApi(page: Page) {
 test.beforeEach(async ({ page, baseURL }) => {
   await signInAsStaff(page, { id: 'blockers-organizer', email: 'blockers@test.com', role: 'ORGANIZER' }, baseURL!);
   await page.setViewportSize({ width: 390, height: 844 });
+  // Light mode is where admin gray text is closest to the contrast limit.
+  await page.emulateMedia({ colorScheme: 'light' });
   await mockApi(page);
 });
 
