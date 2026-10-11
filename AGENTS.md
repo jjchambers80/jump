@@ -32,6 +32,26 @@ cd frontend && npm run test:unit    # Vitest unit tests (lib/color.ts)
 npm test --workspace=packages/cli   # Jump CLI (spec 043), node --test against a fake API
 ```
 
+## Security review
+
+Use [Strix](https://github.com/usestrix/strix) whenever a security review is requested (a PR, a feature, an endpoint, "is this safe?"). It runs AI pentest agents that execute the code in a Docker sandbox and confirm findings with proofs of concept. Reach for it before reviewing by hand. Static review alone is not enough on auth, payments, tenancy or anything that takes user input.
+
+```bash
+pipx install strix-agent                                # one-time; `strix --update` to upgrade. Needs Docker running
+export STRIX_LLM="anthropic/claude-opus-5-5"            # any LiteLLM model id
+export LLM_API_KEY="..."                                # provider key, never committed
+strix -n -t ./ --scope-mode diff --diff-base origin/main -m quick   # current branch only, headless
+strix -n -t ./ -m standard                              # whole repo
+strix -n -t http://localhost:3000 -t ./ \
+  --instruction "Multi-tenant: try cross-org access via X-Jump-Org and :orgId routes"   # live local backend + source
+strix view                                              # browse findings from past runs
+```
+
+- Targets are local code or **local** dev servers only. Never point Strix at production or any Railway URL: it sends real exploit traffic. Never give it live Stripe keys
+- `-n` exits non-zero when it finds something; `--fail-on high` limits that to high or critical. Add `--max-budget-usd` on deep scans
+- Reports land in `strix_runs/<run-name>/` (gitignored). Before you call a finding real, reproduce it. Fix it with a regression test, then re-run the same scan to confirm
+- Write up the Jump-specific risks in `--instruction`: tenancy (Gotcha 8), webhook trust (Stripe), capacity races, sanitized HTML (Gotcha 20), step-up auth (Gotcha 26)
+
 ## Core Constraints
 
 - **Worktrees**: run `./scripts/bootstrap-worktree.sh` before anything else in a fresh worktree — without `backend/.env` the test suite falls back to `postgres:postgres@localhost:5432` and every contract test fails with `P1000`

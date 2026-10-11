@@ -72,3 +72,6 @@ skills-lock.json
 # npm rename staging dirs left by interrupted installs
 .node_modules-*
 **/.node_modules-*
+
+# Strix security scan output
+strix_runs/
