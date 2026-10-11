@@ -14,7 +14,9 @@ The defaults:
 
 - both roles see every feature;
 - ADMIN has every action;
-- ORGANIZER has only the event-configuration actions marked `organizer: true` in the catalog: `applications.forms` (event application forms, categories, questions, form templates) and `addOns.manage` (add-ons and saved add-ons). Spec 050-E opened them so an organizer can set up a whole event. Money (`applications.money`, `orders.refund`), every `settings.*` action and standing forms (`applications.standingForms`, Content › Forms) stay ADMIN.
+- ORGANIZER has only the event-configuration actions marked `organizer: true` in the catalog: `applications.forms` (event application forms, categories, questions, form templates) and `addOns.manage` (add-ons and saved add-ons). Spec 050-E opened them so an organizer can set up a whole event. Money (`applications.money`, `orders.refund`), every `settings.*` action standing forms (`applications.standingForms`, Content › Forms) and forcing a spot onto an application of another category (`maps.forceAssign`, enforced on `POST /admin/maps/:mapId/booths/:boothId/assign` with `force`) stay ADMIN.
+
+`applications.standingForms` was split out of `applications.forms`. An override of `applications.forms` saved before the split also applies to it until System › Roles saves one of its own (`SPLIT_KEYS` in `PermissionService`).
 
 The frontend stand-in that applies before `GET /admin/permissions` answers grants the same ORGANIZER defaults (`OrgContext.tsx`); keep the two in step.
 

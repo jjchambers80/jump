@@ -49,7 +49,7 @@ No new environment variables. Application add-ons run inside the spec 011 flag:
 ## How It Works
 
 ### Product
-1. ADMIN creates add-ons on **Admin › Event › Edit › Add-ons** (or from a preset: Booth power, Extra vendor badge, Table & chairs, Parking pass, VIP lounge). Fields: name, description, price, `scope` (TICKET / APPLICATION / BOTH), `allTiers` or explicit tier attachments, `quantityTotal` (null = unlimited), `maxPerOrder`, `taxable`.
+1. Staff with `addOns.manage` (ADMIN and ORGANIZER by default, spec 050-E) create add-ons on **Admin › Event › Edit › Add-ons** (or from a preset: Booth power, Extra vendor badge, Table & chairs, Parking pass, VIP lounge). Fields: name, description, price, `scope` (TICKET / APPLICATION / BOTH), `allTiers` or explicit tier attachments, `quantityTotal` (null = unlimited), `maxPerOrder`, `taxable`.
 2. Ticket-tier attachments are picked in the add-on dialog. Application-tier attachments are picked in the **form editor's tier edit row** ("Add-ons offered"): `allTiers` add-ons are shown as included on every option; restricted ones are checkboxes saved with `PUT …/application-forms/:formId/tiers/:tierId/add-ons`.
 3. Delete only while nothing has been sold (409 otherwise — deactivate). Event duplicate copies add-ons and remaps both kinds of attachment.
 
@@ -101,16 +101,16 @@ The event's Sales editor (`/admin/events/:id/edit/sales` › Add-ons) has one co
 |--------|------|------|-------------|
 | GET | `/organizations/:orgId/events/:eventId/add-ons` | member | Admin list with attachments and sales counters |
 | GET | `…/add-ons/presets` | member | Static presets (kept for the current editor; the picker uses `suggestions`) |
-| POST | `…/add-ons/attach` | ADMIN | Put a saved add-on on the event: `{ productId }` or `{ savedAddOn: { name, description?, defaultPrice, scope?, taxable? } }` plus offering fields → 201 `{ addOn, savedAddOn, createdSavedAddOn }` |
+| POST | `…/add-ons/attach` | `addOns.manage` (ADMIN, ORGANIZER) | Put a saved add-on on the event: `{ productId }` or `{ savedAddOn: { name, description?, defaultPrice, scope?, taxable? } }` plus offering fields → 201 `{ addOn, savedAddOn, createdSavedAddOn }` |
 | GET | `/organizations/:orgId/saved-add-ons` | member | `?q=` (case-insensitive), `?scope=` (TICKET / APPLICATION also return BOTH), `?includeArchived=1`, `?eventId=` (adds `onEvent`) → `{ savedAddOns, suggestions, exactMatch?, canCreate? }` |
 | GET | `/organizations/:orgId/saved-add-ons/:id` | member | One saved add-on with its `offerings[]` (event, price, sold) |
-| POST / PATCH | `/organizations/:orgId/saved-add-ons[/:id]` | ADMIN | Create (409 `SAVED_ADD_ON_EXISTS`) / update name, description, defaultPrice, scope, taxable |
-| POST | `/organizations/:orgId/saved-add-ons/:id/archive`, `/unarchive` | ADMIN | |
-| POST / PATCH / DELETE | `…/add-ons[/:addOnId]` | ADMIN | Create / update (fields + `priceTierIds` / `applicationTierIds`) / delete (409 once sold) |
-| POST | `…/add-ons/:addOnId/activate`, `/deactivate`, `…/add-ons/reorder` | ADMIN | |
+| POST / PATCH | `/organizations/:orgId/saved-add-ons[/:id]` | `addOns.manage` (ADMIN, ORGANIZER) | Create (409 `SAVED_ADD_ON_EXISTS`) / update name, description, defaultPrice, scope, taxable |
+| POST | `/organizations/:orgId/saved-add-ons/:id/archive`, `/unarchive` | `addOns.manage` (ADMIN, ORGANIZER) | |
+| POST / PATCH / DELETE | `…/add-ons[/:addOnId]` | `addOns.manage` (ADMIN, ORGANIZER) | Create / update (fields + `priceTierIds` / `applicationTierIds`) / delete (409 once sold) |
+| POST | `…/add-ons/:addOnId/activate`, `/deactivate`, `…/add-ons/reorder` | `addOns.manage` (ADMIN, ORGANIZER) | |
 | GET | `…/add-ons/sales` | member | Sales report (phase 3) |
 | GET | `…/add-ons/purchasers.csv` | member | One row per line (phase 3) |
-| PUT | `/admin/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons` | ADMIN | Restricted add-ons offered on a tier |
+| PUT | `/admin/events/:eventId/application-forms/:formId/tiers/:tierId/add-ons` | `applications.forms` (ADMIN, ORGANIZER) | Restricted add-ons offered on a tier |
 | PATCH | `/admin/events/:eventId/applications/:id/add-ons` | ORGANIZER+ | Replace lines before payment |
 | POST | `/admin/orders/:orderId/add-ons/:orderAddOnId/refund` | ADMIN | Refund one line |
 | POST | `/orders` | none | Body gains `addOns: [{ addOnId, quantity }]` |

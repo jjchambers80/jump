@@ -51,7 +51,12 @@ export const FEATURES = [
       { key: 'customers.privacy', label: "Export, erase or anonymize a customer's data" },
     ],
   },
-  { key: 'maps', label: 'Maps', adminPaths: ['/admin/maps'], actions: [] },
+  {
+    key: 'maps',
+    label: 'Maps',
+    adminPaths: ['/admin/maps'],
+    actions: [{ key: 'maps.forceAssign', label: 'Assign a spot to an application from a different category' }],
+  },
   { key: 'analytics', label: 'Analytics', adminPaths: ['/admin/analytics'], actions: [] },
   { key: 'finance', label: 'Finance', adminPaths: ['/admin/finance'], actions: [] },
   {

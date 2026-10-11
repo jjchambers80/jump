@@ -55,6 +55,24 @@ describe('overrides', () => {
     expect((await permissionService.effective('ADMIN')).granted.has('settings.users')).toBe(true);
   });
 
+  test('an applications.forms override saved before the split carries to applications.standingForms (050-E)', async () => {
+    stored({ ORGANIZER: { 'applications.forms': true } });
+    expect((await permissionService.effective('ORGANIZER')).granted.has('applications.standingForms')).toBe(true);
+    stored({ ADMIN: { 'applications.forms': false } });
+    const admin = (await permissionService.effective('ADMIN')).granted;
+    expect(admin.has('applications.forms')).toBe(false);
+    expect(admin.has('applications.standingForms')).toBe(false);
+  });
+
+  test('a saved applications.standingForms value wins over the carried one', async () => {
+    stored({ ORGANIZER: { 'applications.forms': true, 'applications.standingForms': false } });
+    const organizer = (await permissionService.effective('ORGANIZER')).granted;
+    expect(organizer.has('applications.forms')).toBe(true);
+    expect(organizer.has('applications.standingForms')).toBe(false);
+    stored({ ORGANIZER: { 'applications.forms': false } });
+    expect((await permissionService.effective('ORGANIZER')).granted.has('applications.standingForms')).toBe(false);
+  });
+
   test('a platform-disabled feature is gone for every role, SYSTEM_ADMIN included', async () => {
     stored({ disabled: ['maps', 'events'] });
     for (const role of ['ADMIN', 'ORGANIZER', 'SYSTEM_ADMIN']) {
