@@ -99,7 +99,7 @@ export function EventMediaCard({
               disabled={uploading}
               aria-label="Remove image"
               title="Remove image"
-              className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white/95 text-gray-700 shadow-sm transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800/95 dark:text-slate-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100 motion-reduce:transition-none ${focusRing}`}
+              className={`absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-md border border-gray-200 bg-white/95 text-gray-700 shadow-sm transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800/95 dark:text-slate-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100 motion-reduce:transition-none ${focusRing}`}
             >
               <Trash2 className="h-4 w-4" aria-hidden />
             </button>
@@ -129,7 +129,7 @@ export function EventMediaCard({
               <button
                 type="button"
                 onClick={browse}
-                className={`inline-flex min-h-9 items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 ${focusRing}`}
+                className={`inline-flex min-h-11 items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 ${focusRing}`}
               >
                 Upload new
               </button>
