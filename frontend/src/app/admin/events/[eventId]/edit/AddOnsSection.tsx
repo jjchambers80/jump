@@ -9,12 +9,13 @@
 // `SavedAddOnPicker`; "Create '<name>'" opens AddOnDialog, which saves a new
 // saved add-on and its offering here in one call. Price stays per event.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import type { AdminAddOn } from '@/lib/addOns';
 import SavedAddOnPicker from '@/components/events/SavedAddOnPicker';
 import { useCan } from '@/components/OrgContext';
-import AddOnDialog, { type DraftAddOn, type TierOption } from './AddOnDialog';
+import AddOnDialog from './AddOnDialog';
+import { draftBody, emptyDraft, toDraft, type DraftAddOn, type TierOption } from './addOnDraft';
 import AddOnRow from './AddOnRow';
 
 interface AddOnsSectionProps {
@@ -25,28 +26,12 @@ interface AddOnsSectionProps {
   taxInclusive: boolean;
   /** Section number on the edit page's run sheet (decorative). */
   step?: number;
-  /** Called after every successful change (create, attach, edit, reorder, …). */
-  onChange?: () => void;
+  /** Called with the reloaded list after every successful change (create, attach, edit, reorder, …). */
+  onChange?: (addOns: AdminAddOn[]) => void;
 }
 
-const emptyDraft = (name = ''): DraftAddOn => ({
-  name, description: '', price: '', scope: 'BOTH', allTiers: true, priceTierIds: [], quantityTotal: '', maxPerOrder: '', taxable: true,
-});
-
-const toDraft = (a: AdminAddOn): DraftAddOn => ({
-  id: a.id,
-  name: a.name,
-  description: a.description ?? '',
-  price: String(a.price),
-  scope: a.scope,
-  allTiers: a.allTiers,
-  priceTierIds: a.priceTierIds ?? [],
-  quantityTotal: a.quantityTotal == null ? '' : String(a.quantityTotal),
-  maxPerOrder: a.maxPerOrder == null ? '' : String(a.maxPerOrder),
-  taxable: a.taxable,
-});
-
-const describeError = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+// services/api.ts throws plain `{ status, message }` objects, not Errors.
+const describeError = (err: unknown, fallback: string) => (err as { message?: string } | null)?.message || fallback;
 
 export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive, step, onChange }: AddOnsSectionProps) {
   const canEdit = useCan('addOns.manage');
@@ -63,8 +48,10 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
       const data = await api.get<{ addOns: AdminAddOn[] }>(base);
       setAddOns(data.addOns);
       setLoadError(null);
+      return data.addOns;
     } catch (err) {
       setLoadError(describeError(err, 'Could not load add-ons'));
+      return null;
     }
   }, [base]);
 
@@ -72,9 +59,12 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
     load();
   }, [load]);
 
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  /** After any successful change: reload, drop a stale row error, tell the host. */
   const changed = async () => {
-    await load();
-    onChange?.();
+    setError(null);
+    const list = await load();
+    if (list) onChange?.(list);
   };
 
   /** One row action: busy while it runs, the message on failure. */
@@ -84,8 +74,10 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
     try {
       await call();
       await changed();
+      return true;
     } catch (err) {
       setError(describeError(err, fallback));
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -108,7 +100,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
             </span>
           )}
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Add-ons</h2>
+            <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold tracking-tight text-gray-900 focus:outline-none dark:text-white">Add-ons</h2>
             <p className="text-xs text-gray-600 dark:text-slate-400">
               Extras sold with tickets or applications — parking, power, badges. Saved immediately.
             </p>
@@ -160,7 +152,11 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
               onMove={(dir) => move(index, dir)}
               onEdit={() => setDraft(toDraft(a))}
               onToggleActive={() => run(a.id, 'Could not update add-on', () => api.post(`${base}/${a.id}/${a.isActive ? 'deactivate' : 'activate'}`, {}))}
-              onRemove={() => confirm(`Delete "${a.name}"?`) && run(a.id, 'Could not delete add-on', () => api.delete(`${base}/${a.id}`))}
+              onRemove={async () => {
+                if (!confirm(`Delete "${a.name}"?`)) return;
+                // Its row (and this button) is gone: focus the list heading.
+                if (await run(a.id, 'Could not delete add-on', () => api.delete(`${base}/${a.id}`))) headingRef.current?.focus();
+              }}
             />
           ))}
         </ul>
@@ -174,17 +170,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
           taxInclusive={taxInclusive}
           onCancel={() => setDraft(null)}
           onSave={async (d) => {
-            const body = {
-              name: d.name.trim(),
-              description: d.description.trim() || null,
-              price: Number(d.price),
-              scope: d.scope,
-              allTiers: d.allTiers,
-              priceTierIds: d.allTiers ? [] : d.priceTierIds,
-              quantityTotal: d.quantityTotal.trim() === '' ? null : Number(d.quantityTotal),
-              maxPerOrder: d.maxPerOrder.trim() === '' ? null : Number(d.maxPerOrder),
-              taxable: d.taxable,
-            };
+            const body = draftBody(d);
             if (d.id) await api.patch(`${base}/${d.id}`, body);
             else await api.post(base, body);
             setDraft(null);

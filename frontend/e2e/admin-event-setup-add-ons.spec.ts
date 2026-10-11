@@ -51,8 +51,8 @@ const SAVED = [
   { id: 'sa-parking', name: 'Parking pass', description: null, defaultPrice: 15, scope: 'TICKET', taxable: true, isArchived: false, eventCount: 3, onEvent: null },
 ];
 
-async function mockApi(page: Page, event = adminEvent()) {
-  const state = { addOns: [] as Record<string, unknown>[], attach: [] as unknown[], create: [] as unknown[], patch: [] as unknown[], previews: 0 };
+async function mockApi(page: Page, event = adminEvent(), opts: { addOns?: Record<string, unknown>[]; failLoads?: boolean } = {}) {
+  const state = { addOns: [...(opts.addOns ?? [])], attach: [] as unknown[], create: [] as unknown[], patch: [] as unknown[], previews: 0, failLoads: !!opts.failLoads };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
     route.fulfill(json([{ id: ORG_ID, name: 'Collect Org', slug: 'collect-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' }]))
@@ -62,10 +62,14 @@ async function mockApi(page: Page, event = adminEvent()) {
     route.fulfill(json({ granted: ['events', 'venues', 'dashboard', 'addOns.manage'], hiddenPaths: [] }))
   );
   await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([{ ...event.venue, city: 'Raleigh', state: 'NC' }])));
-  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) => route.fulfill(json({ event, applications: { forms: [] } })));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
+    route.fulfill(json({ event, addOns: { addOns: state.addOns, totals: { sold: 0, reserved: 0, revenue: 0 } }, applications: { forms: [] } }))
+  );
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) => {
     state.previews += 1;
-    return route.fulfill(json({ event, organization: { id: ORG_ID, name: 'Collect Org' }, forms: [] }));
+    // Like the public payload: the event's active ticket add-ons.
+    const addOns = state.addOns.filter((a) => a.isActive && a.scope !== 'APPLICATION');
+    return route.fulfill(json({ event: { ...event, addOns }, organization: { id: ORG_ID, name: 'Collect Org' }, forms: [] }));
   });
   await page.route(`${API}/organizations/${ORG_ID}/saved-add-ons?**`, (route) => {
     const q = (new URL(route.request().url()).searchParams.get('q') ?? '').toLowerCase();
@@ -82,6 +86,8 @@ async function mockApi(page: Page, event = adminEvent()) {
       state.addOns.push(row);
       return route.fulfill(json(row, 201));
     }
+    // Fails until the test flips it (dev StrictMode loads twice on mount).
+    if (state.failLoads) return route.fulfill(json({ message: 'Database unavailable' }, 500));
     return route.fulfill(json({ addOns: state.addOns }));
   });
   await page.route(`${base}/attach`, (route) => {
@@ -93,8 +99,9 @@ async function mockApi(page: Page, event = adminEvent()) {
   await page.route(`${base}/addon-parking`, (route) => {
     const body = route.request().postDataJSON();
     state.patch.push(body);
-    Object.assign(state.addOns[0], body);
-    return route.fulfill(json(state.addOns[0]));
+    const row = state.addOns.find((a) => a.id === 'addon-parking')!;
+    Object.assign(row, body);
+    return route.fulfill(json(row));
   });
   return state;
 }
@@ -106,6 +113,7 @@ test.use({ baseURL: WIZARD_URL });
 const STAFF = { id: 'collect-organizer', email: 'collect-organizer@test.com', role: 'ORGANIZER' as const };
 const STEP_URL = `/admin/events/${EVENT_ID}/setup?step=collect-more`;
 const main = (page: Page) => page.locator('main');
+const frame = (page: Page) => page.frameLocator('iframe[title="Event page preview"]');
 const heading = (page: Page) => main(page).getByRole('heading', { level: 1, name: 'Collect more' });
 const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
@@ -131,7 +139,7 @@ test.beforeEach(async ({ page, baseURL }) => {
 /** Add the saved Parking pass, then attach it to the VIP tier only. */
 async function addParkingForVip(page: Page, state: Awaited<ReturnType<typeof mockApi>>) {
   const pane = main(page);
-  await expect(pane.getByText('No add-ons yet.')).toBeVisible(COLD);
+  await expect(pane.getByRole('combobox', { name: 'Add an add-on' })).toBeVisible(COLD);
   const picker = pane.getByRole('combobox', { name: 'Add an add-on' });
   await picker.click();
   await page.getByRole('listbox', { name: 'Saved add-ons' }).getByRole('option', { name: /Parking pass/ }).click();
@@ -165,10 +173,16 @@ test.describe('desktop', () => {
     await expect(heading(page)).toBeVisible(COLD);
     await expect(page.getByText(/Step 7 of 12 — Collect more/)).toBeVisible();
     await expect.poll(() => state.previews).toBeGreaterThan(0);
+    // Nothing yet: the step offers Skip, the preview holds the #add-ons slot.
+    await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible();
+    await expect(frame(page).locator('#add-ons')).toContainText('Add-ons you add show here');
     const before = state.previews;
     await addParkingForVip(page, state);
     // Two saves (attach, edit), each bumps the preview revision.
     await expect.poll(() => state.previews).toBeGreaterThanOrEqual(before + 2);
+    await expect(frame(page).locator('#add-ons')).toContainText('Parking pass');
+    // With an add-on the step is complete: no Skip.
+    await expect(page.getByRole('button', { name: 'Skip for now' })).toHaveCount(0);
   });
 
   test('creates a saved add-on in place; Escape closes a dialog and returns focus', async ({ page }) => {
@@ -195,6 +209,38 @@ test.describe('desktop', () => {
     await expect(edit).toBeFocused();
   });
 
+  test('a failed load says what failed and Try again recovers', async ({ page }) => {
+    const state = await mockApi(page, adminEvent(), { failLoads: true, addOns: [addOn()] });
+    await page.goto(STEP_URL);
+    const alert = main(page).getByRole('alert');
+    await expect(alert).toContainText('Database unavailable', COLD);
+    state.failLoads = false;
+    await alert.getByRole('button', { name: 'Try again' }).click();
+    await expect(main(page).getByTestId('admin-add-on-addon-parking')).toBeVisible();
+    await expect(main(page).getByRole('alert')).toHaveCount(0);
+  });
+
+  test('dialog errors are tied to their field, and Delete returns focus to the list heading', async ({ page }) => {
+    await mockApi(page, adminEvent(), { addOns: [addOn()] });
+    await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons/addon-parking`, (route) => route.fulfill(json({}, 200)));
+    await page.goto(STEP_URL);
+    const row = main(page).getByTestId('admin-add-on-addon-parking');
+    await row.getByRole('button', { name: 'Edit' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Edit add-on' });
+    await dialog.getByLabel('Total available').fill('2.5');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    const quantity = dialog.getByLabel('Total available');
+    await expect(quantity).toBeFocused();
+    await expect(quantity).toHaveAttribute('aria-invalid', 'true');
+    await expect(quantity).toHaveAttribute('aria-describedby', 'add-on-dialog-error');
+    await expect(dialog.locator('#add-on-dialog-error')).toHaveText('Total available must be a whole number, 0 or more');
+    await page.keyboard.press('Escape');
+
+    page.once('dialog', (d) => d.accept());
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeFocused();
+  });
+
   test('RSVP events skip the step while donations are not eligible', async ({ page }) => {
     await mockApi(page, adminEvent({ admissionMode: 'RSVP', priceTiers: [], setupStep: 'tickets' }));
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=tickets`);
@@ -208,15 +254,23 @@ test.describe('desktop', () => {
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('390 × 844: add and attach, no horizontal scroll, axe clean', async ({ page }) => {
-    const state = await mockApi(page);
+  test('390 × 844: add and attach, an inactive row, no horizontal scroll at 390 or 320, axe clean', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const lanyard = addOn({ id: 'addon-lanyard', name: 'Lanyard', price: 5, isActive: false, displayOrder: 1 });
+    const state = await mockApi(page, adminEvent(), { addOns: [lanyard] });
     await page.goto(STEP_URL);
     await expect(heading(page)).toBeVisible(COLD);
+    await expect(main(page).getByTestId('admin-add-on-addon-lanyard')).toContainText('Inactive');
     await addParkingForVip(page, state);
-    const overflow = await page.evaluate(() =>
-      [document.documentElement, document.querySelector('main')].filter((el): el is HTMLElement => !!el && el.scrollWidth > el.clientWidth).length
-    );
-    expect(overflow).toBe(0);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      const overflow = await page.evaluate(() => {
+        const el = document.querySelector('main')!;
+        return el.scrollWidth - el.clientWidth;
+      });
+      expect(overflow, `<main> scrolls sideways at ${width}`).toBeLessThanOrEqual(0);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     expect(await serious(page)).toEqual([]);
     // The dialog open, too.
     await main(page).getByTestId('admin-add-on-addon-parking').getByRole('button', { name: 'Edit' }).click();

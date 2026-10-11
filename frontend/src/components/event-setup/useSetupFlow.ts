@@ -173,6 +173,7 @@ export function useSetupFlow(eventId: string | null) {
     saveState, unsaved, preview, initialised, urlFor, router,
     /** After a dialog or upload saved on its own: the frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),
+    setAddOnCount: data.setAddOnCount,
   };
 }
 

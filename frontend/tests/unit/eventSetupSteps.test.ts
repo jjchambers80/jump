@@ -139,6 +139,12 @@ describe('state', () => {
     expect(stepState(stepByKey('description')!, 'tickets', c)).toBe('skipped');
     expect(stepState(stepByKey('vendors')!, 'tickets', c)).toBe('todo');
   });
+  test('Collect more is complete with an add-on, skipped without one once passed', () => {
+    const passed = (addOnCount?: number) => ctx({ saved: row({ setupStep: 'vendors', addOnCount }) });
+    expect(stepState(stepByKey('collect-more')!, 'vendors', passed(2))).toBe('complete');
+    expect(stepState(stepByKey('collect-more')!, 'vendors', passed(0))).toBe('skipped');
+    expect(stepState(stepByKey('collect-more')!, 'vendors', passed())).toBe('skipped');
+  });
 });
 
 describe('preview messages', () => {

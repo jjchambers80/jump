@@ -8,7 +8,7 @@ import React from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { formatPrice } from '@/lib/fees';
 import { addOnAllInPrice, type AdminAddOn } from '@/lib/addOns';
-import type { TierOption } from './AddOnDialog';
+import type { TierOption } from './addOnDraft';
 
 const SCOPE_LABEL: Record<AdminAddOn['scope'], string> = { TICKET: 'Tickets', APPLICATION: 'Applications', BOTH: 'Tickets & applications' };
 // 44 px targets below sm (WCAG 2.5.5), compact on desktop.
@@ -41,11 +41,12 @@ export default function AddOnRow({ addOn: a, priceTiers, taxRate, taxInclusive, 
   return (
     <li
       data-testid={`admin-add-on-${a.id}`}
-      className={`flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-start sm:justify-between ${a.isActive ? '' : 'opacity-60'}`}
+      // Inactive: a quieter surface and the "Inactive" label, never opacity (text keeps 4.5:1).
+      className={`flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between ${a.isActive ? 'border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800' : 'border-dashed border-gray-300 bg-gray-50 dark:border-slate-600 dark:bg-slate-900'}`}
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-medium text-gray-900 dark:text-white">{a.name}</p>
+          <p className={`font-medium ${a.isActive ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-slate-300'}`}>{a.name}</p>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-slate-700 dark:text-slate-300">{SCOPE_LABEL[a.scope]}</span>
           {!a.isActive && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-300">Inactive</span>}
           {!a.taxable && <span className="text-xs text-gray-600 dark:text-slate-400">untaxed</span>}

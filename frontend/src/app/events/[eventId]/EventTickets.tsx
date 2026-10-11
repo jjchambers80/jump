@@ -109,7 +109,15 @@ export default function EventTickets({ event, state, cart, preview, checkoutCanc
       )}
 
       {!isPastEvent && !isSoldOut && (
-        <EventAddOns offered={cart.offered} quantities={cart.addOnQuantities} onChange={onAddOnChange} taxRate={taxRate} taxInclusive={taxInclusive} />
+        <EventAddOns
+          // Preview: every active ticket add-on, not only the cart's (050-K).
+          offered={preview ? event.addOns ?? [] : cart.offered}
+          quantities={cart.addOnQuantities}
+          onChange={onAddOnChange}
+          taxRate={taxRate}
+          taxInclusive={taxInclusive}
+          preview={preview}
+        />
       )}
     </>
   );

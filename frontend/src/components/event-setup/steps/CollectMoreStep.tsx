@@ -3,7 +3,8 @@
 // Step 7, Collect more (spec 050 §5.1, card 050-K). Add-ons for a TICKETED
 // event through the shared AddOnsSection: saved add-on picker (create in
 // place), price, quantity, tiers, reorder, activate. Each add-on saves on its
-// own dialog (§11.5) and `onSaved` bumps the preview revision.
+// own dialog (§11.5); `onSaved` gets the new add-on count, which marks the
+// step complete, and bumps the preview revision.
 //
 // Tiers and the tax rate are read fresh on entry: the Tickets step may have
 // just changed them.
@@ -18,7 +19,7 @@ interface Props {
   orgId: string;
   eventId: string;
   ticketed: boolean;
-  onSaved: () => void;
+  onSaved: (addOnCount: number) => void;
 }
 
 type Pricing = { tiers: { id: string; name: string }[]; taxRate: number; taxInclusive: boolean };
@@ -70,13 +71,13 @@ export default function CollectMoreStep({ orgId, eventId, ticketed, onSaved }: P
             priceTiers={pricing.tiers}
             taxRate={pricing.taxRate}
             taxInclusive={pricing.taxInclusive}
-            onChange={onSaved}
+            onChange={(list) => onSaved(list.length)}
           />
         </section>
       )}
       {/*
         Spec 047 D1 mount point (plan-d1 §0.1): D1-G renders
-        <EventGiftSettings orgId={orgId} eventId={eventId} onSaved={onSaved} />
+        <EventGiftSettings orgId={orgId} eventId={eventId} onSaved={…} />
         here when useDonationsEligible() is true. Its gift fields ride on the
         event PATCH. On RSVP events this step shows for gifts only.
       */}

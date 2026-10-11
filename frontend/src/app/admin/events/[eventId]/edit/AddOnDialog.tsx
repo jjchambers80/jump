@@ -8,28 +8,11 @@
 import React, { FormEvent, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { formatPrice } from '@/lib/fees';
-import { addOnAllInPrice, type AdminAddOn } from '@/lib/addOns';
+import { addOnAllInPrice } from '@/lib/addOns';
+import type { AddOnScope, DraftAddOn, TierOption } from './addOnDraft';
 import { useDialog } from '@/lib/useDialog';
 
-export type AddOnScope = AdminAddOn['scope'];
-export interface TierOption {
-  id: string;
-  name: string;
-}
-
-export interface DraftAddOn {
-  id?: string;
-  name: string;
-  description: string;
-  price: string;
-  scope: AddOnScope;
-  allTiers: boolean;
-  priceTierIds: string[];
-  quantityTotal: string;
-  maxPerOrder: string;
-  taxable: boolean;
-}
-
+const ERROR_ID = 'add-on-dialog-error';
 const field = 'mt-1 block w-full min-h-11 sm:min-h-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const label = 'block text-sm font-medium text-gray-700 dark:text-slate-300';
 const choice = 'flex min-h-11 items-center gap-2 text-sm text-gray-700 dark:text-slate-300 sm:min-h-0';
@@ -46,7 +29,17 @@ interface Props {
 export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxInclusive, onSave, onCancel }: Props) {
   const [d, setD] = useState<DraftAddOn>(initial);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // `field`: the input the message is about (aria-invalid + aria-describedby, focused).
+  const [error, setErrorState] = useState<{ message: string; field?: string } | null>(null);
+  const setError = (message: string | null, field?: string) => {
+    setErrorState(message ? { message, field } : null);
+    if (field) document.getElementById(field)?.focus();
+  };
+  /** ARIA for one input: its hint, plus the error when it is about this input. */
+  const aria = (id: string, hint?: string) => {
+    const invalid = error?.field === id;
+    return { 'aria-invalid': invalid || undefined, 'aria-describedby': [hint, invalid && ERROR_ID].filter(Boolean).join(' ') || undefined };
+  };
   const panelRef = useDialog<HTMLFormElement>(true, onCancel);
   const set = <K extends keyof DraftAddOn>(key: K, value: DraftAddOn[K]) => setD((current) => ({ ...current, [key]: value }));
 
@@ -58,8 +51,11 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!d.name.trim()) return setError('Name is required');
-    if (!Number.isFinite(price) || price < 0) return setError('Price must be 0 or more');
+    const whole = (v: string, min: number, max = Infinity) => v.trim() === '' || (Number.isInteger(Number(v)) && Number(v) >= min && Number(v) <= max);
+    if (!d.name.trim()) return setError('Name is required', 'add-on-name');
+    if (d.price.trim() === '' || !Number.isFinite(price) || price < 0) return setError('Price must be 0 or more', 'add-on-price');
+    if (!whole(d.quantityTotal, 0)) return setError('Total available must be a whole number, 0 or more', 'add-on-quantity');
+    if (!whole(d.maxPerOrder, 1, 100)) return setError('Max per order must be a whole number from 1 to 100', 'add-on-max');
     if (!d.allTiers && d.scope !== 'APPLICATION' && d.priceTierIds.length === 0) {
       return setError('Pick at least one ticket tier, or offer it on all tiers');
     }
@@ -68,7 +64,7 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
     try {
       await onSave(d);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : 'Could not save add-on');
+      setError((err as { message?: string } | null)?.message || 'Could not save add-on');
     } finally {
       setSaving(false);
     }
@@ -80,6 +76,7 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
       <form
         ref={panelRef}
         onSubmit={submit}
+        noValidate
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-on-dialog-title"
@@ -96,7 +93,7 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
         </div>
 
         <div className="space-y-4 px-4 py-4 sm:px-6">
-          {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+          {error && <p id={ERROR_ID} role="alert" className="text-sm text-red-700 dark:text-red-400">{error.message}</p>}
           {d.id && (
             <p className="rounded-md bg-accent-50 px-3 py-2 text-xs text-accent-900 dark:bg-accent-950/50 dark:text-accent-200">
               Name, description, &ldquo;sold with&rdquo; and tax belong to the saved add-on and change on every event that offers it. Price, stock and tiers are this event&apos;s own.
@@ -104,7 +101,7 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
           )}
           <div>
             <label className={label} htmlFor="add-on-name">Name</label>
-            <input id="add-on-name" className={field} value={d.name} onChange={(e) => set('name', e.target.value)} maxLength={80} required />
+            <input id="add-on-name" className={field} value={d.name} onChange={(e) => set('name', e.target.value)} maxLength={80} required {...aria('add-on-name')} />
           </div>
           <div>
             <label className={label} htmlFor="add-on-description">Description</label>
@@ -113,7 +110,7 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={label} htmlFor="add-on-price">Price ($)</label>
-              <input id="add-on-price" type="number" min="0" step="0.01" className={field} value={d.price} onChange={(e) => set('price', e.target.value)} required aria-describedby={preview && d.scope !== 'APPLICATION' ? 'add-on-price-hint' : undefined} />
+              <input id="add-on-price" type="number" min="0" step="0.01" className={field} value={d.price} onChange={(e) => set('price', e.target.value)} required {...aria('add-on-price', preview && d.scope !== 'APPLICATION' ? 'add-on-price-hint' : undefined)} />
               {preview && d.scope !== 'APPLICATION' && (
                 <p id="add-on-price-hint" className="mt-1 text-xs text-gray-600 dark:text-slate-400">
                   Ticket buyer pays {formatPrice(preview.total)}
@@ -131,11 +128,11 @@ export default function AddOnDialog({ draft: initial, priceTiers, taxRate, taxIn
             </div>
             <div>
               <label className={label} htmlFor="add-on-quantity">Total available</label>
-              <input id="add-on-quantity" type="number" min="0" step="1" className={field} value={d.quantityTotal} onChange={(e) => set('quantityTotal', e.target.value)} placeholder="Unlimited" />
+              <input id="add-on-quantity" type="number" min="0" step="1" className={field} value={d.quantityTotal} onChange={(e) => set('quantityTotal', e.target.value)} placeholder="Unlimited" {...aria('add-on-quantity')} />
             </div>
             <div>
               <label className={label} htmlFor="add-on-max">Max per order</label>
-              <input id="add-on-max" type="number" min="1" max="100" step="1" className={field} value={d.maxPerOrder} onChange={(e) => set('maxPerOrder', e.target.value)} placeholder="No limit" />
+              <input id="add-on-max" type="number" min="1" max="100" step="1" className={field} value={d.maxPerOrder} onChange={(e) => set('maxPerOrder', e.target.value)} placeholder="No limit" {...aria('add-on-max')} />
             </div>
           </div>
 

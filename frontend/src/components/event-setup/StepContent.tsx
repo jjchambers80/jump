@@ -52,8 +52,8 @@ interface Props {
   review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange'>;
   /** Steps 5–6 save on their own; null before the row exists. */
   row: Omit<SavedRowProps, 'orgId'> | null;
-  /** A step that saves on its own (dialogs) saved: refresh the preview. */
-  onSaved: () => void;
+  /** Collect more saved an add-on: the new count (step state) and a preview refresh. */
+  onAddOnsSaved: (addOnCount: number) => void;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
@@ -88,7 +88,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}
           {step.key === 'tickets' && props.row && <TicketsStep {...form} orgId={props.orgId} {...props.row} readOnly={readOnly} />}
           {step.key === 'collect-more' && props.event && (
-            <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onSaved} />
+            <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
           )}
           {!step.built && <PendingStep />}
         </fieldset>
