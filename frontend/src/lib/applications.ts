@@ -473,6 +473,8 @@ export interface FormTemplateSummary {
   id: string;
   name: string;
   kind: FormKind;
+  /** Spec 050 §6.2: optional snapshot key; null on older templates. */
+  purpose?: FormPurpose | null;
   tierCount: number;
   questionCount: number;
   sourceFormId: string | null;

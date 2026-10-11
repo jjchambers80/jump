@@ -21,6 +21,7 @@ import {
 import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './previewMessages';
 import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
+import { useSetupForms } from './useSetupForms';
 import { useHistoryGuard } from './useHistoryGuard';
 import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import { useDonationsEligible } from './useDonationsEligible';
@@ -54,6 +55,7 @@ export function useSetupFlow(eventId: string | null) {
   const { selectedOrgId: orgId, loading: orgLoading } = useOrg();
   const data = useSetupData(orgId, orgLoading, eventId);
   const { saved, venues } = data;
+  const forms = useSetupForms(eventId);
   const [fields, setFields] = useState<SetupFields>(EMPTY_FIELDS);
   const [draftStep, setDraftStep] = useState<StepKey | null>(null);
   const [initialised, setInitialised] = useState(false);
@@ -65,7 +67,8 @@ export function useSetupFlow(eventId: string | null) {
 
   // Fill the form once: the server row, else this tab's draft, else ?venueId=.
   useEffect(() => {
-    if (initialised || data.load.status !== 'ready' || !orgId) return;
+    // Wait for the forms too: they decide whether the floor map step exists.
+    if (initialised || data.load.status !== 'ready' || !orgId || (eventId && forms.load.status === 'loading')) return;
     if (saved) setFields(fieldsFromSaved(saved, zoneOf(saved.venueId)));
     else {
       const draft = readSessionDraft(orgId);
@@ -78,10 +81,10 @@ export function useSetupFlow(eventId: string | null) {
     }
     setInitialised(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.load.status, initialised, orgId, saved]);
+  }, [data.load.status, forms.load.status, initialised, orgId, saved]);
 
   const donationsEligible = useDonationsEligible(orgId);
-  const ctx: StepCtx = { saved, fields, zone, savedZone, forms: [], donationsEligible };
+  const ctx: StepCtx = { saved, fields, zone, savedZone, forms: forms.forms, donationsEligible };
   const mode: 'create' | 'edit' = saved?.setupCompletedAt ? 'edit' : 'create';
   const list = visibleSteps(ctx);
   const requested = stepByKey(params.get('step'));
@@ -169,7 +172,7 @@ export function useSetupFlow(eventId: string | null) {
   };
 
   return {
-    orgId, data, fields, setFields, ctx, mode, list, current, step, at, zone, iso,
+    orgId, data, forms, fields, setFields, ctx, mode, list, current, step, at, zone, iso,
     saveState, unsaved, preview, initialised, urlFor, router,
     /** After a dialog or upload saved on its own: the frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),

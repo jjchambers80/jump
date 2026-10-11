@@ -18,6 +18,9 @@ import DescribeStep from './steps/DescribeStep';
 import ImageStep from './steps/ImageStep';
 import TicketsStep from './steps/TicketsStep';
 import CollectMoreStep from './steps/CollectMoreStep';
+import ApplicationsStep from './steps/ApplicationsStep';
+import { isApplicationStep } from './applicationSteps';
+import type { SetupForms } from './useSetupForms';
 import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
 import type { SavedRowProps, SetupVenue } from './steps/types';
 
@@ -30,6 +33,10 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   image: 'The picture at the top of the event page.',
   tickets: 'Sell tickets in tiers, or take free RSVPs.',
   'collect-more': 'Extras buyers can add to their order, like parking or merch.',
+  vendors: 'Let vendors apply for a space. Add one form, or several (for example food and crafts).',
+  'special-guests': 'Let artists, creators and celebrities apply to appear.',
+  volunteers: 'Let people sign up to help, with your own questions.',
+  'other-applications': 'Sponsors, press, panels and anything else people apply for.',
 };
 
 interface Props {
@@ -54,6 +61,8 @@ interface Props {
   row: Omit<SavedRowProps, 'orgId'> | null;
   /** Collect more saved an add-on: the new count (step state) and a preview refresh. */
   onAddOnsSaved: (addOnCount: number) => void;
+  /** The event's application forms (steps 8, 10–12). */
+  forms: SetupForms;
 }
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
@@ -89,6 +98,9 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'tickets' && props.row && <TicketsStep {...form} orgId={props.orgId} {...props.row} readOnly={readOnly} />}
           {step.key === 'collect-more' && props.event && (
             <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
+          )}
+          {isApplicationStep(step.key) && props.row && (
+            <ApplicationsStep stepKey={step.key} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
           )}
           {!step.built && <PendingStep />}
         </fieldset>

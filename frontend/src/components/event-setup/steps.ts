@@ -8,6 +8,8 @@
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
 import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
+import { OTHER_APPLICATIONS_STEP, SPECIAL_GUESTS_STEP, VENDORS_STEP, VOLUNTEERS_STEP } from './applicationSteps';
+import type { FormPurpose } from '@/lib/applications';
 
 export type StepKey =
   | 'name' | 'venue' | 'date' | 'description' | 'image' | 'tickets' | 'attendee-questions'
@@ -52,8 +54,8 @@ export interface StepCtx {
   /** Zone of the venue currently chosen in the form, and of the saved venue. */
   zone: string | null;
   savedZone: string | null;
-  /** Forms on the event (050-L fills purpose and spaceSelection). */
-  forms?: { spaceSelection?: 'TIERS' | 'MAP' | null }[];
+  /** Forms on the event (050-L): their purpose places them in a step. */
+  forms?: { purpose?: FormPurpose | null; spaceSelection?: 'TIERS' | 'MAP' | null }[];
   donationsEligible?: boolean;
   now?: Date;
 }
@@ -187,11 +189,11 @@ export const EVENT_STEPS: EventStep[] = [
     complete: (ctx) => (ctx.saved?.addOnCount ?? 0) > 0,
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
-  { key: 'vendors', title: 'Vendor applications', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
+  VENDORS_STEP,
   { key: 'floor-map', title: 'Floor map', rule: 'C', anchor: 'floor-map', built: false, visible: (ctx) => !!ctx.forms?.some((f) => f.spaceSelection === 'MAP'), complete: never },
-  { key: 'special-guests', title: 'Special guests', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
-  { key: 'volunteers', title: 'Volunteers', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
-  { key: 'other-applications', title: 'Other applications', rule: 'S', anchor: 'get-involved', built: false, visible: always, complete: never },
+  SPECIAL_GUESTS_STEP,
+  VOLUNTEERS_STEP,
+  OTHER_APPLICATIONS_STEP,
   { key: 'reminders', title: 'Reminders', rule: 'S', anchor: 'event-hero', built: false, reserved: true, visible: never, complete: never },
   { key: 'review', title: 'Review and publish', rule: 'R', anchor: 'event-hero', built: true, visible: always, complete: (ctx) => !!ctx.saved?.setupCompletedAt },
   { key: 'done', title: 'Your event is saved', rule: 'R', anchor: 'event-hero', built: false, visible: never, complete: never },

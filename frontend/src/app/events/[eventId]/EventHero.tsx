@@ -94,7 +94,7 @@ export default function EventHero({ event, org, preview = false, onShowDescripti
             <FloorMapButton eventId={event.id} eventName={event.name} preview={preview} />
             {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
             {/* Spec 050-D: a sales close shuts every form, so the pills go */}
-            {!event.salesClosed && <GetInvolved eventId={event.id} preview={preview} />}
+            {!event.salesClosed && <GetInvolved eventId={event.id} preview={preview} forms={event.previewForms} />}
           </div>
         </div>
 

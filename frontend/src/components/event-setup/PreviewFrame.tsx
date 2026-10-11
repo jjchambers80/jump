@@ -60,10 +60,10 @@ export default function PreviewFrame() {
     if (!eventId || !orgId) return;
     let cancelled = false;
     api
-      .get<{ event: EventPageEvent }>(`/organizations/${encodeURIComponent(orgId)}/events/${encodeURIComponent(eventId)}/preview-payload`)
+      .get<{ event: EventPageEvent; forms?: EventPageEvent['previewForms'] }>(`/organizations/${encodeURIComponent(orgId)}/events/${encodeURIComponent(eventId)}/preview-payload`)
       .then((payload) => {
         if (cancelled) return;
-        setSaved({ id: eventId, revision, event: payload.event });
+        setSaved({ id: eventId, revision, event: { ...payload.event, previewForms: payload.forms ?? [] } });
       })
       // The overlay alone still renders when the saved event cannot load.
       .catch(() => !cancelled && setSaved({ id: eventId, revision, event: null }));

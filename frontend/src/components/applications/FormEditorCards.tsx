@@ -249,7 +249,7 @@ export function SettingsCard({
                   {!template && form.eventId && (
                     <>
                       {' '}
-                      <Link href={`/admin/events/${form.eventId}/map`} className="font-medium text-accent-600 hover:underline dark:text-accent-400">
+                      <Link href={`/admin/events/${form.eventId}/map`} className="font-medium text-accent-600 underline dark:text-accent-400">
                         Open the floor map
                       </Link>
                     </>
@@ -369,7 +369,7 @@ export function TiersCard({
         {!template && eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
-            <Link href={`/admin/events/${form.eventId}/edit`} className="text-accent-600 hover:underline dark:text-accent-300">event page</Link>.
+            <Link href={`/admin/events/${form.eventId}/edit`} className="text-accent-600 underline dark:text-accent-300">event page</Link>.
           </>
         )}
       </p>
