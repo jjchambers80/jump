@@ -21,9 +21,14 @@ const fixturePort = process.env.FIXTURE_API_PORT || new URL(process.env.NEXT_PUB
 // builds with it on (own port, own distDir) for the wizard specs only, so
 // every other spec keeps the flag-off pages. Specs read the URL from
 // PLAYWRIGHT_WIZARD_BASE_URL (workers inherit this process's env).
-const wizardPort = process.env.PLAYWRIGHT_WIZARD_PORT || String(Number(testPort) + 2);
+// Default: the app port + 103, clear of the fixture API (3002) and of any
+// small PLAYWRIGHT_PORT offset. Locally, reuseExistingServer reuses whatever holds
+// that port: make sure it is a flag-on server, or set PLAYWRIGHT_WIZARD_PORT.
+// PLAYWRIGHT_WIZARD=0 skips it (the wizard specs then skip themselves).
+const wizardEnabled = process.env.PLAYWRIGHT_WIZARD !== '0';
+const wizardPort = process.env.PLAYWRIGHT_WIZARD_PORT || String(Number(testPort) + 103);
 const wizardURL = `http://localhost:${wizardPort}`;
-process.env.PLAYWRIGHT_WIZARD_BASE_URL = wizardURL;
+if (wizardEnabled) process.env.PLAYWRIGHT_WIZARD_BASE_URL = wizardURL;
 const internalApi: Record<string, string> = process.env.FIXTURE_API_PORT ? { INTERNAL_API_URL: `http://localhost:${fixturePort}` } : {};
 
 export default defineConfig({
@@ -69,17 +74,21 @@ export default defineConfig({
         ...internalApi,
       },
     },
-    {
-      command: `npx next dev -p ${wizardPort}`,
-      url: wizardURL,
-      reuseExistingServer: !process.env.CI,
-      env: {
-        NEXT_PUBLIC_THEME_EDITOR_ENABLED: 'true',
-        NEXT_PUBLIC_EVENT_WIZARD_ENABLED: 'true',
-        // Two dev servers must not share .next (next.config.mjs reads this).
-        NEXT_DIST_DIR: '.next-e2e-wizard',
-        ...internalApi,
-      },
-    },
+    ...(wizardEnabled
+      ? [
+        {
+          command: `npx next dev -p ${wizardPort}`,
+          url: wizardURL,
+          reuseExistingServer: !process.env.CI,
+          env: {
+            NEXT_PUBLIC_THEME_EDITOR_ENABLED: 'true',
+            NEXT_PUBLIC_EVENT_WIZARD_ENABLED: 'true',
+            // Two dev servers must not share .next (next.config.mjs reads this).
+            NEXT_DIST_DIR: '.next-e2e-wizard',
+            ...internalApi,
+          },
+        },
+      ]
+      : []),
   ],
 });

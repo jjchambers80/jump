@@ -101,7 +101,7 @@ Legend: **R** = required to publish, **S** = skippable ("Skip for now" when empt
 
 | # | Key | Title (h1) | Content | Visible | Rule | Preview anchor | Save call |
 |---|---|---|---|---|---|---|---|
-| 1 | `name` | Name your event | Name, "Edit URL" (`SlugField`) collapsed. Secondary entry: **Start from a past event** (050-I) | create mode only before the row exists; always in edit mode | R | `#event-hero` | Client state. Edit mode: `PATCH /organizations/:orgId/events/:id {name, slug}` |
+| 1 | `name` | Name your event | Name, "Edit URL" (`SlugField`) collapsed. Secondary entry: **Start from a past event** (050-I), shown only before the row exists | always (050-H: stays visible after the row exists, so N is stable and the event can be renamed) | R | `#event-hero` | Client state. Edit mode: `PATCH /organizations/:orgId/events/:id {name, slug}` |
 | 2 | `venue` | Where is it? | Venue select, "+ New venue" (`VenueFlyout`), zone shown read-only (`VenueTimeZoneField`). `?venueId=` preselects | always | R | `#event-venue` | Client state. Edit mode: `PATCH {venueId}` (re-anchors the typed time, research §7) |
 | 3 | `date` | When is it? | Start `datetime-local` in the venue zone + zone label; "+ Add end time" (optional, after start, same zone) | always | R (start) | `#event-date` | Create mode: `POST /organizations/:orgId/events {setup:true,…}`. Edit: `PATCH {date, endDate}` |
 | 4 | `description` | Describe it | `RichTextEditorField`; Listing category select | always | S | `#about` | `PATCH {description, category}` |
@@ -119,7 +119,7 @@ Legend: **R** = required to publish, **S** = skippable ("Skip for now" when empt
 | 13 | `review` | Review and publish | Readiness checklist (blockers link to their step), brand summary (read-only, link to Settings › Brand), resolved tax rate, forms with "Open applications when I publish", donation suggestion (§10), **Open full preview**, **Publish** / **Save as draft** (create) or **Publish** / status (edit) | always | — | page top | `GET …/readiness`; `POST …/publish {openFormIds}`; `PATCH {setupCompleted:true}` |
 | 14 | `done` | Your event is live / Saved as draft | Cards: View page, Copy link, Go to event, Review applications (if forms) or Set up door check-in | create mode only, after Review | — | page top | — |
 
-"Step n of N" counts visible steps 1–13 (Done is not a step). Steps 1–2 are skipped in the count once the row exists in create mode, so the bar never moves backwards.
+"Step n of N" counts visible steps 1–13 (Done is not a step). Steps 1–2 stay in the list and the count after the row exists (050-H), so N never changes under the organizer and the bar never moves backwards; after the create they PATCH like any other step. Only the name step's "Start from a past event" entry is limited to before the row exists.
 
 ### 5.2 Application steps (8, 10, 11, 12)
 

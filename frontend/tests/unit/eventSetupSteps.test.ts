@@ -9,6 +9,7 @@ import {
   EVENT_STEPS, FIELD_IDS, isReachable, neighbours, resumeKey, stepByKey, stepPosition, stepState, visibleSteps,
   type SavedEvent, type StepCtx,
 } from '@/components/event-setup/steps';
+import { PREVIEW_MESSAGE, isPreviewMessage } from '@/components/event-setup/previewMessages';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(join(here, '../../../backend/tests/fixtures/eventSetupSteps.fixtures.json'), 'utf8'));
@@ -137,5 +138,23 @@ describe('state', () => {
     expect(stepState(stepByKey('tickets')!, 'tickets', c)).toBe('current');
     expect(stepState(stepByKey('description')!, 'tickets', c)).toBe('skipped');
     expect(stepState(stepByKey('vendors')!, 'tickets', c)).toBe('todo');
+  });
+});
+
+describe('preview messages', () => {
+  const ok = { type: PREVIEW_MESSAGE, orgId: 'org-1', eventId: 'evt_1', overlay: { name: 'A', venue: null }, revision: 0, anchor: 'event-hero' };
+  test('accepts the wizard shape', () => {
+    expect(isPreviewMessage(ok)).toBe(true);
+    expect(isPreviewMessage({ ...ok, eventId: null })).toBe(true);
+  });
+  test.each([
+    ['a path in the org id', { orgId: '../admin' }],
+    ['a slash in the event id', { eventId: 'a/b' }],
+    ['a selector as anchor', { anchor: '#x y' }],
+    ['a non-number revision', { revision: '1' }],
+    ['a non-string name', { overlay: { name: 1 } }],
+    ['a malformed venue', { overlay: { venue: { id: 1 } } }],
+  ])('refuses %s', (_label, patch) => {
+    expect(isPreviewMessage({ ...ok, ...patch })).toBe(false);
   });
 });

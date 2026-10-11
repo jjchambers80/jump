@@ -94,3 +94,33 @@ describe('explicit save (PUBLISHED)', () => {
     expect(save).not.toHaveBeenCalled();
   });
 });
+
+describe('flush and dispose', () => {
+  test('flush resolves only when a change typed during the save is saved too', async () => {
+    let release!: () => void;
+    const save = vi.fn().mockImplementationOnce(() => new Promise<void>((r) => (release = r))).mockResolvedValue(undefined);
+    const { saver } = make(false, save);
+    saver.change({ name: 'A' });
+    const done = saver.flush();
+    saver.change({ name: 'AB' });
+    release();
+    await expect(done).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ name: 'AB' });
+  });
+
+  test('dispose sends a DRAFT change still in its debounce', async () => {
+    const { saver, save } = make(true);
+    saver.change({ name: 'A' });
+    saver.dispose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledWith({ name: 'A' });
+  });
+
+  test('dispose never saves a PUBLISHED change', async () => {
+    const { saver, save } = make(false);
+    saver.change({ name: 'Live' });
+    saver.dispose();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(save).not.toHaveBeenCalled();
+  });
+});
