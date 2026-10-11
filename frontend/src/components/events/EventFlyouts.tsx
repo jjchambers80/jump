@@ -6,6 +6,7 @@
 // pages (/edit/details, /edit/sales) stay for everything else.
 
 import React, { FormEvent, useMemo, useState } from 'react';
+import Link from 'next/link';
 import api from '@/services/api';
 import Flyout from '@/components/Flyout';
 import SlugField from '@/components/SlugField';
@@ -377,11 +378,13 @@ const FORM_STATUSES: OverviewForm['status'][] = ['DRAFT', 'OPEN', 'CLOSED'];
 export function FormSettingsFlyout({
   event,
   form,
+  paymentsReady = true,
   onClose,
   onSaved,
 }: {
   event: OverviewEvent;
   form: OverviewForm;
+  paymentsReady?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -436,6 +439,12 @@ export function FormSettingsFlyout({
         </div>
         <fieldset>
           <legend className={labelClass}>Status</legend>
+          {form.kind === 'PAID' && !paymentsReady && (
+            <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              Set up payments before opening this paid form.{' '}
+              <Link href="/admin/settings/payments" className="font-semibold underline">Set up payments</Link>
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
             {FORM_STATUSES.map((status) => (
               <label
@@ -451,6 +460,7 @@ export function FormSettingsFlyout({
                   name="form-flyout-status"
                   value={status}
                   checked={state.status === status}
+                  disabled={form.kind === 'PAID' && status === 'OPEN' && !paymentsReady}
                   onChange={() => setState((s) => ({ ...s, status }))}
                   className="sr-only"
                 />
