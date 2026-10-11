@@ -9,6 +9,7 @@
 export type StorefrontRoute =
   | { kind: 'pass' }
   | { kind: 'rewrite'; pathname: string }
+  | { kind: 'redirect'; pathname: string }
   | { kind: 'notFound' };
 
 /** Lowercase host without port or trailing dot. */
@@ -78,11 +79,11 @@ const PLATFORM_ONLY = [
 ];
 
 /**
- * Decide what a path means on a tenant host for `orgId`.
+ * Decide what a path means on a tenant host for `orgId` (`slug` is its slug).
  * `/api/*`, `/_next/*` and static files are excluded by the middleware matcher
  * and never reach this function.
  */
-export function routeForTenantHost(pathname: string, orgId: string): StorefrontRoute {
+export function routeForTenantHost(pathname: string, orgId: string, slug?: string | null): StorefrontRoute {
   const path = pathname || '/';
   if (path === '/' || path === '') return { kind: 'rewrite', pathname: `/organizations/${orgId}` };
 
@@ -109,7 +110,12 @@ export function routeForTenantHost(pathname: string, orgId: string): StorefrontR
     };
 
   const org = path.match(/^\/organizations\/([^/]+)(\/.*)?$/);
-  if (org) return org[1] === orgId ? { kind: 'pass' } : { kind: 'notFound' };
+  if (org) {
+    if (org[1] === orgId) return { kind: 'pass' };
+    // Menu and theme links name the organization by slug: send them to the short path.
+    if (slug && org[1] === slug) return { kind: 'redirect', pathname: org[2] || '/' };
+    return { kind: 'notFound' };
+  }
 
   if (PLATFORM_ONLY.some((re) => re.test(path))) return { kind: 'notFound' };
   if (PUBLIC_PASS.some((re) => re.test(path))) return { kind: 'pass' };

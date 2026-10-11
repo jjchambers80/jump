@@ -121,7 +121,7 @@ describe('Organization suspension', () => {
     it('does not resolve the custom domain', async () => {
       expect((await request(app).get('/domains/resolve').query({ host: HOST })).status).toBe(404);
       await setStatus('ACTIVE');
-      expect((await request(app).get('/domains/resolve').query({ host: HOST })).body).toEqual({ organizationId: org.id });
+      expect((await request(app).get('/domains/resolve').query({ host: HOST })).body).toEqual({ organizationId: org.id, slug: org.slug });
       await setStatus('INACTIVE');
     });
 

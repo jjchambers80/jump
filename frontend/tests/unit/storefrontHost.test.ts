@@ -113,6 +113,15 @@ describe('routeForTenantHost', () => {
     }
   });
 
+  it('redirects the organization slug paths to the short paths', () => {
+    expect(routeForTenantHost('/organizations/acme', 'org_1', 'acme')).toEqual({ kind: 'redirect', pathname: '/' });
+    expect(routeForTenantHost('/organizations/acme/pages/about', 'org_1', 'acme')).toEqual({
+      kind: 'redirect',
+      pathname: '/pages/about',
+    });
+    expect(routeForTenantHost('/organizations/other/pages/about', 'org_1', 'acme')).toEqual({ kind: 'notFound' });
+  });
+
   it('hides other organizations and every platform-only surface', () => {
     expect(route('/organizations/org_2')).toEqual({ kind: 'notFound' });
     for (const p of [

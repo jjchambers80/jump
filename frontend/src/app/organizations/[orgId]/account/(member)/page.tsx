@@ -77,7 +77,7 @@ export default function AccountOverviewPage() {
               No upcoming tickets.
             </p>
             <Link
-              href={storefrontHref(`/organizations/${org.id}`, org.id)}
+              href={storefrontHref(`/organizations/${org.id}`)}
               className="text-sm font-semibold text-brand-link hover:underline"
             >
               See what&apos;s on at {org.name}

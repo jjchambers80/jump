@@ -35,7 +35,7 @@ function FooterLink({
   host?: string | null;
   className: string;
 }) {
-  const href = storefrontHref(item.href, orgId, host);
+  const href = storefrontHref(item.href, host);
   if (/^https?:\/\//i.test(href) || item.newTab) {
     return (
       <a

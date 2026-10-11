@@ -1,5 +1,5 @@
 // Public domain resolution (spec 007 phase 3)
-//   GET /domains/resolve?host=tickets.example.com -> { organizationId }
+//   GET /domains/resolve?host=tickets.example.com -> { organizationId, slug }
 //   GET /domains/owner?eventId=|orderId=|venueId=  -> { organizationId }
 // Called by frontend/src/middleware.ts on requests to a non-platform host:
 // first to map the host to an organization, then to confirm that a resource
@@ -22,10 +22,10 @@ router.get('/resolve', resolveLimiter, async (req, res, next) => {
   try {
     const host = String(req.query.host || '').trim().toLowerCase();
     if (!host || host.length > 253) throw new ValidationError('host is required');
-    const organizationId = await domainService.resolveHost(host);
-    if (!organizationId) throw new NotFoundError('Unknown storefront host');
+    const tenant = await domainService.resolveTenant(host);
+    if (!tenant) throw new NotFoundError('Unknown storefront host');
     res.set('Cache-Control', 'public, max-age=60');
-    res.json({ organizationId });
+    res.json(tenant);
   } catch (error) {
     next(error);
   }

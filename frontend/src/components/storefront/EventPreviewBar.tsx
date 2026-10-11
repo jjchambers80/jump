@@ -9,7 +9,7 @@ import { Eye, X } from 'lucide-react';
 import { storefrontHref } from '@/lib/storefrontPath';
 
 export default function EventPreviewBar({ organizationId }: { organizationId?: string | null }) {
-  const home = organizationId ? storefrontHref(`/organizations/${organizationId}`, organizationId) : '/';
+  const home = organizationId ? storefrontHref(`/organizations/${organizationId}`) : '/';
   return (
     <div
       role="region"

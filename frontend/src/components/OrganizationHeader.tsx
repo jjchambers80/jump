@@ -100,7 +100,7 @@ export default function OrganizationHeader({
   const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
   const orgSlug = organizationSlug ?? organization.id ?? '';
   const accountHref = organization.id
-    ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`, organization.id)
+    ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`)
     : null;
   const storefrontLogo = organization.storefrontLogo;
   const rawLogo = storefrontLogo?.url || organization.logoUrl;
@@ -112,7 +112,7 @@ export default function OrganizationHeader({
         '--theme-logo-width-mobile': `${storefrontLogo.mobileWidth}px`,
       } as CSSProperties)
     : undefined;
-  const href = organization.id ? `/organizations/${encodeURIComponent(orgSlug)}` : null;
+  const href = organization.id ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}`) : null;
   const isHeading = as === 'h1';
   // With a logo the name is read by screen readers only; without one it is the visible identity.
   const nameClass = logoSrc

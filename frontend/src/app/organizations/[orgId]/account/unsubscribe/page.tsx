@@ -21,7 +21,7 @@ function UnsubscribeInner({ orgId }: { orgId: string }) {
   const [info, setInfo] = useState<Info | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const preferencesHref = storefrontHref(`/organizations/${orgId}/account/preferences`, orgId);
+  const preferencesHref = storefrontHref(`/organizations/${orgId}/account/preferences`);
 
   useEffect(() => {
     let cancelled = false;

@@ -30,7 +30,7 @@ interface StorefrontNavProps {
 const CurrentPathContext = createContext<string | null>(null);
 
 function flattenHrefs(items: PublicMenuItem[], orgId: string): string[] {
-  return items.flatMap((item) => [storefrontHref(item.href, orgId), ...flattenHrefs(item.children, orgId)]);
+  return items.flatMap((item) => [storefrontHref(item.href), ...flattenHrefs(item.children, orgId)]);
 }
 
 function NavLink({
@@ -45,7 +45,7 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const currentPath = useContext(CurrentPathContext);
-  const href = storefrontHref(item.href, orgId);
+  const href = storefrontHref(item.href);
   const external = /^https?:\/\//i.test(href) || item.newTab;
   const current = !external && currentPath !== null && href.split('#')[0] === currentPath;
   if (external) {
