@@ -63,6 +63,8 @@ export interface OrganizationHeaderProps {
   layout?: 'standard' | 'bar';
   /** Bar layout only: the row under the bar, aligned with the menu button. */
   subheader?: ReactNode;
+  /** Tenant host when rendered on the server, so links are short in the HTML too. */
+  host?: string | null;
 }
 
 // Skip link: moves focus to the themed page body (#storefront-main, spec 038)
@@ -93,6 +95,7 @@ export default function OrganizationHeader({
   logoPosition = 'center',
   layout = 'standard',
   subheader,
+  host,
 }: OrganizationHeaderProps) {
   const fetchedMenus = useStorefrontMenus(nav && !serverMenus ? organization.id : null);
   const menus = serverMenus ?? fetchedMenus;
@@ -100,7 +103,7 @@ export default function OrganizationHeader({
   const { buyer, loading: buyerLoading } = useBuyer(signIn ? organization.id : null);
   const orgSlug = organizationSlug ?? organization.id ?? '';
   const accountHref = organization.id
-    ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`)
+    ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}/account`, host)
     : null;
   const storefrontLogo = organization.storefrontLogo;
   const rawLogo = storefrontLogo?.url || organization.logoUrl;
@@ -112,7 +115,7 @@ export default function OrganizationHeader({
         '--theme-logo-width-mobile': `${storefrontLogo.mobileWidth}px`,
       } as CSSProperties)
     : undefined;
-  const href = organization.id ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}`) : null;
+  const href = organization.id ? storefrontHref(`/organizations/${encodeURIComponent(orgSlug)}`, host) : null;
   const isHeading = as === 'h1';
   // With a logo the name is read by screen readers only; without one it is the visible identity.
   const nameClass = logoSrc
@@ -215,7 +218,7 @@ export default function OrganizationHeader({
         {skipLink}
         <div className="flex min-h-14 items-center gap-1 px-2 sm:gap-2 sm:px-4">
           {hasNav && (
-            <StorefrontNav orgId={organization.id!} items={navItems} variant="mobile" side="left" />
+            <StorefrontNav orgId={organization.id!} host={host} items={navItems} variant="mobile" side="left" />
           )}
           <div className="min-w-0 flex-1 py-1.5">{identityLink}</div>
           {signInLink && <div className="shrink-0">{signInLink}</div>}
@@ -238,9 +241,10 @@ export default function OrganizationHeader({
           <div className="flex min-h-11 min-w-0 items-center justify-start">
             {hasNav && (
               <>
-                <StorefrontNav orgId={organization.id!} items={navItems} side="left" className="hidden md:block" />
+                <StorefrontNav orgId={organization.id!} host={host} items={navItems} side="left" className="hidden md:block" />
                 <StorefrontNav
                   orgId={organization.id!}
+                  host={host}
                   items={navItems}
                   variant="mobile"
                   side="left"
@@ -267,7 +271,7 @@ export default function OrganizationHeader({
         <div className="flex min-h-11 min-w-0 flex-1 items-center">{identityLink}</div>
 
         {hasNav && (
-          <StorefrontNav orgId={organization.id!} items={navItems} className="hidden md:block" />
+          <StorefrontNav orgId={organization.id!} host={host} items={navItems} className="hidden md:block" />
         )}
 
         {(signInLink || hasNav) && (
@@ -276,6 +280,7 @@ export default function OrganizationHeader({
             {hasNav && (
               <StorefrontNav
                 orgId={organization.id!}
+                host={host}
                 items={navItems}
                 variant="mobile"
                 className="md:hidden"

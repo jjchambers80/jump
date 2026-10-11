@@ -24,13 +24,16 @@ interface StorefrontNavProps {
    */
   side?: 'left' | 'right';
   className?: string;
+  /** Tenant host when rendered on the server, so links are short in the HTML too. */
+  host?: string | null;
 }
 
 // The single current path for this menu (currentMenuPath), shared by every link.
 const CurrentPathContext = createContext<string | null>(null);
+const HostContext = createContext<string | null | undefined>(undefined);
 
-function flattenHrefs(items: PublicMenuItem[], orgId: string): string[] {
-  return items.flatMap((item) => [storefrontHref(item.href), ...flattenHrefs(item.children, orgId)]);
+function flattenHrefs(items: PublicMenuItem[], host?: string | null): string[] {
+  return items.flatMap((item) => [storefrontHref(item.href, host), ...flattenHrefs(item.children, host)]);
 }
 
 function NavLink({
@@ -45,7 +48,7 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const currentPath = useContext(CurrentPathContext);
-  const href = storefrontHref(item.href);
+  const href = storefrontHref(item.href, useContext(HostContext));
   const external = /^https?:\/\//i.test(href) || item.newTab;
   const current = !external && currentPath !== null && href.split('#')[0] === currentPath;
   if (external) {
@@ -242,9 +245,10 @@ export default function StorefrontNav({
   variant = 'desktop',
   side = 'right',
   className = '',
+  host,
 }: StorefrontNavProps) {
   const pathname = usePathname();
-  const currentPath = useMemo(() => currentMenuPath(pathname, flattenHrefs(items, orgId)), [pathname, items, orgId]);
+  const currentPath = useMemo(() => currentMenuPath(pathname, flattenHrefs(items, host)), [pathname, items, host]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -285,6 +289,7 @@ export default function StorefrontNav({
 
   if (variant === 'desktop') {
     return (
+      <HostContext.Provider value={host}>
       <CurrentPathContext.Provider value={currentPath}>
         <nav aria-label="Main" className={className} data-testid="storefront-nav">
           {/* -ml-3 on the left: the first label's text, not its padding, meets the page gutter. */}
@@ -305,10 +310,12 @@ export default function StorefrontNav({
           </ul>
         </nav>
       </CurrentPathContext.Provider>
+      </HostContext.Provider>
     );
   }
 
   return (
+    <HostContext.Provider value={host}>
     <CurrentPathContext.Provider value={currentPath}>
       <nav aria-label="Main menu" className={className} data-testid="storefront-nav-mobile">
         <button
@@ -365,5 +372,6 @@ export default function StorefrontNav({
         )}
       </nav>
     </CurrentPathContext.Provider>
+    </HostContext.Provider>
   );
 }
