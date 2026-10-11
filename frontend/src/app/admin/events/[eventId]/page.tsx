@@ -423,7 +423,7 @@ function EventHero({
                 </span>
               )}
             </div>
-            <p className="mt-1 truncate font-mono text-xs text-gray-400 dark:text-slate-500">
+            <p className="mt-1 truncate font-mono text-xs text-gray-500 dark:text-slate-400">
               {publicPath}
               <span className="sr-only">, doors at {formatEventTime(event.date, zone)}</span>
             </p>
