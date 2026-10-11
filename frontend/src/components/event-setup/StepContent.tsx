@@ -104,7 +104,8 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
             <CollectMoreStep orgId={props.orgId} eventId={props.event.id} ticketed={props.event.admissionMode !== 'RSVP'} onSaved={props.onAddOnsSaved} />
           )}
           {isApplicationStep(step.key) && props.row && (
-            <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview} />
+            <ApplicationsStep stepKey={step.key} orgId={props.orgId} eventId={props.row.saved.id} eventName={props.row.saved.name} forms={props.forms} refreshPreview={props.row.refreshPreview}
+              eventStart={props.row.saved.date} eventEnd={props.row.saved.endDate} />
           )}
           {step.key === 'floor-map' && props.row && <FloorMapStep eventId={props.row.saved.id} refreshPreview={props.row.refreshPreview} onMapStatus={props.onMapStatus} />}
           {!step.built && <PendingStep />}

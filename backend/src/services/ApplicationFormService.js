@@ -168,6 +168,8 @@ class ApplicationFormService {
         _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
         event: { select: { id: true, name: true, date: true, status: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
         questions: { where: { pinned: true, archivedAt: null }, select: { id: true, label: true, type: true }, orderBy: { displayOrder: 'asc' } },
+        // Spec 050-S: the org-wide Shift filter.
+        shifts: { select: { id: true, name: true }, orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }] },
       },
       orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -195,6 +197,7 @@ class ApplicationFormService {
       applicationCount: f._count.applications,
       pinnedQuestions: f.questions.map((q) => ({ id: q.id, label: q.label, type: q.type })),
       addOns: addOns.filter((a) => a.eventId === f.eventId).map((a) => ({ id: a.id, name: a.name })),
+      shifts: f.purpose === 'VOLUNTEER' ? f.shifts : [],
       updatedAt: f.updatedAt,
     }));
   }

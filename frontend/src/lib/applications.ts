@@ -161,7 +161,31 @@ export interface AdminForm {
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
   addOns: { id: string; name: string; price: number; allTiers: boolean; isActive: boolean; scope: 'TICKET' | 'APPLICATION' | 'BOTH' }[];
+  /** Spec 050 §6.4: shifts on a VOLUNTEER form (empty otherwise); times render in `timezone`, the venue's. */
+  shifts?: AdminShift[];
+  timezone?: string | null;
   updatedAt?: string;
+}
+
+/** Spec 050 §6.4: a volunteer shift as staff edit it. `capacity` / `remaining` null = unlimited. */
+export interface AdminShift {
+  id: string;
+  name: string;
+  description: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  capacity: number | null;
+  assigned: number;
+  remaining: number | null;
+  displayOrder: number;
+}
+
+/** Create / PATCH body for a shift (ISO instants; null clears a time or the cap). */
+export interface ShiftInput {
+  name?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  capacity?: number | null;
 }
 
 /** Public shape. */
@@ -435,6 +459,8 @@ export interface ApplicationRow {
   selectionHeldUntil?: string | null;
   /** Spec 019 phase 3: organizer tags and on-site check-in (APPROVED only). */
   tags: string[];
+  /** Spec 050-S: the volunteer's shift picks, `assigned` once confirmed on approval. */
+  shifts?: { id: string; name: string; assigned: boolean }[];
   checkedInAt: string | null;
   checkedOutAt: string | null;
   /** Answers to the form's pinned questions, in question order. */
@@ -511,6 +537,8 @@ export interface OrgForm {
   applicationCount: number;
   pinnedQuestions: { id: string; label: string; type: QuestionType }[];
   addOns: { id: string; name: string }[];
+  /** Spec 050-S: a VOLUNTEER form's shifts, for the Shift filter. */
+  shifts?: { id: string; name: string }[];
   updatedAt: string;
 }
 

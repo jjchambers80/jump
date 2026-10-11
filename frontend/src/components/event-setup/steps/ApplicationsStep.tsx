@@ -31,11 +31,14 @@ interface Props {
   eventName: string;
   forms: SetupForms;
   refreshPreview: () => void;
+  /** Event start / end (ISO), for the volunteer shift editor's outside-the-event warning. */
+  eventStart?: string | null;
+  eventEnd?: string | null;
 }
 
 const LIST_HEADING = 'setup-forms-heading';
 
-export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, forms, refreshPreview }: Props) {
+export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, forms, refreshPreview, eventStart, eventEnd }: Props) {
   const config = APPLICATION_STEPS[stepKey];
   const api = useApplicationsApi(eventId);
   const participants = useParticipantsApi();
@@ -172,7 +175,7 @@ export default function ApplicationsStep({ stepKey, orgId, eventId, eventName, f
                 }}
                 onClose={() => void act(`${form.name} closed.`, () => api.updateForm(form.id, { status: 'CLOSED' }))}
               >
-                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} />
+                <InlineFormEditor form={form} api={api} canEdit={canEdit} purposes={config.purposes.length > 1 ? config.purposes : null} onSaved={saved} eventStart={eventStart} eventEnd={eventEnd} />
               </FormRow>
             ))}
           </ul>
