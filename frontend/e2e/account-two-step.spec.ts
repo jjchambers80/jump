@@ -33,7 +33,6 @@ async function mockOrgAndSecurity(page: Page) {
 async function completeReauth(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Send code' }).click();
   await dialog.getByLabel('Verification code').fill('123456');
   await dialog.getByRole('button', { name: 'Verify' }).click();
   await expect(dialog).toBeHidden();
