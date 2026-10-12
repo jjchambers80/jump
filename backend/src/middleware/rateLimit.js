@@ -163,6 +163,11 @@ export const LIMITS = Object.freeze({
     limit: 10,
     message: 'Too many imports. Try again later.',
   },
+  CONTACT_EXPORT: {
+    windowMs: 60 * 60 * 1000,
+    limit: 20,
+    message: 'Too many exports. Try again later.',
+  },
   // Spec 042: storefront contact-form messages per IP
   CONTACT_SUBMIT: {
     windowMs: 60 * 60 * 1000,

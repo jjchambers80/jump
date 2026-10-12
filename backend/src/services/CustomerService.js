@@ -9,6 +9,7 @@ import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import contactOptInService from './ContactOptInService.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { csvLine } from '../utils/csv.js';
 import { CONTACT_SOURCES, PAYING_WHERE, sourceWhere } from './contactListFilters.js';
 import contactListService from './ContactListService.js';
 
@@ -29,6 +30,24 @@ const ORDER_SELECT = {
     refunds: { where: { status: 'SUCCEEDED' }, select: { amount: true } },
   },
 };
+
+/** What a list row needs: paid orders, GOING RSVPs and standing-form submissions. */
+const ROW_INCLUDE = {
+  orders: ORDER_SELECT,
+  rsvps: { where: { status: 'GOING' }, select: { status: true } },
+  applications: {
+    where: { status: { not: 'DRAFT' }, form: { eventId: null } },
+    select: {
+      id: true,
+      status: true,
+      form: { select: { id: true, name: true, eventId: true } },
+    },
+  },
+};
+
+const SOURCE_LABELS = { tickets: 'Tickets', rsvp: 'RSVP', subscribed: 'Subscribed' };
+const EXPORT_HEADERS = ['First name', 'Last name', 'Email', 'Phone', 'Tags', 'Subscribed', 'Sources', 'Total spent', 'Last activity', 'Created'];
+const isoDay = (date) => (date ? new Date(date).toISOString().slice(0, 10) : '');
 
 /** By default a customer is a contact with money collected; `all` also returns prospects (spec 032 phase 3). */
 function customerPredicate(scope = 'customers') {
@@ -182,6 +201,49 @@ async function listWhereFor(organizationId, list) {
 
 class CustomerService {
   /**
+   * Every contact the Contacts list shows for these filters (or a list's, with
+   * `list`), as CSV (spec 055-E), written in pages of 1,000 through `write`.
+   * Cells go through the formula-safe csvCell.
+   */
+  async exportCsv(organizationId, options, write) {
+    const where = await this.whereFor(organizationId, options);
+    write(`${csvLine(EXPORT_HEADERS)}\r\n`);
+    let cursor = null;
+    for (;;) {
+      const page = await prisma.contact.findMany({
+        where,
+        include: ROW_INCLUDE,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 1000,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+      });
+      if (!page.length) break;
+      const lines = page.map((contact) => {
+        const row = customerRow(contact);
+        const sources = [
+          ...row.sources.map((source) => SOURCE_LABELS[source] ?? source),
+          ...row.formSources.map((form) => `Form: ${form.name}`),
+        ];
+        return csvLine([
+          row.firstName,
+          row.lastName,
+          row.email,
+          contact.phone,
+          (row.tags ?? []).join('; '),
+          row.emailSubscribed ? 'Yes' : 'No',
+          sources.join('; '),
+          row.totalSpent.toFixed(2),
+          isoDay(row.lastActivityAt),
+          isoDay(row.createdAt),
+        ]);
+      });
+      write(`${lines.join('\r\n')}\r\n`);
+      cursor = page[page.length - 1].id;
+      if (page.length < 1000) break;
+    }
+  }
+
+  /**
    * Prisma where for the Contacts list with these filters (spec 055: "select
    * all N matching" adds exactly what the list shows).
    */
@@ -227,18 +289,7 @@ class CustomerService {
       const [contacts, total] = await Promise.all([
         prisma.contact.findMany({
           where,
-          include: {
-            orders: ORDER_SELECT,
-            rsvps: { where: { status: 'GOING' }, select: { status: true } },
-            applications: {
-              where: { status: { not: 'DRAFT' }, form: { eventId: null } },
-              select: {
-                id: true,
-                status: true,
-                form: { select: { id: true, name: true, eventId: true } },
-              },
-            },
-          },
+          include: ROW_INCLUDE,
           orderBy: databaseOrder,
           skip: (page - 1) * limit,
           take: limit,
@@ -255,18 +306,7 @@ class CustomerService {
     // query; compute them before slicing so pagination totals stay correct.
     const contacts = await prisma.contact.findMany({
       where,
-      include: {
-        orders: ORDER_SELECT,
-        rsvps: { where: { status: 'GOING' }, select: { status: true } },
-        applications: {
-          where: { status: { not: 'DRAFT' }, form: { eventId: null } },
-          select: {
-            id: true,
-            status: true,
-            form: { select: { id: true, name: true, eventId: true } },
-          },
-        },
-      },
+      include: ROW_INCLUDE,
     });
     const ordered = filterAndSortCustomers(contacts, { sort, direction });
     const total = ordered.length;

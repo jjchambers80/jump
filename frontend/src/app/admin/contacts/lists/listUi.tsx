@@ -33,7 +33,7 @@ export function formatRelative(iso: string, now = Date.now()): string {
   return 'just now';
 }
 
-/** Row and page menu: Open, Edit / Rename, Duplicate, Delete. Built-ins can only be opened and duplicated. */
+/** Row and page menu: Open, Export CSV, Edit / Rename, Duplicate, Delete. Built-ins can only be opened, exported and duplicated. */
 export function listMenuItems(
   list: ContactList,
   {
@@ -43,6 +43,7 @@ export function listMenuItems(
     onEdit,
     onDuplicate,
     onDelete,
+    onExport,
   }: {
     canEdit: boolean;
     /** Include Open (the list's own page leaves it out). */
@@ -52,9 +53,12 @@ export function listMenuItems(
     onEdit?: (trigger: HTMLButtonElement) => void;
     onDuplicate: () => void;
     onDelete: (trigger: HTMLButtonElement) => void;
+    /** Set when the user may export (customers.export). */
+    onExport?: () => void;
   }
 ): ActionsMenuItem[] {
   const items: ActionsMenuItem[] = open ? [{ label: 'Open', href: contactListHref(list.id) }] : [];
+  if (onExport) items.push({ label: 'Export CSV', onSelect: onExport });
   if (!canEdit) return items;
   if (edit && !list.builtIn) items.push({ label: list.type === 'AUTOMATIC' ? 'Edit list' : 'Rename', onSelect: onEdit });
   items.push({ label: 'Duplicate', onSelect: onDuplicate });

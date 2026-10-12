@@ -7,7 +7,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ListChecks, Plus, Search } from 'lucide-react';
-import api from '@/services/api';
+import api, { downloadCsv } from '@/services/api';
+import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
 import { useCan, useOrg } from '@/components/OrgContext';
 import ActionsMenu from '@/components/ActionsMenu';
 import ToastHost, { showToast } from '@/components/content/Toast';
@@ -22,9 +23,11 @@ const TYPE_FILTERS: { value: ContactListType; label: string }[] = [
   { value: 'MANUAL', label: 'Manual' },
 ];
 
-export default function ContactListsPage() {
+function ContactListsPageContent() {
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const canEdit = useCan('customers.lists');
+  const canExport = useCan('customers.export');
+  const { withReauth } = useReauth();
   const router = useRouter();
   const [lists, setLists] = useState<ContactList[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +81,16 @@ export default function ContactListsPage() {
     }
   };
 
+  const exportList = async (list: ContactList) => {
+    try {
+      await withReauth(() =>
+        downloadCsv(`/admin/customers/export.csv?scope=all&list=${encodeURIComponent(list.id)}`, 'contacts.csv')
+      );
+    } catch (err) {
+      if (!isReauthCancelled(err)) showToast((err as Error)?.message || 'Could not export the list');
+    }
+  };
+
   const menuFor = (list: ContactList) =>
     listMenuItems(list, {
       canEdit,
@@ -86,6 +99,7 @@ export default function ContactListsPage() {
         setDialog({ list });
       },
       onDuplicate: () => duplicate(list),
+      onExport: canExport ? () => exportList(list) : undefined,
       onDelete: (trigger) => {
         focusReturnRef.current = trigger;
         setDeleting(list);
@@ -286,5 +300,13 @@ export default function ContactListsPage() {
 
       <ToastHost />
     </div>
+  );
+}
+
+export default function ContactListsPage() {
+  return (
+    <ReauthProvider>
+      <ContactListsPageContent />
+    </ReauthProvider>
   );
 }

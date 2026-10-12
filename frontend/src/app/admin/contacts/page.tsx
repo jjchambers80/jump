@@ -10,6 +10,7 @@ import { useSearchParams } from 'next/navigation';
 import { ListPlus } from 'lucide-react';
 import { useCan } from '@/components/OrgContext';
 import ToastHost, { showToast } from '@/components/content/Toast';
+import { ReauthProvider } from '@/app/admin/account/useReauth';
 import ContactsHeader from './ContactsHeader';
 import ContactsList, { type ContactSelection } from './ContactsList';
 import AddToListDialog, { addedMessage } from './lists/AddToListDialog';
@@ -65,8 +66,10 @@ function ContactsPageContent() {
 
 export default function ContactsPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">Loading contacts…</div>}>
-      <ContactsPageContent />
-    </Suspense>
+    <ReauthProvider>
+      <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">Loading contacts…</div>}>
+        <ContactsPageContent />
+      </Suspense>
+    </ReauthProvider>
   );
 }

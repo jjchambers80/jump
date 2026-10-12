@@ -8,9 +8,10 @@
 import React, { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Search, Users, X } from 'lucide-react';
-import api from '@/services/api';
-import { useOrg } from '@/components/OrgContext';
+import { ChevronLeft, ChevronRight, Download, Search, Users, X } from 'lucide-react';
+import api, { downloadCsv } from '@/services/api';
+import { isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
+import { useCan, useOrg } from '@/components/OrgContext';
 import {
   customerDetailHref,
   customerListQuery,
@@ -129,6 +130,9 @@ export default function ContactsList({
   reloadKey?: number;
 }) {
   const { selectedOrgId, loading: orgLoading } = useOrg();
+  const canExport = useCan('customers.export');
+  const { withReauth } = useReauth();
+  const [exporting, setExporting] = useState(false);
   const router = useRouter();
   const params = useSearchParams();
 
@@ -212,6 +216,21 @@ export default function ContactsList({
       .catch(() => setStandingForms([]));
   }, [selectedOrgId, state.source]);
 
+  // Spec 055-E: every contact these filters (and the list) match, as CSV. ADMIN + step-up.
+  const exportCsv = async () => {
+    const query = new URLSearchParams(queryString);
+    query.delete('page');
+    query.set('scope', state.scope ?? 'all');
+    setExporting(true);
+    try {
+      await withReauth(() => downloadCsv(`/admin/customers/export.csv?${query}`, 'contacts.csv'));
+    } catch (err) {
+      if (!isReauthCancelled(err)) setError((err as Error)?.message || 'Could not export contacts');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const clearFilters = () => {
     setSearchInput('');
     router.replace(basePath, { scroll: false });
@@ -263,7 +282,7 @@ export default function ContactsList({
       {header(<span aria-live="polite">{loading ? ' ' : countLabel}</span>)}
 
       {/* Toolbar */}
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,2fr)_1fr_1fr_1fr]">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,2fr)_1fr_1fr_1fr_auto]">
         <div className="sm:col-span-2 lg:col-span-1">
           <label htmlFor="contact-search" className={labelClass}>
             Search
@@ -331,6 +350,19 @@ export default function ContactsList({
             ))}
           </select>
         </div>
+        {canExport && (
+          <div className="sm:col-span-2 lg:col-span-1 lg:self-end">
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={exporting}
+              className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border border-gray-300 px-4 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:opacity-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-700 lg:w-auto"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          </div>
+        )}
         {state.source === 'form' && (
           <div className="sm:col-span-2 lg:col-span-1 lg:col-start-3">
             <label htmlFor="contact-form" className={labelClass}>

@@ -48,11 +48,12 @@ export function parseCsv(text) {
 /**
  * One CSV cell. A value starting with = + - @, a tab or a CR gets a leading
  * apostrophe so a spreadsheet never runs it as a formula (OWASP CSV injection).
+ * A plain number such as -10.00 cannot be a formula and is left as it is.
  */
 export function csvCell(value) {
   if (value === null || value === undefined) return '';
   let str = String(value);
-  if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) str = `'${str}`;
   return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 

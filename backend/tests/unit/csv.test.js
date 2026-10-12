@@ -28,7 +28,7 @@ describe('csvCell', () => {
     expect(csvCell('=SUM(A1)')).toBe("'=SUM(A1)");
     expect(csvCell('+1 919')).toBe("'+1 919");
     expect(csvCell(null)).toBe('');
-    expect(csvLine(['a', 1, '-2'])).toBe("a,1,'-2");
+    expect(csvLine(['a', 1, '-2', '-10.00', '-2+3'])).toBe("a,1,-2,-10.00,'-2+3");
   });
 });
 

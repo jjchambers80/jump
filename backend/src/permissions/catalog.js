@@ -53,6 +53,7 @@ export const FEATURES = [
       { key: 'customers.privacy', label: "Export, erase or anonymize a contact's data" },
       { key: 'customers.lists', label: 'Create, edit and delete contact lists', organizer: true },
       { key: 'customers.import', label: 'Import contacts into a list from a CSV file' },
+      { key: 'customers.export', label: 'Export contacts and lists as CSV' },
       { key: 'applications.standingForms', label: 'Build standing application forms (Contacts › Forms)' },
     ],
   },
