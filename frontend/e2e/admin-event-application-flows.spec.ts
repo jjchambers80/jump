@@ -220,6 +220,28 @@ test.describe('desktop', () => {
     await expect(page.getByRole('region', { name: 'Live preview of the event page' })).toBeVisible(COLD);
   });
 
+  test('with no saved templates there is nothing to choose: Start says what the form starts with', async ({ page }) => {
+    await mockApi(page);
+    await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
+    await page.goto(flowUrl('vendors'));
+    await expect(heading(page, 'Start a vendor application')).toBeVisible(COLD);
+    await expect(main(page).getByRole('group', { name: 'Start with' })).toHaveCount(0);
+    await expect(main(page).getByRole('radio')).toHaveCount(0);
+    await expect(main(page).getByText('Starts with suggested questions about what they sell, power and tables.', { exact: false })).toBeVisible();
+    await expect(page.locator('footer').getByRole('button', { name: 'Create form' })).toBeEnabled();
+  });
+
+  test('with templates, Start with names the standard form and what each template holds', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(flowUrl('vendors'));
+    const group = main(page).getByRole('group', { name: 'Start with' });
+    await expect(group).toBeVisible(COLD);
+    await expect(group.getByRole('radio', { name: /Standard vendor form/ })).toBeChecked();
+    await expect(group.getByText('Your template · 2 categories · 3 questions')).toBeVisible();
+    // Only same-kind templates of other purposes would add the toggle; there are none here.
+    await expect(group.getByLabel(/Also show templates from other kinds of forms/)).toHaveCount(0);
+  });
+
   test('Start previews the form being set up: the name as it is typed, no business step for volunteers', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('volunteers'));
