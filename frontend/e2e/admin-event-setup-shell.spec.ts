@@ -253,16 +253,8 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
     await main(page).getByLabel('Event name').fill('Live Rename');
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
-    // The edit-mode rail: jumping to another step sends nothing.
-    const rail = page.getByRole('navigation', { name: 'Jump to edit' });
-    await rail.getByRole('link', { name: /When is it\?/ }).click();
-    await expect(heading(page, 'When is it?')).toBeFocused();
-    // Back (to the venue step) does not save either.
-    await page.getByRole('button', { name: 'Back' }).click();
-    await expect(heading(page, 'Where is it?')).toBeFocused();
-    await rail.getByRole('link', { name: /Name your event/ }).click();
-    await expect(heading(page, 'Name your event')).toBeFocused();
-    await expect(main(page).getByLabel('Event name')).toHaveValue('Live Rename');
+    // No autosave on a live event.
+    await page.waitForTimeout(1200);
     expect(calls.patch).toHaveLength(0);
     // Save is the explicit way.
     await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -325,20 +317,9 @@ test.describe('mobile', () => {
     await expect(sheet).toBeHidden();
     await expect(eye).toBeFocused();
 
-    const menuButton = page.getByRole('button', { name: 'Setup steps' });
-    await menuButton.click();
-    const menu = page.getByRole('dialog', { name: 'Setup steps' });
-    const nav = menu.getByRole('navigation', { name: 'Jump to edit' });
-    await expect(nav.getByRole('link', { name: 'Where is it?' })).toBeFocused();
-    await expect(nav.getByRole('link', { name: /Name your event.*Completed/ })).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(menu).toHaveCount(0);
-    await expect(menuButton).toBeFocused();
-
-    await menuButton.click();
-    await menu.getByRole('link', { name: /When is it\?/ }).click();
-    await expect(heading(page, 'When is it?')).toBeFocused();
-    await expect(page).toHaveURL(/step=date$/);
+    // No step menu (spec 051): the progress bar, and Back / Next move between steps.
+    await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 2 of 8');
   });
 
   for (const scheme of ['light', 'dark'] as const) {

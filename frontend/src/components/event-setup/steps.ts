@@ -240,17 +240,6 @@ export function resumeKey(ctx: StepCtx, setupStep: string | null | undefined): S
   return list[0].key;
 }
 
-export type StepState = 'complete' | 'current' | 'skipped' | 'todo';
-
-/** Progress state per step: text + icon in the UI, never colour alone. */
-export function stepState(step: EventStep, current: StepKey, ctx: StepCtx): StepState {
-  if (step.key === current) return 'current';
-  if (step.complete(ctx)) return 'complete';
-  const list = visibleSteps(ctx);
-  const furthest = Math.max(list.findIndex((s) => s.key === ctx.saved?.setupStep), list.findIndex((s) => s.key === current));
-  return step.rule !== 'R' && list.indexOf(step) < furthest ? 'skipped' : 'todo';
-}
-
 /** Neighbours in the visible list for Back and Next. */
 export function neighbours(key: StepKey, ctx: StepCtx) {
   const list = visibleSteps(ctx);

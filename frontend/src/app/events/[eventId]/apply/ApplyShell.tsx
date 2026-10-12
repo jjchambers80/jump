@@ -108,6 +108,27 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
     );
   }
 
+  return (
+    <ApplyFrame event={event} title={title} kicker={kicker} width={width} hero={hero}>
+      {children(event)}
+    </ApplyFrame>
+  );
+}
+
+/**
+ * The apply pages' frame once the event is loaded. The setup wizard's preview
+ * (spec 051) renders it too, with `preview`: the back link is plain text, so a
+ * click never navigates the preview iframe.
+ */
+export function ApplyFrame({
+  event,
+  title,
+  kicker = 'Get involved',
+  width = 'narrow',
+  hero = 'full',
+  preview = false,
+  children,
+}: Omit<ApplyShellProps, 'eventId' | 'children'> & { event: ApplyEvent; preview?: boolean; children: ReactNode }) {
   const zone = event.venue?.timezone;
   const tile = dateTile(event.date, zone);
   const poster = resolveAssetUrl(event.logoUrl);
@@ -127,7 +148,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         />
       )}
       {/* Hero: the event this application belongs to */}
-      <div className="relative overflow-hidden bg-slate-900" data-testid="apply-hero">
+      <div id="apply-top" className="relative overflow-hidden bg-slate-900" data-testid="apply-hero">
         {poster && (
           <div
             aria-hidden
@@ -140,13 +161,20 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-brand" />
 
         <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 lg:px-8 sm:pb-12 sm:pt-8`}>
-          <Link
-            href={`/events/${event.id}`}
-            className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Back to {event.name}
-          </Link>
+          {preview ? (
+            <span className="inline-flex items-center gap-1.5 py-1 pr-2 text-sm font-semibold text-gray-300">
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back to {event.name}
+            </span>
+          ) : (
+            <Link
+              href={`/events/${event.id}`}
+              className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back to {event.name}
+            </Link>
+          )}
 
           <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
             <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm">
@@ -202,7 +230,7 @@ export default function ApplyShell({ eventId, title, kicker = 'Get involved', wi
       </>
       )}
 
-      {width === 'full' ? <main>{children(event)}</main> : <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children(event)}</main>}
+      {width === 'full' ? <main>{children}</main> : <main className={`mx-auto ${container} px-4 py-8 sm:px-6 lg:px-8 sm:py-10`}>{children}</main>}
     </BrandScope>
   );
 }

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import {
-  EVENT_STEPS, FIELD_IDS, isReachable, neighbours, resumeKey, stepByKey, stepPosition, stepState, visibleSteps,
+  EVENT_STEPS, FIELD_IDS, isReachable, neighbours, resumeKey, stepByKey, stepPosition, visibleSteps,
   type SavedEvent, type StepCtx,
 } from '@/components/event-setup/steps';
 import { PREVIEW_MESSAGE, isPreviewMessage } from '@/components/event-setup/previewMessages';
@@ -127,20 +127,12 @@ describe('validation and payloads', () => {
   });
 });
 
-describe('state', () => {
-  test('complete, current, skipped and todo', () => {
-    const saved = row({ setupStep: 'tickets' });
-    const c = ctx({ saved, fields: { ...fields, name: 'Fair', venueId: 'v1', date: '2030-06-01T16:00' } });
-    expect(stepState(stepByKey('name')!, 'tickets', c)).toBe('complete');
-    expect(stepState(stepByKey('tickets')!, 'tickets', c)).toBe('current');
-    expect(stepState(stepByKey('description')!, 'tickets', c)).toBe('skipped');
-    expect(stepState(stepByKey('collect-more')!, 'tickets', c)).toBe('todo');
-  });
-  test('Collect more is complete with an add-on, skipped without one once passed', () => {
-    const passed = (addOnCount?: number) => ctx({ saved: row({ setupStep: 'review', addOnCount }) });
-    expect(stepState(stepByKey('collect-more')!, 'review', passed(2))).toBe('complete');
-    expect(stepState(stepByKey('collect-more')!, 'review', passed(0))).toBe('skipped');
-    expect(stepState(stepByKey('collect-more')!, 'review', passed())).toBe('skipped');
+describe('complete (Skip for now shows only on an empty optional step)', () => {
+  test('Collect more is complete with an add-on', () => {
+    const at = (addOnCount?: number) => stepByKey('collect-more')!.complete(ctx({ saved: row({ addOnCount }) }));
+    expect(at(2)).toBe(true);
+    expect(at(0)).toBe(false);
+    expect(at()).toBe(false);
   });
 });
 

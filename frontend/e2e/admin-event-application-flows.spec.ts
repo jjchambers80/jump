@@ -152,12 +152,9 @@ test.describe('desktop', () => {
     // Purpose-matched templates only (the PAID vendor one).
     await expect(main(page).getByText('Makers market')).toBeVisible();
     await expect(main(page).getByText('Old free form')).toHaveCount(0);
-    // Steps after Start wait for the form.
-    await page.getByRole('button', { name: 'Setup steps' }).click();
-    const sheet = page.getByRole('dialog', { name: 'Setup steps' });
-    await expect(sheet.getByText('Questions')).toBeVisible();
-    await expect(sheet.getByRole('link', { name: /Questions/ })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    // No step menu or step labels: a progress bar, and Back / Next (spec 051).
+    await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
@@ -192,12 +189,38 @@ test.describe('desktop', () => {
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}(\\?saved=1)?$`));
   });
 
+  test('the preview shows the application form and follows what is typed; the device switch keeps it', async ({ page }) => {
+    const calls = await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths', intro: 'Bring a table.' })]);
+    await page.goto(flowUrl('vendors', 'step=details&form=form-paid'));
+    await expect(heading(page, 'Form details')).toBeVisible(COLD);
+    const pane = page.getByRole('region', { name: 'Live preview of the application form' });
+    const formFrame = page.frameLocator('iframe[title="Application form preview"]');
+    await expect(formFrame.getByRole('heading', { level: 1, name: 'Vendor booths' })).toBeVisible(COLD);
+    await expect(formFrame.getByText('Bring a table.')).toBeVisible();
+    // Unsaved typing shows at once; nothing is sent until Next.
+    await main(page).getByLabel('Name').fill('Makers market');
+    await main(page).getByLabel('Intro shown to applicants').fill('Power at every booth.');
+    await expect(formFrame.getByRole('heading', { level: 1, name: 'Makers market' })).toBeVisible();
+    await expect(formFrame.getByText('Power at every booth.')).toBeVisible();
+    expect(calls.patch).toHaveLength(0);
+    await expect(formFrame.getByRole('button', { name: 'Submit application' })).toBeDisabled();
+    // Phone and laptop frames share one iframe: switching does not reload it.
+    await formFrame.locator('body').evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
+    await pane.getByText('Desktop', { exact: true }).click();
+    await expect(pane.getByRole('radio', { name: 'Desktop' })).toBeChecked();
+    await expect(pane.locator('iframe')).toHaveCSS('width', '1280px');
+    expect(await formFrame.locator('body').evaluate(() => (window as unknown as { __kept?: boolean }).__kept)).toBe(true);
+    await expect(formFrame.getByText('Power at every booth.')).toBeVisible();
+    // Steps that do not shape the form keep the event page.
+    await page.goto(flowUrl('special-guests', 'step=lineup'));
+    await expect(page.getByRole('region', { name: 'Live preview of the event page' })).toBeVisible(COLD);
+  });
+
   test('switching a vendor form to MAP adds the Floor map step', async ({ page }) => {
     const calls = await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths' })]);
     await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
     await expect(heading(page, 'Spaces and pricing')).toBeVisible(COLD);
-    const steps = page.getByRole('list', { name: 'Setup steps' });
-    await expect(steps.getByText('Floor map')).toHaveCount(0);
+    await expect(page.getByText('Step 3 of 5 — Spaces and pricing')).toBeVisible();
     await main(page).getByTestId('form-space-map').check();
     await expect(main(page).getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/vendors?step=floor-map&form=form-paid`);
     await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`);
@@ -205,7 +228,7 @@ test.describe('desktop', () => {
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
     // The saved form decides the next step: the new Floor map step.
     await expect(heading(page, 'Floor map')).toBeFocused();
-    await expect(steps.getByText('Floor map')).toBeVisible();
+    await expect(page.getByText('Step 4 of 6 — Floor map')).toBeVisible();
   });
 
   test('a volunteer form is always free, then shifts and questions', async ({ page }) => {
@@ -256,8 +279,8 @@ test.describe('desktop', () => {
     await main(page).getByLabel('What is this form for?').selectOption('PANEL');
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ purpose: 'PANEL' });
 
-    await page.getByRole('button', { name: 'Setup steps' }).click();
-    await page.getByRole('dialog', { name: 'Setup steps' }).getByRole('link', { name: /Review and open/ }).click();
+    await page.goto(page.url().replace('step=details', 'step=review'));
+    await expect(heading(page, 'Review and open')).toBeVisible(COLD);
     page.once('dialog', (d) => void d.accept());
     await main(page).getByRole('button', { name: 'Delete form' }).click();
     await expect.poll(() => calls.remove.length).toBe(1);
@@ -281,9 +304,7 @@ test.describe('desktop', () => {
     await mockApi(page);
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await expect(heading(page, 'Collect more')).toBeVisible(COLD);
-    const steps = page.getByRole('list', { name: 'Setup steps' });
-    await expect(steps.getByRole('listitem')).toHaveCount(8);
-    await expect(steps.getByText('Vendor applications')).toHaveCount(0);
+    await expect(page.getByText('Step 7 of 8 — Collect more')).toBeVisible();
   });
 
   for (const scheme of ['light', 'dark'] as const) {

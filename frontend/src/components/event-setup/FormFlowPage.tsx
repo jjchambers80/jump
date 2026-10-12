@@ -2,14 +2,14 @@
 
 // An application flow (spec 051): one vendor, special guest, volunteer or
 // other application form, set up step by step in the event wizard's shell
-// (header, progress, step menu, footer, live preview). Started from the
+// (header, progress bar, footer, live preview). Started from the
 // event's Overview. Cards save explicitly: Next submits a step's settings and
 // moves on only when the save succeeded; list editors (tiers, shifts,
 // questions, the lineup) save each change themselves.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useCan } from '@/components/OrgContext';
+import { useCan, useOrg } from '@/components/OrgContext';
 import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
@@ -20,10 +20,9 @@ import SetupProgress from './SetupProgress';
 import SetupFooter from './SetupFooter';
 import PreviewPane from './PreviewPane';
 import LoadingFields from './LoadingFields';
-import { StepMenuSheet, type MenuItem } from './StepMenu';
-import { PREVIEW_MESSAGE } from './previewMessages';
+import { PREVIEW_MESSAGE, previewForm } from './previewMessages';
 import { APPLICATION_STEPS, PURPOSE_LABEL, formsOnStep } from './applicationSteps';
-import { FORM_FLOWS, flowSteps, formEditHref, type FlowStepKey, type FormFlowKey } from './formFlows';
+import { FORM_FLOWS, flowSteps, formEditHref, type FormFlowKey } from './formFlows';
 import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
@@ -31,7 +30,6 @@ import ReviewFormStep, { REVIEW_FORM_ID } from './steps/ReviewFormStep';
 import ShiftsCard from './steps/ShiftsCard';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
-import type { StepState } from './steps';
 import { hintClass, inputClass, labelClass, secondaryButton } from './ui';
 
 const SETTINGS_FORM_ID = 'flow-settings-form';
@@ -50,10 +48,12 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const { selectedOrg } = useOrg();
+  // Unsaved name and intro from Form details: the preview shows them as they are typed.
+  const [typed, setTyped] = useState<{ name?: string; intro?: string | null }>({});
 
   const loadTemplates = useCallback(() => {
     if (!canEdit) return setTemplates([]);
@@ -66,6 +66,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   useEffect(() => {
     if (!show) return;
     setBusy(false);
+    setTyped({});
     setError(null);
     setNotice('');
     headingRef.current?.focus();
@@ -120,8 +121,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     f.go('details', created.id);
   };
 
-  const states: StepState[] = list.map((_, i) => (i === at ? 'current' : i < at ? 'complete' : 'todo'));
-  const items: MenuItem<FlowStepKey>[] = list.map((s, i) => ({ step: s, state: states[i], href: f.href(s.key), reachable: f.reachable(s) }));
   const loadError = f.data.load.status === 'error' ? f.data.load : f.forms.load.status === 'error' ? f.forms.load : null;
 
   // Next: submit the step's own form when it has one, else just move on.
@@ -221,7 +220,15 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             </div>
           )}
           {form && (step.key === 'details' || step.key === 'payment') && (
-            <SettingsCard form={form} canEdit={canEdit} section={step.key} formId={SETTINGS_FORM_ID} hideSubmit onSave={saveAndContinue} />
+            <SettingsCard
+              form={form}
+              canEdit={canEdit}
+              section={step.key}
+              formId={SETTINGS_FORM_ID}
+              hideSubmit
+              onSave={saveAndContinue}
+              onChange={(s) => setTyped({ name: s.name as string, intro: (s.intro as string | null) ?? null })}
+            />
           )}
           {form && step.key === 'payment' && (
             <TiersCard
@@ -280,14 +287,11 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           eventName={event?.name ?? null}
           hasRow={false}
           saving={busy}
-          showMenuButton={show}
-          menuButtonClass=""
-          onMenu={() => setMenuOpen(true)}
           onPreview={() => setPreviewOpen(true)}
           onExit={() => f.exit()}
         />
       }
-      progress={show && <SetupProgress steps={list} states={states} index={at + 1} total={list.length} title={step.title} aside={null} />}
+      progress={show && <SetupProgress index={at + 1} total={list.length} title={step.title} aside={null} />}
       footer={
         show && (
           <SetupFooter
@@ -304,7 +308,16 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
       preview={
         show && f.orgId ? (
           <PreviewPane
-            message={{ type: PREVIEW_MESSAGE, orgId: f.orgId, eventId, overlay: {}, revision: f.revision, anchor: step.anchor }}
+            message={{
+              type: PREVIEW_MESSAGE,
+              orgId: f.orgId,
+              eventId,
+              overlay: {},
+              revision: f.revision,
+              anchor: (form && step.formAnchor) || step.anchor,
+              form: form && step.formAnchor ? previewForm(form, typed, selectedOrg?.name) : null,
+            }}
+            subject={form && step.formAnchor ? 'form' : 'event'}
             isDesktop={isDesktop}
             open={previewOpen}
             onClose={() => setPreviewOpen(false)}
@@ -313,7 +326,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
       }
     >
       {body}
-      {menuOpen && <StepMenuSheet items={items} onGo={(key) => f.go(key)} onClose={() => setMenuOpen(false)} unreachableText="(available once the form is created)" />}
     </SetupShell>
   );
 }

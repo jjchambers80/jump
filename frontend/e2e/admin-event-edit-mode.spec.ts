@@ -1,7 +1,7 @@
 // Edit mode (spec 050 §8.4, card 050-O): every Event
 // Details section's Edit opens its wizard step, the flyouts are gone, the old
 // editors and forms configuration pages redirect, and a set-up event opens
-// the wizard non-linearly ("Jump to edit", Save & exit back to Details with a
+// the wizard non-linearly (Back / Next, Save & exit back to Details with a
 // "Saved" notice; a PUBLISHED event saves only when asked). Every API call is mocked by
 // a small stateful fake. Wizard assertions are scoped to the form pane
 // (<main>): the preview frame repeats names.
@@ -237,12 +237,10 @@ test.describe('edit mode', () => {
 
   test('links that leave the wizard ask first while a live edit is unsaved', async ({ page }) => {
     const calls = await mockApi(page);
-    await page.goto(setupUrl('step=name'));
-    await expect(heading(page, 'Name your event')).toBeFocused(COLD);
-    await main(page).getByLabel('Event name').fill('Unsaved Name');
+    await page.goto(setupUrl('step=tickets'));
+    await expect(heading(page, 'Tickets or RSVP')).toBeFocused(COLD);
+    await main(page).getByLabel(/Capacity/).first().fill('250');
     await guardArmed(page);
-    await page.getByRole('navigation', { name: 'Jump to edit' }).getByRole('link', { name: /Tickets or RSVP/ }).click();
-    await expect(heading(page, 'Tickets or RSVP')).toBeFocused();
     const asked: string[] = [];
     page.once('dialog', (dialog) => {
       asked.push(dialog.message());
@@ -305,13 +303,15 @@ test.describe('edit mode', () => {
     await expect(dialog.getByRole('radio', { name: /Crew sign-up/ })).toHaveCount(0);
   });
 
-  test('the progress shows the step list, not "Step n of N"', async ({ page }) => {
+  test('the progress says "Editing <step>" over the bar, with no step menu', async ({ page }) => {
     await mockApi(page);
     await page.goto(setupUrl('step=description'));
     await expect(heading(page, 'Describe it')).toBeVisible(COLD);
-    await expect(page.getByText(/Step \d+ of \d+/)).toHaveCount(0);
+    await expect(page.getByText(/Step \d+ of \d+ —/)).toHaveCount(0);
     await expect(page.getByText('Editing Describe it')).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Jump to edit' }).getByRole('link', { name: 'Describe it' })).toHaveAttribute('aria-current', 'step');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Jump to edit' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
   });
 
   test('a published event saves only through Save; navigating sends no PATCH; Save & exit returns with "Saved"', async ({ page }) => {
@@ -321,14 +321,7 @@ test.describe('edit mode', () => {
     await expect(heading(page, 'Name your event')).toBeFocused(COLD);
     await main(page).getByLabel('Event name').fill('Spring Fair 2031');
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
-    // Jumps and Back keep the edit pending; nothing is sent.
-    const rail = page.getByRole('navigation', { name: 'Jump to edit' });
-    await rail.getByRole('link', { name: /Describe it/ }).click();
-    await expect(heading(page, 'Describe it')).toBeFocused();
-    await page.getByRole('button', { name: 'Back' }).click();
-    await expect(heading(page, 'Add an image').or(heading(page, 'When is it?'))).toBeVisible();
-    await rail.getByRole('link', { name: /Name your event/ }).click();
-    await expect(main(page).getByLabel('Event name')).toHaveValue('Spring Fair 2031');
+    // The edit stays pending; nothing is sent.
     await page.waitForTimeout(1200); // past the 800 ms autosave a DRAFT would use
     expect(calls.patch).toHaveLength(0);
 
@@ -429,13 +422,9 @@ test.describe('mobile 390', () => {
       await expect(heading(page, 'Describe it')).toBeFocused(COLD);
       // Tiptap mounts client-side after the step; scan the finished editor, not its placeholder.
       await expect(main(page).locator('.ProseMirror')).toBeVisible(COLD);
-      // The mobile "Jump to edit" sheet starts on the current step.
-      await page.getByRole('button', { name: 'Setup steps' }).click();
-      const sheet = page.getByRole('dialog', { name: 'Setup steps' });
-      await expect(sheet.getByRole('navigation', { name: 'Jump to edit' })).toBeVisible();
-      await expect(sheet.getByRole('link', { name: 'Describe it' })).toBeFocused();
-      await page.keyboard.press('Escape');
-      await expect(sheet).toBeHidden();
+      // No step menu on phones either: Back and Next sit in the footer.
+      await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
+      expect((await page.getByRole('button', { name: 'Back' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
       expect(await serious(page)).toEqual([]);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
       expect(overflow).toBe(false);

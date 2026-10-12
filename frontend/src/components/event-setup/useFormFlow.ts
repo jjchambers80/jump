@@ -57,7 +57,6 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
     at,
     ready,
     redirecting: !!target,
-    reachable,
     href,
     go: (key: FlowStepKey, id?: string) => router.push(href(key, id)),
     exit: (saved = false) => router.push(`/admin/events/${encodeURIComponent(eventId)}${saved ? '?saved=1' : ''}`),

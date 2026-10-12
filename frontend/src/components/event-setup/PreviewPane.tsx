@@ -4,19 +4,17 @@
 // it is the right-hand pane; below, the same element becomes a full-screen
 // sheet behind the header's eye button (focus trapped, Escape closes, focus
 // returns) and is `inert` + hidden while closed, so the frame keeps its state.
-// Phone = a 390 × 844 viewport; Desktop = 1280 wide scaled to the pane.
+// The page sits in a phone (390 × 844) or a laptop (1280 × 800) frame on a
+// dotted stage, scaled as one to fit (PreviewDevice, spec 051).
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Monitor, Smartphone, X } from 'lucide-react';
 import { useDialog } from '@/lib/useDialog';
 import { usePreviewChannel } from './usePreviewChannel';
 import type { PreviewMessage } from './previewMessages';
+import PreviewDevice, { deviceSize, type Device } from './PreviewDevice';
 
-type Device = 'phone' | 'desktop';
-const SIZES: Record<Device, { width: number; height: number | null }> = {
-  phone: { width: 390, height: 844 },
-  desktop: { width: 1280, height: null },
-};
+const STAGE_PADDING = 48;
 
 function useSize(ref: React.RefObject<HTMLElement>) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -37,8 +35,11 @@ export default function PreviewPane({
   isDesktop,
   open,
   onClose,
+  subject = 'event',
 }: {
   message: PreviewMessage;
+  /** What the frame shows: the event page, or an application form (spec 051). */
+  subject?: 'event' | 'form';
   /** ≥ lg: inline pane. Below: a sheet shown while `open`. */
   isDesktop: boolean;
   open: boolean;
@@ -59,16 +60,13 @@ export default function PreviewPane({
     if (el) el.inert = sheet && !open;
   }, [panelRef, sheet, open]);
 
-  const { width, height } = SIZES[device];
-  const scale = stage.width
-    ? Math.min(1, (stage.width - 16) / width, height ? (stage.height - 16) / height : 1)
-    : 1;
-  const frameHeight = height ?? (stage.height ? stage.height / scale : 800);
+  const outer = deviceSize(device);
+  const scale = stage.width ? Math.max(0.1, Math.min(1, (stage.width - STAGE_PADDING) / outer.width, (stage.height - STAGE_PADDING) / outer.height)) : 0.5;
 
   return (
     <section
       ref={panelRef}
-      aria-label="Live preview of the event page"
+      aria-label={subject === 'form' ? 'Live preview of the application form' : 'Live preview of the event page'}
       {...(sheet ? { role: 'dialog', 'aria-modal': true, 'aria-hidden': !open || undefined } : {})}
       className={
         sheet
@@ -91,7 +89,8 @@ export default function PreviewPane({
                 onChange={() => setDevice(value)}
                 className="peer sr-only"
               />
-              <span className="flex min-h-11 cursor-pointer items-center rounded px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 peer-checked:bg-gray-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:peer-checked:bg-slate-100 dark:peer-checked:text-slate-900 sm:min-h-9">
+              <span className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 peer-checked:bg-gray-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:peer-checked:bg-slate-100 dark:peer-checked:text-slate-900 sm:min-h-9">
+                {value === 'phone' ? <Smartphone className="h-4 w-4" aria-hidden /> : <Monitor className="h-4 w-4" aria-hidden />}
                 {value === 'phone' ? 'Phone' : 'Desktop'}
               </span>
             </label>
@@ -108,17 +107,20 @@ export default function PreviewPane({
           </button>
         )}
       </div>
-      <div ref={stageRef} className="relative flex min-h-0 flex-1 justify-center overflow-hidden p-2">
-        {!ready && <div aria-hidden className="absolute inset-4 animate-pulse rounded-lg bg-gray-200 dark:bg-slate-800" />}
-        <div style={{ width: width * scale, height: frameHeight * scale }} className="relative shrink-0">
-          <iframe
-            ref={frameRef}
-            src="/admin/events/preview-frame"
-            title="Event page preview"
-            style={{ width, height: frameHeight, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-            className={`absolute left-0 top-0 rounded-md border border-gray-300 bg-white dark:border-slate-700 ${ready ? '' : 'opacity-0'}`}
-          />
-        </div>
+      <div ref={stageRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        {/* Dotted stage, as a layer of its own so nothing inherits its colour. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 text-gray-300 dark:text-slate-700"
+          style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1.5px)', backgroundSize: '20px 20px' }}
+        />
+        <PreviewDevice
+          ref={frameRef}
+          device={device}
+          scale={scale}
+          ready={ready}
+          title={subject === 'form' ? 'Application form preview' : 'Event page preview'}
+        />
       </div>
     </section>
   );

@@ -7,7 +7,13 @@ Plan: [`specs/051-application-setup-flows/plan.md`](../../../specs/051-applicati
 
 ## Overview
 
-Event setup and application setup are separate tasks. The event wizard covers the event itself (name, venue, date, description, image, tickets, add-ons, review): 8 steps for a new ticketed event, down from 12. Vendor applications, special guests, volunteers and other applications (sponsors, press, panels) are each set up in their own **flow**, one form per run, in the same wizard shell: header, progress bar and step list, step menu sheet, Back / Next footer, live preview.
+Event setup and application setup are separate tasks. The event wizard covers the event itself (name, venue, date, description, image, tickets, add-ons, review): 8 steps for a new ticketed event, down from 12. Vendor applications, special guests, volunteers and other applications (sponsors, press, panels) are each set up in their own **flow**, one form per run, in the same wizard shell: header, progress bar, Back / Next footer, live preview.
+
+**Live form preview.** On every step that shapes the form (Form details, Spaces and pricing, Shifts, Questions, Review and open) the preview shows the application form itself, as applicants will see it: `previewForm(form, typed, orgName)` (`previewMessages.ts`) builds the public form from the saved one plus the name and intro being typed (`SettingsCard` `onChange`), and the frame renders `ApplyFormPreview` (the public `ApplyFrame` + `ApplyFormBody`, submit off, links inert), scrolled to that step's part (`formAnchor`). Lineup, Start and Floor map keep the event page.
+
+**Device frames (both wizards).** `PreviewDevice` puts the page in a phone (390 × 844, status bar and island) or a laptop (1280 × 800, browser bar and base) on a dotted stage, scaled as one to fit. Both frames share one element tree, so switching never reloads the iframe.
+
+**No step menu (both wizards).** The header has no menu button and the progress area no step labels: a `role="progressbar"` fill and one line, "Step n of N — Title" ("Editing Title" on a set-up event). Back and Next move between steps; the edit-mode rail and the step sheet were removed.
 
 Organizers start a flow from **Add to this event** on the event's Overview, from **What's next** on the wizard's Done screen, or from **Add a form** on the event's Applications tab. Editing an existing form opens its flow at Form details.
 
@@ -55,6 +61,8 @@ Mobile first: one column, 44 px targets, no horizontal scroll at 320 px. Each st
 | `frontend/src/components/event-setup/formFlows.ts` | `FORM_FLOWS` registry, `flowSteps`, `formFlowHref`, `formEditHref`, `legacyFlowHref` |
 | `frontend/src/components/event-setup/useFormFlow.ts`, `FormFlowPage.tsx` | Flow state (form, step, URL) and the page in the wizard shell |
 | `frontend/src/components/event-setup/steps/StartFormStep.tsx`, `ReviewFormStep.tsx` | Start and Review and open |
+| `frontend/src/components/event-setup/ApplyFormPreview.tsx`, `previewMessages.ts` (`previewForm`), `PreviewDevice.tsx` | Live form preview, device frames |
+| `frontend/src/components/applications/ApplyFormBody.tsx`, `app/events/[eventId]/apply/ApplyShell.tsx` (`ApplyFrame`) | Apply form body and frame, shared by the public page and the preview |
 | `frontend/src/app/admin/events/[eventId]/setup/[flow]/page.tsx` | Route |
 | `frontend/src/components/events/AddToEvent.tsx` | `ADD_TO_EVENT` entries and the Overview card |
 | `frontend/src/app/admin/events/[eventId]/applications/ApplicationsHeader.tsx` | Add a form menu |
@@ -63,7 +71,7 @@ Mobile first: one column, 44 px targets, no horizontal scroll at 320 px. Each st
 
 ## Tests
 
-- Vitest: `tests/unit/formFlows.test.ts`, `eventSetupSteps.test.ts` (8 steps, former keys resume at Review), `eventWizard.test.ts`, `eventReadiness.test.ts`.
+- Vitest: `tests/unit/formFlows.test.ts`, `previewForm.test.ts`, `eventSetupSteps.test.ts` (8 steps, former keys resume at Review), `eventWizard.test.ts`, `eventReadiness.test.ts`.
 - Jest: `tests/unit/eventReadiness.test.js` (map warning `formId`), `tests/contract/eventSetupDraft.test.js` (`setupStep: 'vendors'` → 400), the shared `eventSetupSteps.fixtures.json`.
 - Playwright: `admin-event-application-flows` (each flow, MAP → Floor map, purpose lock, old links, axe light / dark, 390 and 320 px), `admin-event-details` (Add to this event), `admin-event-setup-floor-map`, `admin-event-setup-volunteer-shifts`, `event-guest-lineup`, `admin-event-edit-mode`, `applications-add-ons`, `participants-templates`, `applications-shift-roster` (Add a form menu), `admin-event-setup-entry` (What's next).
 

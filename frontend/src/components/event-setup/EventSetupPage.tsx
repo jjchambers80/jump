@@ -14,8 +14,7 @@ import SetupFooter from './SetupFooter';
 import SaveIndicator from './SaveIndicator';
 import PreviewPane from './PreviewPane';
 import StepContent from './StepContent';
-import { StepMenuSheet, StepRail, type MenuItem } from './StepMenu';
-import { isReachable, stepState, type StepKey } from './steps';
+import { type StepKey } from './steps';
 import { useSetupFlow } from './useSetupFlow';
 import { useSetupActions } from './useSetupActions';
 import { focusAfterStepChange, takeStepFocus } from './stepFocus';
@@ -23,7 +22,6 @@ import { toSaved } from './useSetupData';
 import { markSetupFinished } from './doneMarker';
 import LoadingFields from './LoadingFields';
 import ViewEventLink from './ViewEventLink';
-import { LOCKED_REASON_ID } from './SetupFooter';
 import { secondaryButton } from './ui';
 
 export function useIsDesktop() {
@@ -46,8 +44,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const saved = ctx.saved;
   const isDesktop = useIsDesktop();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  // A publish in flight holds the organizer on Review (Back and the step menu wait).
+  // A publish in flight holds the organizer on Review (Back waits).
   const [publishing, setPublishing] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -77,8 +74,6 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
     if (isDesktop) setPreviewOpen(false);
   }, [isDesktop]);
 
-  const states = list.map((s) => stepState(s, current, ctx));
-  const items: MenuItem[] = list.map((s, i) => ({ step: s, state: states[i], href: urlFor(s.key), reachable: isReachable(s.key, ctx) }));
   const readOnly = saveState.error?.status === 403;
   const loadError = data.load.status === 'error' ? data.load : null;
 
@@ -141,7 +136,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
 
   const ready = flow.initialised && !loadError && !flow.redirecting;
   const done = current === 'done';
-  const railed = mode === 'edit' && !done;
+  const editing = mode === 'edit' && !done;
 
   return (
     <SetupShell
@@ -151,10 +146,6 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           eventName={saved?.name ?? null}
           hasRow={!!saved}
           saving={saveState.status === 'saving'}
-          showMenuButton={ready}
-          menuButtonClass={railed ? 'xl:hidden' : ''}
-          menuLockedBy={publishing ? LOCKED_REASON_ID : undefined}
-          onMenu={() => !publishing && setMenuOpen(true)}
           onPreview={() => setPreviewOpen(true)}
           onExit={actions.onExit}
           viewEvent={saved && orgId ? <ViewEventLink orgId={orgId} event={saved} /> : undefined}
@@ -163,22 +154,19 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       progress={
         ready && !done && (
           <SetupProgress
-            steps={list}
-            states={states}
             index={at + 1}
             total={list.length}
             title={step.title}
-            editMode={railed}
+            editMode={editing}
             aside={<SaveIndicator status={saveState.status} invalidCount={saveState.invalidCount} savedAt={saveState.savedAt} hasRow={!!saved} onRetry={() => void saveState.retry()} />}
           />
         )
       }
-      rail={ready && railed ? <StepRail items={items} onGo={actions.go} lockedBy={publishing ? LOCKED_REASON_ID : undefined} /> : undefined}
       footer={
         ready && !done && (
           <SetupFooter
             onBack={actions.onBack}
-            locked={publishing ? 'Publishing… Back and the step menu return when it finishes.' : undefined}
+            locked={publishing ? 'Publishing… Back returns when it finishes.' : undefined}
             onSkip={actions.onSkip}
             onSave={actions.onSave}
             onNext={current === 'review' ? undefined : () => void actions.onNext()}
@@ -200,7 +188,6 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       }
     >
       {body}
-      {menuOpen && <StepMenuSheet items={items} onGo={actions.go} onClose={() => setMenuOpen(false)} />}
     </SetupShell>
   );
 }

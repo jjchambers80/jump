@@ -11,6 +11,7 @@ import api from '@/services/api';
 import EventPageView from '@/app/events/[eventId]/EventPageView';
 import { orgFromEvent, type EventPageEvent } from '@/app/events/[eventId]/eventPage';
 import { useOrg } from '@/components/OrgContext';
+import ApplyFormPreview from './ApplyFormPreview';
 import {
   PREVIEW_READY,
   applyOverlay,
@@ -22,7 +23,7 @@ import {
 } from './previewMessages';
 
 function scrollToAnchor(anchor: string) {
-  const target = document.getElementById(anchor) ?? document.getElementById('tickets') ?? document.getElementById('event-hero');
+  const target = document.getElementById(anchor) ?? document.getElementById('tickets') ?? document.getElementById('event-hero') ?? document.getElementById('apply-top');
   if (!target) return;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const top = target.getBoundingClientRect().top + window.scrollY - 16;
@@ -105,5 +106,7 @@ export default function PreviewFrame() {
   const stale = !!saved && saved.revision < message.revision;
   const event = applyOverlay(base, stale ? { ...carried, ...message.overlay } : message.overlay);
 
+  // Spec 051: an application flow previews the form being built.
+  if (message.form) return <ApplyFormPreview event={event} form={message.form} />;
   return <EventPageView event={event} org={orgFromEvent(event)} preview />;
 }
