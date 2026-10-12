@@ -11,6 +11,8 @@ const nextConfig = {
       { source: '/admin/settings/platform', destination: '/admin/system/settings', permanent: true },
       { source: '/admin/organizations', destination: '/admin/system/organizations', permanent: true },
       // Settings › Payments › Payouts became "Payout bank account"; Finance › Payouts is the history page
+      // Settings › Applications became Settings › Notifications (every editable system email)
+      { source: '/admin/settings/applications', destination: '/admin/settings/notifications', permanent: true },
       { source: '/admin/settings/payments/payouts', destination: '/admin/settings/payments/payout-bank-account', permanent: true },
       // Legacy legal paths (spec 023 LR-03). The targets are dark until
       // NEXT_PUBLIC_LEGAL_PAGES_ENABLED and counsel's text ship together.

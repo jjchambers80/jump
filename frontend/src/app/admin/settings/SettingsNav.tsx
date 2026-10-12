@@ -18,7 +18,7 @@ const SECTIONS: Section[] = [
   // Spec 022 phase 2: shown only when billing is on (NEXT_PUBLIC_BILLING_ENABLED)
   ...(process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true' ? [{ href: '/admin/settings/plan', label: 'Plan' }] : []),
   { href: '/admin/settings/tax', label: 'Tax' },
-  { href: '/admin/settings/applications', label: 'Applications' },
+  { href: '/admin/settings/notifications', label: 'Notifications' },
   { href: '/admin/settings/customer-accounts', label: 'Customer accounts' },
   { href: '/admin/settings/policies', label: 'Policies' },
   { href: '/admin/settings/users', label: 'Users', permission: 'settings.users' },

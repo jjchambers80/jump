@@ -89,7 +89,7 @@ export const FEATURES = [
       { key: 'settings.payments', label: 'Change payment settings and the payout account' },
       { key: 'settings.customerAccounts', label: 'Change customer account and refund policy settings' },
       { key: 'settings.policies', label: 'Edit and publish the store policies (refund, privacy, terms…)' },
-      { key: 'settings.applications', label: 'Change application email templates and the digest' },
+      { key: 'settings.applications', label: 'Edit notification emails and the application digest' },
       { key: 'settings.agentAccess', label: 'Manage AI agent access' },
       { key: 'settings.activity', label: 'View the activity log' },
       // Locked: an Organizer who could manage users could make themselves Admin,
