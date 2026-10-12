@@ -182,7 +182,7 @@ class ApplicationDigestService {
       parts.push(`Approved, awaiting space: ${awaitingSpace} vendor${awaitingSpace === 1 ? '' : 's'} still need${awaitingSpace === 1 ? 's' : ''} to choose and pay for a space.\n${base}/admin/events`);
     }
     parts.push(`${base}/admin/events`);
-    parts.push(`You get this daily summary because you are a member of ${org.name}. Turn it off under Settings › Applications.`);
+    parts.push(`You get this daily summary because you are a member of ${org.name}. Turn it off under Settings › Notifications.`);
     return { subject, body: parts.join('\n\n') };
   }
 

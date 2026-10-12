@@ -207,8 +207,7 @@ describe('Settings › Notifications (spec 053)', () => {
     const key = 'application.event.WAITLISTED';
     const put = await request(app).put(`/admin/settings/notifications/${key}`).set(...auth(adminToken)).send({ subject: 'Waitlist: {{event.name}}', body: 'Hang tight, {{applicant.firstName}}.' });
     expect(put.status).toBe(200);
-    const legacy = await request(app).get('/admin/settings/application-templates').set(...auth(adminToken));
-    expect(legacy.body.data.find((t) => t.action === 'WAITLISTED')).toMatchObject({ subject: 'Waitlist: {{event.name}}', isDefault: false });
+    expect(await applicationTemplateService.getTemplate(org.id, 'WAITLISTED')).toMatchObject({ subject: 'Waitlist: {{event.name}}', isDefault: false });
     const rendered = await applicationTemplateService.render(org.id, 'WAITLISTED', { eventId: 'e1', organizationId: org.id, contact: { firstName: 'Pat' }, event: { name: 'Expo' } });
     expect(rendered).toEqual({ subject: 'Waitlist: Expo', body: 'Hang tight, Pat.' });
     await request(app).delete(`/admin/settings/notifications/${key}`).set(...auth(adminToken));

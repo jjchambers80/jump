@@ -15,7 +15,7 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 
 | File | Purpose |
 |------|---------|
-| `packages/db/prisma/schema.prisma` (`ApplicationForm`, `ApplicationTier`, `ApplicationQuestion`, `ApplicantProfile(+Image)`, `Application`, `ApplicationAnswer`, `ApplicationDecision`, `ApplicationRefund`, `ApplicationMessageTemplate`, `Contact.stripeCustomerId`) | Model; migration `20260916200000_applications` |
+| `packages/db/prisma/schema.prisma` (`ApplicationForm`, `ApplicationTier`, `ApplicationQuestion`, `ApplicantProfile(+Image)`, `Application`, `ApplicationAnswer`, `ApplicationDecision`, `ApplicationRefund`, `Contact.stripeCustomerId`) | Model; migration `20260916200000_applications` |
 | `backend/src/config/applications.js` | Limits, question types, merge fields, default templates |
 | `backend/src/services/ApplicationFormService.js` | Forms / tiers / questions CRUD with value validation, public read shape, `tierAmounts` (fee mode PASS/ABSORB), acceptance window, `paymentsEnabled()` |
 | `backend/src/services/ApplicantProfileService.js` | Profile upsert per org + contact, photos via `ImageService` (`usageType: applicant_profile`) |
@@ -150,7 +150,7 @@ Redesigned 2026-09-26 to match the event page's language (hero from PR #202, tic
 - **Bulk on PAID**: WAITLIST and REJECT run in bulk on any form; APPROVE stays per application on PAID forms (each approval charges the saved card). The bulk bar disables Approve when the selection includes a PAID row.
 - **Applicant profile self-service**: `ApplicantProfileSection` on the account page edits name / description / website / socials (`PATCH /buyer/me/applicant-profile`), adds photos (`POST …/photos`, multipart `photos`, cap 6) and removes them. Changes apply to future applications only — submitted answers are not rewritten.
 - **Price-changed notice**: `_serializeAdmin` adds `pricing: { currentApplicantPays, currentOrgReceives, changed }` by recomputing `tierAmounts` with today's tier price, fee mode and tax; the detail page shows an amber note while the snapshot stays the only amount charged.
-- **Daily digest**: the hourly sweep calls `ApplicationDigestService.sendDue`. An organization is due when `applicationDigestAt` is null or ≥ 23 h old; the window is `(applicationDigestAt ?? now − 24 h, now]`, claimed with a conditional `updateMany` before reading so two backend instances never double-send. Submissions in the window are grouped by event → form (25 rows per form, then "…and N more") and mailed to every `OrganizationMember` (ORGANIZER and ADMIN) with an inline link per event to `/admin/events/:id/applications?status=SUBMITTED` and one **Open** button to `/admin/events` (spec 037; was the Participants list). Quiet windows still advance. Off switch: Settings › Applications → Daily digest (`applicationDigestEnabled`).
+- **Daily digest**: the hourly sweep calls `ApplicationDigestService.sendDue`. An organization is due when `applicationDigestAt` is null or ≥ 23 h old; the window is `(applicationDigestAt ?? now − 24 h, now]`, claimed with a conditional `updateMany` before reading so two backend instances never double-send. Submissions in the window are grouped by event → form (25 rows per form, then "…and N more") and mailed to every `OrganizationMember` (ORGANIZER and ADMIN) with an inline link per event to `/admin/events/:id/applications?status=SUBMITTED` and one **Open** button to `/admin/events` (spec 037; was the Participants list). Quiet windows still advance. Off switch: Settings › Notifications → Daily application digest (`applicationDigestEnabled`).
 - **Event duplicate**: `POST /organizations/:orgId/events/:eventId/duplicate { date, name? }` (ORGANIZER+, `requireOrgMembership`) creates a DRAFT with the source's venue, description, image, capacity, category, cached tax rate and price tiers (inventory 0, sale windows cleared), then `copyForms` copies every form as DRAFT with no open/close window, tiers at full quantity, non-archived questions. Orders, tickets and applications are never copied; `purpose`, `collectBusiness` and volunteer shifts (moved by the date offset, no picks) are. `{ setup: true }` makes the copy a wizard draft (`setupCompletedAt: null`, `setupStep: 'date'`). Response is the event detail plus `copiedForms`.
 
 ### Roles
@@ -177,7 +177,7 @@ ORGANIZER+ views forms/applications and decides. Configuring event forms, tiers,
 | POST | `…/applications/:id/preview` `{ decision, tierId? }`, `…/applications/:id/decision` `{ decision, tierId?, note?, message?, sendEmail? }`, `…/applications/:id/charge`, `…/applications/bulk` | organizer+ |
 | POST | `…/applications/:id/refund` `{ amount?, reason? }` | admin |
 | POST | `/webhooks/stripe` — events whose `metadata.applicationId` is set (Checkout, SetupIntent, PaymentIntent) and `charge.refunded` for a known intent | Stripe |
-| GET/PUT/DELETE | `/admin/settings/application-templates[/:action]` | organizer+ / admin / admin |
+| GET/PUT/DELETE | `/admin/settings/notifications[/application.<event|standing>.<ACTION>]` (spec 053, see [notifications](notifications.md)) | organizer+ / `settings.notifications` |
 | GET/PATCH | `/admin/settings/application-digest` `{ enabled }` | organizer+ / admin |
 | POST | `/organizations/:orgId/events/:eventId/duplicate` `{ date, name? }` | organizer+ (member of the org) |
 

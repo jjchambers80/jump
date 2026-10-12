@@ -200,15 +200,13 @@ describe('Standing applications contract (spec 044A)', () => {
   });
 
   it('exposes the four standing email templates', async () => {
-    const response = await request(app)
-      .get('/admin/settings/application-templates?scope=STANDING')
-      .set(...auth(adminToken));
+    const response = await request(app).get('/admin/settings/notifications').set(...auth(adminToken));
     expect(response.status).toBe(200);
-    expect(response.body.data.map(({ action, scope }) => [action, scope])).toEqual([
-      ['RECEIVED', 'STANDING'],
-      ['APPROVED', 'STANDING'],
-      ['WAITLISTED', 'STANDING'],
-      ['REJECTED', 'STANDING'],
+    expect(response.body.groups.find((g) => g.key === 'standingForms').notifications.map((n) => n.key)).toEqual([
+      'application.standing.RECEIVED',
+      'application.standing.APPROVED',
+      'application.standing.WAITLISTED',
+      'application.standing.REJECTED',
     ]);
   });
 

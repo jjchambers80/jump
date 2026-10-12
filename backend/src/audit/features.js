@@ -60,7 +60,6 @@ export const MODEL_FEATURES = {
   ApplicationTier: { feature: 'Applications', label: 'name', org: 'form', event: 'form' },
   ApplicationQuestion: { feature: 'Applications', label: 'label', org: 'form', event: 'form' },
   ApplicationFormTemplate: { feature: 'Applications', label: 'name' },
-  ApplicationMessageTemplate: { feature: 'Applications' },
   NotificationTemplate: { feature: 'Settings › Notifications', label: 'key' },
   Application: { feature: 'Applications' },
   ApplicationAnswer: { feature: 'Applications', org: 'application', event: 'application' },
