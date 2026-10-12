@@ -71,7 +71,7 @@ test.describe('as ADMIN', () => {
     const nav = page.getByRole('navigation', { name: 'Settings sections' });
     const link = nav.getByRole('link', { name: 'Customer accounts' });
     await expect(link).toBeVisible();
-    expect((await link.boundingBox())!.y).toBeGreaterThan((await nav.getByRole('link', { name: 'Applications' }).boundingBox())!.y);
+    expect((await link.boundingBox())!.y).toBeGreaterThan((await nav.getByRole('link', { name: 'Notifications' }).boundingBox())!.y);
     await link.click();
 
     await expect(page).toHaveURL(/\/admin\/settings\/customer-accounts$/);
