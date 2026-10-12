@@ -1,7 +1,7 @@
-// Contract tests for Settings › Notifications (spec 053 card A): list,
+// Contract tests for Settings › Notifications (spec 053 cards A + B): list,
 // edit, reset, preview and test send of store-edited system emails, the
-// settings.notifications permission, and the order confirmation using the
-// store's wording while its order blocks stay fixed.
+// settings.notifications permission, the optional RSVP reminder switch, and
+// each email using the store's wording while its system blocks stay fixed.
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
@@ -32,7 +32,7 @@ describe('Settings › Notifications (spec 053)', () => {
     adminToken = await staffToken({ email: emails[0], role: 'ADMIN' });
     organizerToken = await staffToken({ email: emails[1], role: 'ORGANIZER' });
     adminBToken = await staffToken({ email: emails[2], role: 'ADMIN' });
-    org = await prisma.organization.create({ data: { name: `${TAG} Retro` } });
+    org = await prisma.organization.create({ data: { name: `${TAG} Retro`, email: `store@${TAG}.test` } });
     orgB = await prisma.organization.create({ data: { name: `${TAG} Other` } });
     await joinOrgByToken(adminToken, org.id, 'ADMIN');
     await joinOrgByToken(organizerToken, org.id, 'ORGANIZER');
@@ -148,5 +148,93 @@ describe('Settings › Notifications (spec 053)', () => {
     const msg = send.mock.calls[0][0];
     expect(msg.subject).toBe('Order Confirmed — Gala (ORD-CT2)');
     expect(msg.text).toBe('Hi there,\n\nYour order ORD-CT2 has been confirmed.');
+  });
+  it('lists every registry email in its group; only the reminder is optional', async () => {
+    const res = await request(app).get('/admin/settings/notifications').set(...auth(adminToken));
+    const byGroup = Object.fromEntries(res.body.groups.map((g) => [g.key, g.notifications.map((n) => n.key)]));
+    expect(byGroup).toEqual({
+      orders: ['order.confirmation'],
+      rsvps: ['rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled'],
+      applicationPayments: ['application.receipt'],
+    });
+    const optional = res.body.groups.flatMap((g) => g.notifications).filter((n) => n.optional).map((n) => n.key);
+    expect(optional).toEqual(['rsvp.reminder']);
+  });
+
+  it('every email previews against sample data', async () => {
+    for (const key of ['order.confirmation', 'rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled', 'application.receipt']) {
+      const res = await request(app).post(`/admin/settings/notifications/${key}/preview`).set(...auth(adminToken)).send({});
+      expect(res.status).toBe(200);
+      expect(res.body.subject).not.toMatch(/\{\{/);
+      expect(res.body.html).toContain('Sample');
+    }
+  });
+
+  it('the reminder can be switched off and back on; other emails cannot', async () => {
+    const off = await request(app).put('/admin/settings/notifications/rsvp.reminder').set(...auth(adminToken)).send({ subject: 'Tomorrow: {{event.name}}', body: 'See you!', enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.body).toMatchObject({ enabled: false, optional: true, isDefault: false });
+    expect((await request(app).put(`/admin/settings/notifications/${KEY}`).set(...auth(adminToken)).send({ subject: 'a', body: 'b', enabled: false })).status).toBe(400);
+    expect((await request(app).put('/admin/settings/notifications/rsvp.reminder').set(...auth(adminToken)).send({ subject: 'a', body: 'b', enabled: 'no' })).status).toBe(400);
+
+    const rsvp = {
+      id: 'rsvp-ct',
+      eventId: 'evt-ct',
+      partySize: 2,
+      event: { name: `${TAG} Picnic`, date: new Date('2027-06-01T16:00:00Z'), venue: { timezone: 'America/New_York', organization: { id: org.id, name: org.name, email: org.email } } },
+      contact: { firstName: 'Kim', email: `guest@${TAG}.test` },
+    };
+    await emailService.sendRsvpReminder(rsvp, { cancelUrl: 'https://x.test/cancel' });
+    expect(send).not.toHaveBeenCalled();
+
+    const on = await request(app).put('/admin/settings/notifications/rsvp.reminder').set(...auth(adminToken)).send({ subject: 'Tomorrow: {{event.name}}', body: 'See you, {{guest.firstName}}!', enabled: true });
+    expect(on.body.enabled).toBe(true);
+    await emailService.sendRsvpReminder(rsvp, { cancelUrl: 'https://x.test/cancel' });
+    const msg = send.mock.calls[0][0];
+    expect(msg.subject).toBe(`Tomorrow: ${TAG} Picnic`);
+    expect(msg.html).toContain('See you, Kim!');
+    expect(msg.html).toContain('Cancel RSVP');
+    expect(msg.html).toContain('Party size:');
+
+    const reset = await request(app).delete('/admin/settings/notifications/rsvp.reminder').set(...auth(adminToken));
+    expect(reset.body).toMatchObject({ enabled: true, isDefault: true });
+  });
+
+  it('the RSVP cancellation replies to the store and no longer names support@jump.events', async () => {
+    const event = { id: 'evt-ct', name: `${TAG} Picnic`, date: new Date('2027-06-01T16:00:00Z'), admissionMode: 'RSVP', venue: { timezone: 'America/New_York', organization: { id: org.id, name: org.name, email: org.email } } };
+    await emailService.sendCancellationNotification(event, [{ contact: { firstName: 'Kim', email: `guest@${TAG}.test` } }, { contact: { firstName: 'Kim', email: `guest@${TAG}.test` } }]);
+    expect(send).toHaveBeenCalledTimes(1);
+    const msg = send.mock.calls[0][0];
+    expect(msg.subject).toBe(`Event Cancelled — ${TAG} Picnic`);
+    expect(msg.reply_to).toBe(org.email);
+    expect(msg.html).not.toContain('support@jump.events');
+    expect(msg.text).toContain('reply to this email');
+  });
+
+  it('the RSVP confirmation and application receipt use the store wording and keep their blocks', async () => {
+    await request(app).put('/admin/settings/notifications/rsvp.confirmation').set(...auth(adminToken)).send({ subject: 'Yes! {{event.name}}', body: 'Party of {{rsvp.partySize}}, {{guest.firstName}}.' });
+    await request(app).put('/admin/settings/notifications/application.receipt').set(...auth(adminToken)).send({ subject: 'Paid: {{order.ref}}', body: '{{profile.businessName}} paid {{order.total}}.' });
+    const venue = { name: 'Hall', address: '1 Main St', timezone: 'America/New_York', organization: { id: org.id, name: org.name, email: org.email } };
+    await emailService.sendRsvpConfirmation(
+      { id: 'rsvp-ct2', partySize: 3, event: { name: 'Gala', date: new Date('2027-06-01T16:00:00Z'), venue }, contact: { firstName: 'Kim', email: `guest@${TAG}.test` } },
+      { cancelUrl: 'https://x.test/cancel' }
+    );
+    const conf = send.mock.calls[0][0];
+    expect(conf.subject).toBe('Yes! Gala');
+    expect(conf.html).toContain('Party of 3, Kim.');
+    expect(conf.html).toContain('Cancel your RSVP');
+    expect(conf.attachments[0].filename).toBe('gala.ics');
+
+    const ok = await emailService.sendApplicationReceipt(
+      { id: 'app-ct', contact: { firstName: 'Pat', email: `vendor@${TAG}.test` }, profile: { businessName: 'Pixel Pins' }, tier: { name: '10x10' }, event: { name: 'Gala', date: new Date('2027-06-01T16:00:00Z'), venue }, order: { id: 'ord-ct3', orderRef: 'APP-CT', totalAmount: 275, payment: { source: 'STRIPE' } } },
+      { statusUrl: 'https://x.test/status', lines: [{ label: '10x10 space', amount: 275 }] }
+    );
+    expect(ok).toBe(true);
+    const receipt = send.mock.calls[1][0];
+    expect(receipt.subject).toBe('Paid: APP-CT');
+    expect(receipt.html).toContain('Pixel Pins paid $275.00.');
+    expect(receipt.html).toContain('10x10 space');
+    expect(receipt.html).toContain('Total paid');
+    expect(receipt.html).toContain('View your application');
   });
 });

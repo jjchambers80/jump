@@ -15,6 +15,9 @@ export interface NotificationTemplate {
   mergeFields: { key: string; description: string }[];
   subject: string;
   body: string;
+  /** The store may switch this email off (only the RSVP reminder today). */
+  optional: boolean;
+  enabled: boolean;
   isDefault: boolean;
   updatedAt: string | null;
 }
@@ -25,7 +28,7 @@ export interface NotificationGroup {
   notifications: NotificationTemplate[];
 }
 
-export type Draft = { subject: string; body: string };
+export type Draft = { subject: string; body: string; enabled?: boolean };
 
 export function useNotificationsApi() {
   return useMemo(

@@ -21,12 +21,26 @@ const DEFAULT = {
   ],
   subject: 'Order Confirmed — {{event.name}} ({{order.ref}})',
   body: 'Hi {{buyer.firstName}},\n\nYour order {{order.ref}} has been confirmed.',
+  optional: false,
+  enabled: true,
   isDefault: true,
   updatedAt: null,
 };
 
+const REMINDER = {
+  ...DEFAULT,
+  key: 'rsvp.reminder',
+  label: 'RSVP reminder',
+  when: 'Sent to each guest about 24 hours before the event.',
+  blocks: ['Cancel RSVP button'],
+  subject: 'Reminder: {{event.name}}',
+  body: 'Hi {{guest.firstName}}',
+  optional: true,
+};
+
 async function mockApi(page: Page) {
   let template = { ...DEFAULT };
+  let reminder = { ...REMINDER };
   const calls: { method: string; path: string; body?: unknown }[] = [];
   const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -39,7 +53,13 @@ async function mockApi(page: Page) {
     const method = req.method();
     const body = req.postData() ? req.postDataJSON() : undefined;
     calls.push({ method, path, body });
-    if (path === '/admin/settings/notifications') return route.fulfill(json({ groups: [{ key: 'orders', label: 'Orders & tickets', notifications: [template] }] }));
+    if (path === '/admin/settings/notifications') {
+      return route.fulfill(json({ groups: [{ key: 'orders', label: 'Orders & tickets', notifications: [template] }, { key: 'rsvps', label: 'RSVPs', notifications: [reminder] }] }));
+    }
+    if (path === '/admin/settings/notifications/rsvp.reminder' && method === 'PUT') {
+      reminder = { ...reminder, ...body, isDefault: false };
+      return route.fulfill(json(reminder));
+    }
     if (path === `/admin/settings/notifications/${KEY}` && method === 'PUT') {
       template = { ...template, ...body, isDefault: false };
       return route.fulfill(json(template));
@@ -111,12 +131,31 @@ test.describe('Settings › Notifications', () => {
     await expect(row).not.toContainText('Customized');
   });
 
+  test('the RSVP reminder can be switched off', async ({ page }) => {
+    const { calls } = await mockApi(page);
+    await page.goto('/admin/settings/notifications');
+    const row = page.getByRole('button', { name: 'Edit RSVP reminder email' });
+    await row.click();
+    const dialog = page.getByRole('dialog', { name: 'RSVP reminder' });
+    const toggle = dialog.getByRole('switch', { name: 'Send this email' });
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(row).toContainText('Off');
+    expect(calls.find((c) => c.method === 'PUT' && c.path.endsWith('rsvp.reminder'))?.body).toEqual({ subject: REMINDER.subject, body: REMINDER.body, enabled: false });
+
+    await page.getByRole('button', { name: 'Edit Order confirmation email' }).click();
+    await expect(page.getByRole('dialog', { name: 'Order confirmation' }).getByRole('switch')).toHaveCount(0);
+  });
+
   test('the dialog has no axe violations', async ({ page }) => {
     await mockApi(page);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/admin/settings/notifications');
-    await page.getByRole('button', { name: 'Edit Order confirmation email' }).click();
-    await expect(page.getByRole('dialog', { name: 'Order confirmation' })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit RSVP reminder email' }).click();
+    await expect(page.getByRole('dialog', { name: 'RSVP reminder' })).toBeVisible();
     const results = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(results.violations).toEqual([]);
   });

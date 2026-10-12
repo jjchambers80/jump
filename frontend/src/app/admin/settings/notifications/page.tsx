@@ -147,7 +147,7 @@ export default function NotificationsPage() {
             key={n.key}
             label={`Edit ${n.label} email`}
             leading={<Mail className="h-5 w-5" aria-hidden="true" />}
-            primary={n.isDefault ? n.label : `${n.label} · Customized`}
+            primary={[n.label, !n.isDefault && 'Customized', n.optional && !n.enabled && 'Off'].filter(Boolean).join(' · ')}
             secondary={n.subject}
             buttonRef={refFor(`notification:${n.key}`)}
             onClick={() => setOpenKey(n.key)}
@@ -237,7 +237,7 @@ export default function NotificationsPage() {
           key={openNotification.key}
           title={openNotification.label}
           when={openNotification.when}
-          template={openNotification}
+          template={{ ...openNotification, enabled: openNotification.optional ? openNotification.enabled : undefined }}
           mergeFields={openNotification.mergeFields}
           blocks={openNotification.blocks}
           canEdit={canEditNotifications}

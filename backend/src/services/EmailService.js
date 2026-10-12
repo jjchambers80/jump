@@ -137,21 +137,77 @@ function orderContext(order) {
   };
 }
 
-// Spec 053: a sample for the Settings › Notifications preview and test send.
-// Never a real buyer: the preview must not leak anyone's order to staff.
-const SAMPLES = {
-  'order.confirmation': (organization) => ({
-    order: {
-      id: 'sample',
-      orderRef: 'ORD-SAMPLE',
-      totalAmount: 52.5,
-      contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' },
-      event: { name: 'Sample event', date: new Date(Date.now() + 14 * 86400000).toISOString(), venue: { timezone: 'America/New_York' } },
-      organization,
-      addOns: [{ quantity: 1, name: 'Parking pass' }],
+/** Merge context for the RSVP emails (spec 053 `rsvp.*`). */
+function rsvpContext(event, contact, partySize = null) {
+  const organization = event.venue?.organization || {};
+  return {
+    guest: { firstName: contact?.firstName || 'there', lastName: contact?.lastName || '' },
+    event: { name: event.name || '', date: formatEventDateTime(event.date, event.venue?.timezone) || '' },
+    rsvp: { partySize: partySize == null ? '' : String(partySize) },
+    organization: { name: organization.name || '' },
+  };
+}
+
+/** Merge context for the application receipt (spec 053 `application.receipt`). */
+function receiptContext(application) {
+  const organization = application.event?.venue?.organization || {};
+  return {
+    applicant: { firstName: application.contact?.firstName || 'there', lastName: application.contact?.lastName || '' },
+    profile: { businessName: application.profile?.businessName || 'your' },
+    event: {
+      name: application.event?.name || 'the event',
+      date: formatEventDateTime(application.event?.date, application.event?.venue?.timezone) || '',
     },
-    tickets: [{ priceTier: { name: 'General admission' } }, { priceTier: { name: 'General admission' } }],
-  }),
+    tier: { name: application.tier?.name || '' },
+    order: { ref: application.order?.orderRef || '', total: `$${Number(application.order?.totalAmount || 0).toFixed(2)}` },
+    organization: { name: organization.name || '' },
+  };
+}
+
+// Spec 053: samples for the Settings › Notifications preview and test send.
+// Never a real buyer: the preview must not leak anyone's details to staff.
+const SAMPLE_URL = 'https://example.com/sample';
+const sampleDate = () => new Date(Date.now() + 14 * 86400000).toISOString();
+const sampleEvent = (organization) => ({
+  id: 'sample',
+  name: 'Sample event',
+  date: sampleDate(),
+  admissionMode: 'RSVP',
+  venue: { name: 'Sample venue', address: '1 Main St', timezone: 'America/New_York', organization },
+});
+const sampleRsvp = (organization) => ({ id: 'sample', partySize: 2, event: sampleEvent(organization), contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' } });
+const SAMPLES = {
+  'order.confirmation': (svc, organization, template) =>
+    svc.buildOrderConfirmation(
+      {
+        id: 'sample',
+        orderRef: 'ORD-SAMPLE',
+        totalAmount: 52.5,
+        contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' },
+        event: { name: 'Sample event', date: sampleDate(), venue: { timezone: 'America/New_York' } },
+        organization,
+        addOns: [{ quantity: 1, name: 'Parking pass' }],
+      },
+      [{ priceTier: { name: 'General admission' } }, { priceTier: { name: 'General admission' } }],
+      { manageTicketsUrl: null, template }
+    ),
+  'rsvp.confirmation': (svc, organization, template) => svc.buildRsvpConfirmation(sampleRsvp(organization), { cancelUrl: SAMPLE_URL, template }),
+  'rsvp.reminder': (svc, organization, template) => svc.buildRsvpReminder(sampleRsvp(organization), { cancelUrl: SAMPLE_URL, template }),
+  'rsvp.cancelled': (svc, organization, template) =>
+    svc.buildRsvpCancellation(sampleEvent(organization), { firstName: 'Alex', email: 'alex@example.com' }, template),
+  'application.receipt': (svc, organization, template) =>
+    svc.buildApplicationReceipt(
+      {
+        id: 'sample',
+        contact: { firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' },
+        profile: { businessName: 'Pixel Pins' },
+        tier: { name: '10x10' },
+        event: { ...sampleEvent(organization), admissionMode: 'TICKETED' },
+        order: { id: 'sample', orderRef: 'APP-SAMPLE', totalAmount: 275, paidAt: new Date().toISOString(), payment: { source: 'STRIPE' } },
+      },
+      { statusUrl: SAMPLE_URL, accountUrl: SAMPLE_URL, lines: [{ label: '10x10 space', amount: 275 }], booth: { label: 'A12', size: '10×10', mapUrl: SAMPLE_URL } },
+      template
+    ),
 };
 
 function icsText(value) {
@@ -248,9 +304,9 @@ ${manageTicketsHtml}
    * @returns {Promise<{ subject: string, html: string, text: string }>}
    */
   async previewNotification(key, organization, template) {
-    const sample = SAMPLES[key]?.(organization);
-    if (!sample) throw new Error(`No preview for notification ${key}`);
-    const msg = await this.buildOrderConfirmation(sample.order, sample.tickets, { manageTicketsUrl: null, template });
+    const build = SAMPLES[key];
+    if (!build) throw new Error(`No preview for notification ${key}`);
+    const msg = await build(this, organization, template);
     return { subject: msg.subject, html: msg.html, text: msg.text };
   }
 
@@ -769,83 +825,79 @@ ${manageTicketsHtml}
   }
 
   /**
-   * Send cancellation notification to all ticket holders (FR-037)
-   * @param {Object} event - Event object
-   * @param {Array} tickets - Tickets to notify (with contact relations)
+   * "Event cancelled" to every GOING guest of a cancelled RSVP event (spec
+   * 034; spec 053 `rsvp.cancelled`). Paid events send no email from here.
+   * One email per address; a failure is logged and the loop moves on.
+   *
+   * @param {Object} event - the cancelled event with venue.organization
+   * @param {Array<{ contact: { email, firstName } }>} rsvps
    */
-  async sendCancellationNotification(event, tickets) {
-    // Spec 033: the event date belongs to the venue's zone, not the server's.
-    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
-    const isRsvp = event.admissionMode === 'RSVP';
-    // Group tickets by contact email to avoid duplicate emails
-    const contactEmails = new Map();
-    for (const ticket of tickets) {
-      const email = ticket.contact?.email;
-      if (email && !contactEmails.has(email)) {
-        contactEmails.set(email, ticket.contact);
-      }
+  async sendCancellationNotification(event, rsvps) {
+    const organization = event.venue?.organization || {};
+    const template = await notificationTemplateService.resolve(organization.id || event.venue?.organizationId || null, 'rsvp.cancelled');
+    const contacts = new Map();
+    for (const rsvp of rsvps) {
+      const email = rsvp.contact?.email;
+      if (email && !contacts.has(email)) contacts.set(email, rsvp.contact);
     }
 
-    for (const [email, contact] of contactEmails) {
+    for (const [email, contact] of contacts) {
       try {
-        const msg = {
-          to: [email],
-          from: fromAs(event.organizationName ?? event.venue?.organization?.name),
-          subject: `Event Cancelled — ${event.name}`,
-          html: `
-            <html>
-              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background-color: #fee2e2; padding: 20px; text-align: center;">
-                  ${orgLogoHtml(
-                    event.organizationLogoUrl ?? event.venue?.organization?.logoUrl,
-                    event.organizationName ?? event.venue?.organization?.name
-                  )}
-                  <h1 style="color: #991b1b;">Event Cancelled</h1>
-                </div>
-                <div style="padding: 20px;">
-                  <p>Hi ${contact.firstName || 'there'},</p>
-                  <p>We're sorry to inform you that <strong>${event.name}</strong> has been cancelled.</p>
-                  ${eventWhen ? `<p style="color: #666; font-size: 14px; margin-top: -8px;">${escapeHtml(eventWhen)}</p>` : ''}
-                  <p>${isRsvp ? 'Your RSVP has been cancelled; no action is needed.' : 'Your tickets have been voided and a refund will be processed automatically.'}</p>
-                  <p style="color: #666; font-size: 12px;">If you have questions, contact us at support@jump.events</p>
-                </div>
-              </body>
-            </html>
-          `,
-        };
-
-        await deliver(msg);
-
-        logger.info('Cancellation notification sent', {
-          eventId: event.id,
-          email,
-        });
+        await deliver(this.buildRsvpCancellation(event, contact, template));
+        logger.info('Cancellation notification sent', { eventId: event.id, email });
       } catch (error) {
-        logger.error('Failed to send cancellation notification', {
-          eventId: event.id,
-          email,
-          error: error.message,
-        });
-        // Continue sending to other contacts
+        logger.error('Failed to send cancellation notification', { eventId: event.id, email, error: error.message });
       }
     }
   }
 
+  /** The "Event cancelled" message: the store's wording, then the event date. */
+  buildRsvpCancellation(event, contact, template) {
+    const organization = event.venue?.organization || {};
+    const b = emailBrand(organization.brandColor);
+    const context = rsvpContext(event, contact);
+    const textBody = renderTemplate(template.body, context);
+    const eventWhen = context.event.date;
+    return {
+      to: [contact.email],
+      from: fromAs(organization.name),
+      subject: renderTemplate(template.subject, context),
+      text: [textBody, ...(eventWhen ? ['', `${event.name}: ${eventWhen}`] : [])].join('\n'),
+      ...(organization.email && { reply_to: organization.email }),
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #fee2e2; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, organization.name)}
+              <h1 style="color: #991b1b;">Event Cancelled</h1>
+            </div>
+            <div style="padding: 20px;">
+              ${textToHtml(textBody, b)}
+              ${eventWhen ? `<p style="color: #666; font-size: 14px;"><strong>${escapeHtml(event.name)}</strong> · ${escapeHtml(eventWhen)}</p>` : ''}
+            </div>
+          </body>
+        </html>
+      `,
+    };
+  }
+
   /**
-   * RSVP reminder sent ~24 h before the event (spec 034 §9.2). Branded with
-   * the organization's logo; includes the event name, date/time in the venue's
-   * timezone (spec 033), party size, a cancel link, and a marketing opt-in
-   * note. Fire-and-forget with async retry (3 attempts).
+   * RSVP reminder sent ~24 h before the event (spec 034 §9.2; spec 053
+   * `rsvp.reminder`, which the store may switch off). The store's wording,
+   * then the event card, the Cancel RSVP button and why the guest got it.
+   * Fire-and-forget with async retry (3 attempts).
    *
    * @param {Object} rsvp - EventRsvp row with included event (incl. venue), contact
    * @param {{ cancelUrl: string }} options
    */
   async sendRsvpReminder(rsvp, { cancelUrl }) {
-    const event = rsvp.event;
-    const contact = rsvp.contact;
-    const organization = event.venue?.organization || {};
-    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
-    const orgName = organization.name || 'the organizer';
+    const organization = rsvp.event.venue?.organization || {};
+    const template = await notificationTemplateService.resolve(organization.id || rsvp.event.venue?.organizationId || null, 'rsvp.reminder');
+    if (template.enabled === false) {
+      logger.info('RSVP reminder skipped: switched off', { event: 'rsvp_reminder_disabled', rsvpId: rsvp.id, eventId: rsvp.eventId });
+      return;
+    }
+    const msg = this.buildRsvpReminder(rsvp, { cancelUrl, template });
     const maxRetries = 3;
     let attempt = 0;
     let lastError;
@@ -853,73 +905,19 @@ ${manageTicketsHtml}
     while (attempt < maxRetries) {
       try {
         attempt++;
-
-        const msg = {
-          to: [contact.email],
-          from: fromAs(organization.name),
-          subject: `Reminder: ${event.name} is happening tomorrow — ${orgName}`,
-          html: `
-            <html>
-              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-                  ${orgLogoHtml(organization.logoUrl, orgName)}
-                  <h1 style="color: #333; font-size: 22px;">Event Reminder — ${escapeHtml(event.name)}</h1>
-                </div>
-                <div style="padding: 24px; color: #111827; font-size: 15px;">
-                  <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
-                  <p>This is a reminder that you're on the list for:</p>
-                  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
-                    <p style="margin: 0 0 8px; font-size: 17px; font-weight: bold; color: #111827;">${escapeHtml(event.name)}</p>
-                    ${eventWhen ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>When:</strong> ${escapeHtml(eventWhen)}</p>` : ''}
-                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Party size:</strong> ${rsvp.partySize}</p>
-                  </div>
-                  <p style="color: #666; font-size: 14px;">You can cancel your RSVP at any time. Please let us know if your plans change so we can open the spot to someone else.</p>
-                  <div style="text-align: center; margin: 24px 0;">
-                    <a href="${cancelUrl}" style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Cancel RSVP</a>
-                  </div>
-                  <p style="color: #666; font-size: 12px; margin-top: 16px;">You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.</p>
-                  <p style="color: #999; font-size: 12px; margin-top: 24px;">${escapeHtml(orgName)}</p>
-                </div>
-              </body>
-            </html>
-          `,
-          text: [
-            `Hi ${contact.firstName || 'there'},`,
-            '',
-            `This is a reminder that you're on the list for:`,
-            '',
-            `${event.name}`,
-            ...(eventWhen ? [`When: ${eventWhen}`] : []),
-            `Party size: ${rsvp.partySize}`,
-            '',
-            `You can cancel your RSVP at any time: ${cancelUrl}`,
-            '',
-            `You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.`,
-            '',
-            orgName,
-          ].join('\n'),
-          ...(organization.email && { reply_to: organization.email }),
-        };
-
         await deliver(msg);
-
         logger.info('RSVP reminder sent', {
           event: 'rsvp_reminder_sent',
           rsvpId: rsvp.id,
           eventId: rsvp.eventId,
           contactId: rsvp.contactId,
-          email: contact.email,
+          email: rsvp.contact.email,
           attempt,
         });
-
         return;
       } catch (error) {
         lastError = error;
-        logger.warn('RSVP reminder email attempt failed', {
-          rsvpId: rsvp.id,
-          attempt,
-          error: error.message,
-        });
+        logger.warn('RSVP reminder email attempt failed', { rsvpId: rsvp.id, attempt, error: error.message });
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
         }
@@ -935,13 +933,81 @@ ${manageTicketsHtml}
     });
   }
 
-  /** Branded RSVP confirmation with a calendar attachment (spec 034). */
-  async sendRsvpConfirmation(rsvp, { cancelUrl }) {
+  buildRsvpReminder(rsvp, { cancelUrl, template }) {
     const event = rsvp.event;
     const contact = rsvp.contact;
     const organization = event.venue?.organization || {};
     const b = emailBrand(organization.brandColor);
-    const eventWhen = formatEventDateTime(event.date, event.venue?.timezone);
+    const orgName = organization.name || 'the organizer';
+    const context = rsvpContext(event, contact, rsvp.partySize);
+    const textBody = renderTemplate(template.body, context);
+    const eventWhen = context.event.date;
+    return {
+      to: [contact.email],
+      from: fromAs(organization.name),
+      subject: renderTemplate(template.subject, context),
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(organization.logoUrl, orgName)}
+              <h1 style="color: #333; font-size: 22px;">Event Reminder — ${escapeHtml(event.name)}</h1>
+            </div>
+            <div style="padding: 24px; color: #111827; font-size: 15px;">
+              ${textToHtml(textBody, b)}
+              <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0 0 8px; font-size: 17px; font-weight: bold; color: #111827;">${escapeHtml(event.name)}</p>
+                ${eventWhen ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>When:</strong> ${escapeHtml(eventWhen)}</p>` : ''}
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Party size:</strong> ${rsvp.partySize}</p>
+              </div>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="${escapeHtml(cancelUrl)}" style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Cancel RSVP</a>
+              </div>
+              <p style="color: #666; font-size: 12px; margin-top: 16px;">You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.</p>
+              <p style="color: #999; font-size: 12px; margin-top: 24px;">${escapeHtml(orgName)}</p>
+            </div>
+          </body>
+        </html>
+      `,
+      text: [
+        textBody,
+        '',
+        `${event.name}`,
+        ...(eventWhen ? [`When: ${eventWhen}`] : []),
+        `Party size: ${rsvp.partySize}`,
+        '',
+        `Cancel your RSVP: ${cancelUrl}`,
+        '',
+        `You received this reminder because you RSVP'd to this event. Cancelling your RSVP stops further emails about it.`,
+        '',
+        orgName,
+      ].join('\n'),
+      ...(organization.email && { reply_to: organization.email }),
+    };
+  }
+
+  /** Branded RSVP confirmation with a calendar attachment (spec 034; spec 053 `rsvp.confirmation`). */
+  async sendRsvpConfirmation(rsvp, { cancelUrl }) {
+    const organization = rsvp.event.venue?.organization || {};
+    const template = await notificationTemplateService.resolve(organization.id || rsvp.event.venue?.organizationId || null, 'rsvp.confirmation');
+    try {
+      await deliver(this.buildRsvpConfirmation(rsvp, { cancelUrl, template }));
+      logger.info('RSVP confirmation sent', { event: 'rsvp_confirmation_sent', rsvpId: rsvp.id });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send RSVP confirmation', { rsvpId: rsvp.id, error: error.message });
+      return false;
+    }
+  }
+
+  buildRsvpConfirmation(rsvp, { cancelUrl, template }) {
+    const event = rsvp.event;
+    const contact = rsvp.contact;
+    const organization = event.venue?.organization || {};
+    const b = emailBrand(organization.brandColor);
+    const context = rsvpContext(event, contact, rsvp.partySize);
+    const textBody = renderTemplate(template.body, context);
+    const eventWhen = context.event.date;
     const startsAt = new Date(event.date);
     const endsAt = new Date(startsAt.getTime() + 2 * 60 * 60 * 1000);
     const location = [event.venue?.name, event.venue?.address].filter(Boolean).join(', ');
@@ -952,12 +1018,12 @@ ${manageTicketsHtml}
       `SUMMARY:${icsText(event.name)}`, `LOCATION:${icsText(location)}`,
       'END:VEVENT', 'END:VCALENDAR', '',
     ].join('\r\n');
-    const msg = {
+    return {
       to: [contact.email],
       from: fromAs(organization.name),
-      subject: `You're on the list — ${event.name}`,
+      subject: renderTemplate(template.subject, context),
       text: [
-        `Hi ${contact.firstName || 'there'},`, '', `You're on the list for ${event.name}.`,
+        textBody, '',
         ...(eventWhen ? [`When: ${eventWhen}`] : []), ...(location ? [`Where: ${location}`] : []),
         `Party size: ${rsvp.partySize}`, '', `Can't make it? Cancel your RSVP: ${cancelUrl}`,
       ].join('\n'),
@@ -968,8 +1034,7 @@ ${manageTicketsHtml}
             <h1 style="color: #333; font-size: 22px;">You're on the list</h1>
           </div>
           <div style="padding: 24px; color: #111827;">
-            <p>Hi ${escapeHtml(contact.firstName || 'there')},</p>
-            <p>Your RSVP for <strong>${escapeHtml(event.name)}</strong> is confirmed.</p>
+            ${textToHtml(textBody, b)}
             <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
               ${eventWhen ? `<p style="margin: 4px 0;"><strong>When:</strong> ${escapeHtml(eventWhen)}</p>` : ''}
               ${location ? `<p style="margin: 4px 0;"><strong>Where:</strong> ${escapeHtml(location)}</p>` : ''}
@@ -984,14 +1049,6 @@ ${manageTicketsHtml}
       }],
       ...(organization.email && { reply_to: organization.email }),
     };
-    try {
-      await deliver(msg);
-      logger.info('RSVP confirmation sent', { event: 'rsvp_confirmation_sent', rsvpId: rsvp.id });
-      return true;
-    } catch (error) {
-      logger.error('Failed to send RSVP confirmation', { rsvpId: rsvp.id, error: error.message });
-      return false;
-    }
   }
 
   /**
@@ -1004,7 +1061,26 @@ ${manageTicketsHtml}
    * @param {{ statusUrl: string, accountUrl?: string|null, paymentMethod?: string|null, lines: Array<{ label: string, amount: number }>, booth?: { label: string, size: string, mapUrl: string|null }|null }} options
    *   `booth` (spec 014 phase 2): the booth this payment bought, named on the receipt with a `?booth=` map link
    */
-  async sendApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [], booth = null }) {
+  async sendApplicationReceipt(application, options) {
+    const order = application.order;
+    const organization = application.event?.venue?.organization || {};
+    const template = await notificationTemplateService.resolve(
+      organization.id || application.event?.venue?.organizationId || application.organizationId || null,
+      'application.receipt'
+    );
+    const msg = this.buildApplicationReceipt(application, options, template);
+    if (!msg) return false;
+    try {
+      await deliver(msg);
+      logger.info('Application receipt sent', { event: 'application_receipt_sent', orderId: order.id, orderRef: order.orderRef, applicationId: application.id });
+      return true;
+    } catch (error) {
+      logger.error('Failed to send application receipt', { orderId: order.id, applicationId: application.id, error: error.message });
+      return false;
+    }
+  }
+
+  buildApplicationReceipt(application, { statusUrl, accountUrl = null, paymentMethod = null, lines = [], booth = null }, template) {
     const order = application.order;
     const organization = application.event?.venue?.organization || {};
     // Spec 033: the event date is wall-clock local to the venue.
@@ -1012,7 +1088,9 @@ ${manageTicketsHtml}
     const eventWhen = formatEventDateTime(application.event?.date, application.event?.venue?.timezone);
     const orgName = organization.name || 'the organizer';
     const to = application.contact?.email;
-    if (!order || !to) return false;
+    if (!order || !to) return null;
+    const context = receiptContext(application);
+    const textBody = renderTemplate(template.body, context);
     const money = (n) => `$${Number(n || 0).toFixed(2)}`;
     const payment = order.payment;
     const method =
@@ -1028,9 +1106,8 @@ ${manageTicketsHtml}
       .map(([label, amount], i, arr) => `<tr><td style="padding: 6px 0; color: #374151; font-size: 14px; ${i === arr.length - 1 ? 'font-weight: bold;' : ''}">${escapeHtml(label)}</td><td style="padding: 6px 0; text-align: right; color: #111827; font-size: 14px; ${i === arr.length - 1 ? 'font-weight: bold;' : ''}">${money(amount)}</td></tr>`)
       .join('');
     const textLines = [
-      `Hi ${application.contact?.firstName || 'there'},`,
+      textBody,
       '',
-      `This is your receipt for ${application.profile?.businessName || 'your'} application to ${application.event?.name || 'the event'}${application.tier ? ` (${application.tier.name})` : ''}.`,
       ...(eventWhen ? [`When: ${eventWhen}`] : []),
       `Order number: ${order.orderRef}`,
       '',
@@ -1047,7 +1124,7 @@ ${manageTicketsHtml}
     const msg = {
       to: [to],
       from: fromAs(organization.name),
-      subject: `Receipt for ${application.event?.name || 'your application'} (${order.orderRef})`,
+      subject: renderTemplate(template.subject, context),
       text: textLines.join('\n'),
       html: `
         <html>
@@ -1057,8 +1134,7 @@ ${manageTicketsHtml}
               <h1 style="color: #333; font-size: 20px; margin: 0;">Payment receipt</h1>
             </div>
             <div style="padding: 24px; color: #111827; font-size: 15px;">
-              <p>Hi ${escapeHtml(application.contact?.firstName || 'there')},</p>
-              <p>This is your receipt for <strong>${escapeHtml(application.profile?.businessName || 'your')}</strong>'s application to <strong>${escapeHtml(application.event?.name || 'the event')}</strong>${application.tier ? ` (${escapeHtml(application.tier.name)})` : ''}.</p>
+              ${textToHtml(textBody, b)}
               <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
                 <p style="margin: 0 0 12px; color: #666; font-size: 13px;">Order <strong style="color: #111827;">${escapeHtml(order.orderRef)}</strong> · ${escapeHtml(orgName)}</p>
                 ${eventWhen ? `<p style="margin: -6px 0 12px; color: #666; font-size: 13px;">${escapeHtml(eventWhen)}</p>` : ''}
@@ -1075,15 +1151,9 @@ ${manageTicketsHtml}
       `,
       ...(organization.email && { reply_to: organization.email }),
     };
-    try {
-      await deliver(msg);
-      logger.info('Application receipt sent', { event: 'application_receipt_sent', orderId: order.id, orderRef: order.orderRef, applicationId: application.id });
-      return true;
-    } catch (error) {
-      logger.error('Failed to send application receipt', { orderId: order.id, applicationId: application.id, error: error.message });
-      return false;
-    }
+    return msg;
   }
+
 }
 
 export default new EmailService();
