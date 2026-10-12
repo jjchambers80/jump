@@ -4,7 +4,7 @@
 // other application form, set up step by step in the event wizard's shell
 // (header, progress bar, footer, live preview). Started from the
 // event's Overview. Cards save explicitly: Next submits a step's settings and
-// moves on only when the save succeeded; list editors (tiers, shifts,
+// moves on only when the save succeeded; list editors (tiers,
 // questions, the lineup) save each change themselves.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,7 +27,6 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import ReviewFormStep, { REVIEW_FORM_ID } from './steps/ReviewFormStep';
-import ShiftsCard from './steps/ShiftsCard';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, inputClass, labelClass, secondaryButton } from './ui';
@@ -255,7 +254,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             />
           )}
           {form && step.key === 'floor-map' && <FloorMapStep eventId={eventId} returnTo={f.href('floor-map')} refreshPreview={f.refreshPreview} onMapStatus={noop} />}
-          {form && step.key === 'shifts' && <ShiftsCard form={form} api={api} canEdit={canEdit} eventStart={event.date} eventEnd={event.endDate} onSaved={saved} />}
           {form && step.key === 'questions' && (
             <QuestionsCard
               form={form}

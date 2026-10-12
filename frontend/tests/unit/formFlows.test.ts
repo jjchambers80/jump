@@ -13,9 +13,9 @@ describe('application flows (spec 051)', () => {
     expect(keys('vendors', { kind: 'FREE', spaceSelection: null })).toEqual(['start', 'details', 'questions', 'review']);
   });
 
-  it('starts special guests at the lineup and gives volunteers shifts', () => {
+  it('starts special guests at the lineup; volunteers have no shifts step', () => {
     expect(keys('special-guests', null)).toEqual(['lineup', 'start', 'details', 'questions', 'review']);
-    expect(keys('volunteers', { kind: 'FREE' })).toEqual(['start', 'details', 'shifts', 'questions', 'review']);
+    expect(keys('volunteers', { kind: 'FREE' })).toEqual(['start', 'details', 'questions', 'review']);
     expect(keys('other-applications', { kind: 'FREE' })).toEqual(['start', 'details', 'questions', 'review']);
   });
 
@@ -26,7 +26,7 @@ describe('application flows (spec 051)', () => {
 
   it('builds flow links', () => {
     expect(formFlowHref('e 1', 'vendors')).toBe('/admin/events/e%201/setup/vendors');
-    expect(formFlowHref('e1', 'volunteers', { step: 'shifts', form: 'f1', org: 'o1' })).toBe('/admin/events/e1/setup/volunteers?step=shifts&form=f1&org=o1');
+    expect(formFlowHref('e1', 'volunteers', { step: 'questions', form: 'f1', org: 'o1' })).toBe('/admin/events/e1/setup/volunteers?step=questions&form=f1&org=o1');
     expect(formEditHref('e1', { id: 'f1', purpose: 'SPONSOR' })).toBe('/admin/events/e1/setup/other-applications?step=details&form=f1');
   });
 });

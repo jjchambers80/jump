@@ -2,7 +2,6 @@
 // helpers shared by the storefront apply pages, the buyer account and admin.
 
 import { computeOrderFees, roundCurrency } from './fees';
-import { formatEventDate, formatEventDateTime, formatEventTime } from './eventTime';
 
 export type FormKind = 'PAID' | 'FREE';
 export type FormStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
@@ -161,31 +160,8 @@ export interface AdminForm {
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
   addOns: { id: string; name: string; price: number; allTiers: boolean; isActive: boolean; scope: 'TICKET' | 'APPLICATION' | 'BOTH' }[];
-  /** Spec 050 §6.4: shifts on a VOLUNTEER form (empty otherwise); times render in `timezone`, the venue's. */
-  shifts?: AdminShift[];
   timezone?: string | null;
   updatedAt?: string;
-}
-
-/** Spec 050 §6.4: a volunteer shift as staff edit it. `capacity` / `remaining` null = unlimited. */
-export interface AdminShift {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  capacity: number | null;
-  assigned: number;
-  remaining: number | null;
-  displayOrder: number;
-}
-
-/** Create / PATCH body for a shift (ISO instants; null clears a time or the cap). */
-export interface ShiftInput {
-  name?: string;
-  startsAt?: string | null;
-  endsAt?: string | null;
-  capacity?: number | null;
 }
 
 /** Public shape. */
@@ -222,44 +198,7 @@ export interface PublicForm {
   /** Spec 044: standing forms' own button label and thank-you line. */
   buttonLabel?: string | null;
   successMessage?: string | null;
-  /** Spec 050 §6.4: shifts on a VOLUNTEER form; times render in `timezone` (the venue's). */
-  shifts?: PublicShift[];
   timezone?: string | null;
-}
-
-/** Spec 050 §6.4: a volunteer shift as applicants see it. `remaining` null = unlimited. */
-export interface PublicShift {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  remaining: number | null;
-  full: boolean;
-}
-
-/** Staff view of a shift on an application: capacity, what is left, and this volunteer's pick. */
-export interface ApplicationShiftView {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  capacity: number | null;
-  assigned: number;
-  remaining: number | null;
-  picked: boolean;
-  assignedToApplication: boolean;
-}
-
-/** "Sat, Sep 18, 2027 · 9:00 AM EDT – 1:00 PM EDT" in the venue zone (gotcha 28), the end date added past midnight; null for a role without a time. */
-export function shiftWhen(shift: { startsAt: string | null; endsAt: string | null }, zone: string | null | undefined): string | null {
-  if (!shift.startsAt) return null;
-  const start = formatEventDateTime(shift.startsAt, zone);
-  if (!shift.endsAt) return start;
-  // A shift past midnight (venue clock) names its end date too.
-  const sameDay = formatEventDate(shift.startsAt, zone) === formatEventDate(shift.endsAt, zone);
-  return `${start} – ${sameDay ? formatEventTime(shift.endsAt, zone) : formatEventDateTime(shift.endsAt, zone)}`;
 }
 
 export interface ProfilePhoto {
@@ -459,8 +398,6 @@ export interface ApplicationRow {
   selectionHeldUntil?: string | null;
   /** Spec 019 phase 3: organizer tags and on-site check-in (APPROVED only). */
   tags: string[];
-  /** Spec 050-S: the volunteer's shift picks, `assigned` once confirmed on approval. */
-  shifts?: { id: string; name: string; assigned: boolean }[];
   checkedInAt: string | null;
   checkedOutAt: string | null;
   /** Answers to the form's pinned questions, in question order. */
@@ -537,8 +474,6 @@ export interface OrgForm {
   applicationCount: number;
   pinnedQuestions: { id: string; label: string; type: QuestionType }[];
   addOns: { id: string; name: string }[];
-  /** Spec 050-S: a VOLUNTEER form's shifts, for the Shift filter. */
-  shifts?: { id: string; name: string }[];
   updatedAt: string;
 }
 
@@ -603,8 +538,6 @@ export interface AdminApplication {
   lineupGuestId?: string | null;
   /** Spec 037 phase 5: the categories an approval can assign, with what is left. */
   categories?: { id: string; name: string; price: number; isActive: boolean; remaining: number }[];
-  /** Spec 050 §6.4: every shift of a VOLUNTEER form, flagged with this volunteer's picks. */
-  shifts?: ApplicationShiftView[];
   /** Spec 037 phase 5: while set, the vendor holds a chosen space and is paying. */
   selectionHeldUntil?: string | null;
   /** Whether the organizer may change the category (freely before a space is chosen). */

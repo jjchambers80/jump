@@ -7,8 +7,8 @@
 // submit button.
 
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { CircleSlash, ImagePlus, X } from 'lucide-react';
-import { SOCIAL_FIELDS, shiftWhen, type PublicForm, type PublicShift, type Question } from '@/lib/applications';
+import { ImagePlus, X } from 'lucide-react';
+import { SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
 import { acceptancesFor, applyConsentText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import { storefrontInput, storefrontLabel, storefrontTextarea } from '@/components/storefront/formStyles';
 
@@ -31,8 +31,6 @@ interface Draft {
   profile: { businessName: string; description: string; website: string };
   socials: Record<string, string>;
   answers: Answers;
-  /** Spec 050 §6.4: volunteer shift picks (preferences; the organizer assigns on approval). */
-  shiftIds: string[];
   optInAccount: boolean;
   optInMarketing: boolean;
 }
@@ -42,7 +40,6 @@ const EMPTY: Draft = {
   profile: { businessName: '', description: '', website: '' },
   socials: {},
   answers: {},
-  shiftIds: [],
   optInAccount: true,
   optInMarketing: false,
 };
@@ -170,7 +167,6 @@ export function useApplyForm(form: PublicForm | null, { submitUrl, draftKey }: {
         contact: draft.contact,
         ...(collectBusiness && { profile: { ...draft.profile, socials: draft.socials } }),
         answers: draft.answers,
-        ...(form.shifts?.length ? { shiftIds: (draft.shiftIds || []).filter((sid) => form.shifts?.some((sh) => sh.id === sid)) } : {}),
         optInAccount: draft.optInAccount,
         optInMarketing: draft.optInMarketing,
         acceptances: acceptancesFor(versions),
@@ -323,18 +319,6 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
         </Step>
       )}
 
-      {form.purpose === 'VOLUNTEER' && (form.shifts?.length ?? 0) > 0 && (
-        <Step n={next()} id={id('step-shifts')} title="Pick your shifts" hint="Choose every shift you could work. The organizer confirms yours when they approve you.">
-          <ShiftPicker
-            shifts={form.shifts ?? []}
-            zone={form.timezone}
-            selected={apply.shiftIds || []}
-            onChange={(shiftIds) => update({ shiftIds })}
-            idPrefix={idPrefix}
-          />
-        </Step>
-      )}
-
       <Step n={next()} title="Before you submit">
         {/* Account + marketing opt-ins — independent; applied once the application is submitted (spec 024 phase 3) */}
         <label className={choice}>
@@ -365,57 +349,6 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
         </label>
       </Step>
     </div>
-  );
-}
-
-/**
- * Spec 050 §6.4: multi-select of a VOLUNTEER form's shifts. A full shift says
- * "Full" (text and icon) and stays pickable: picks are preferences, and
- * capacity counts only the shifts the organizer assigns.
- */
-function ShiftPicker({ shifts, zone, selected, onChange, idPrefix }: { shifts: PublicShift[]; zone?: string | null; selected: string[]; onChange: (ids: string[]) => void; idPrefix: string }) {
-  const noteId = `${idPrefix}shifts-note`;
-  return (
-    <fieldset aria-describedby={shifts.some((sh) => sh.full) ? noteId : undefined} data-testid="apply-shifts">
-      <legend className={label}>Shifts you can work</legend>
-      <div className="grid gap-2">
-        {shifts.map((sh) => {
-          const when = shiftWhen(sh, zone);
-          return (
-            <label key={sh.id} className={`${choice} min-h-11`}>
-              <input
-                type="checkbox"
-                checked={selected.includes(sh.id)}
-                onChange={(e) => onChange(e.target.checked ? [...selected, sh.id] : selected.filter((x) => x !== sh.id))}
-                className={check}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="font-semibold">{sh.name}</span>
-                  {sh.full ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-slate-300">
-                      <CircleSlash className="h-3.5 w-3.5" aria-hidden />
-                      Full
-                    </span>
-                  ) : sh.remaining != null ? (
-                    <span className="text-xs text-gray-600 dark:text-slate-400">
-                      {sh.remaining} {sh.remaining === 1 ? 'spot' : 'spots'} left
-                    </span>
-                  ) : null}
-                </span>
-                {when && <span className="block text-gray-600 dark:text-slate-400">{when}</span>}
-                {sh.description && <span className="block text-gray-500 dark:text-slate-400">{sh.description}</span>}
-              </span>
-            </label>
-          );
-        })}
-      </div>
-      {shifts.some((sh) => sh.full) && (
-        <p id={noteId} className="mt-2 text-xs text-gray-600 dark:text-slate-400">
-          You can still pick a full shift. The organizer may move you there if a spot opens.
-        </p>
-      )}
-    </fieldset>
   );
 }
 

@@ -68,8 +68,6 @@ export const MODEL_FEATURES = {
   ApplicationDecision: { feature: 'Applications', org: 'application', event: 'application' },
   ApplicantProfile: { feature: 'Applications' },
   ApplicantProfileImage: { feature: 'Applications', org: 'profile' },
-  VolunteerShift: { feature: 'Applications', label: 'name', org: 'form', event: 'form' },
-  ApplicationShift: { feature: 'Applications', org: 'application', event: 'application' },
   FloorMap: { feature: 'Floor maps', label: 'name' },
   FloorMapTemplate: { feature: 'Floor maps', label: 'name' },
   Booth: { feature: 'Floor maps', label: 'label', org: 'map', event: 'map' },

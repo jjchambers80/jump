@@ -17,7 +17,7 @@ export const ADD_TO_EVENT: { flow: FormFlowKey; title: string; icon: LucideIcon;
   { flow: 'vendors', title: APPLICATION_STEPS.vendors.addLabel, icon: Store, detail: 'Vendors apply for a space, then choose it and pay.' },
   // The flow starts at the lineup; the application form is optional.
   { flow: 'special-guests', title: 'Add special guests', icon: Sparkles, detail: 'Your lineup, and an optional form for guests to apply.' },
-  { flow: 'volunteers', title: APPLICATION_STEPS.volunteers.addLabel, icon: HandHeart, detail: 'People sign up to help, with shifts if you need them.' },
+  { flow: 'volunteers', title: APPLICATION_STEPS.volunteers.addLabel, icon: HandHeart, detail: 'People sign up to help.' },
   { flow: 'other-applications', title: APPLICATION_STEPS['other-applications'].addLabel, icon: FileText, detail: 'Sponsors, press, panels and anything else.' },
 ];
 

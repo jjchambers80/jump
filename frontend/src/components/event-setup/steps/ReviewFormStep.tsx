@@ -55,7 +55,6 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
     { label: 'Takes applications', value: dates || 'No open or close date', step: 'details' },
     ...(has('options') ? [{ label: 'Options', value: form.tiers.length ? `${count(form.tiers.length, 'option')} · ${form.tiers.map((t) => t.name).join(', ')}` : 'None yet', step: 'options' as const }] : []),
     ...(has('payment') ? [{ label: 'Spaces', value: form.spaceSelection === 'MAP' ? 'Chosen on the floor map' : 'Chosen by option', step: 'payment' as const }] : []),
-    ...(has('shifts') ? [{ label: 'Shifts', value: form.shifts?.length ? count(form.shifts.length, 'shift') : 'No shifts', step: 'shifts' as const }] : []),
     { label: 'Questions', value: count(form.questions.length, 'question'), step: 'questions' },
   ];
 
