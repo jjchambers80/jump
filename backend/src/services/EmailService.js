@@ -164,6 +164,24 @@ function receiptContext(application) {
   };
 }
 
+// Spec 053-D: what a decision email's merge fields resolve to in the
+// preview. Mirrors ApplicationTemplateService.contextFor; never a real vendor.
+const SAMPLE_APPLICATION_CONTEXT = {
+  applicant: { firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' },
+  profile: { businessName: 'Pixel Pins' },
+  event: { name: 'Sample event', date: 'March 1, 2027' },
+  form: { name: 'Vendor application', paid: true },
+  tier: { name: '10x10', price: '$275.00' },
+  addOns: { summary: 'Booth power ×1 ($25.00)', count: 1 },
+  amount: { applicantPays: '$300.00' },
+  payment: { dueDate: 'February 1, 2027' },
+  space: { chooseRequired: true, onMap: true, pickTier: false, dueDate: 'February 1, 2027' },
+  order: { ref: 'APP-SAMPLE' },
+  account: { created: false },
+  booth: { label: 'A12', size: '10×10', chooseRequired: true },
+  links: { status: 'https://example.com/status', payNow: 'https://example.com/pay', account: 'https://example.com/account', map: 'https://example.com/map' },
+};
+
 // Spec 053: samples for the Settings › Notifications preview and test send.
 // Never a real buyer: the preview must not leak anyone's details to staff.
 const SAMPLE_URL = 'https://example.com/sample';
@@ -304,6 +322,16 @@ ${manageTicketsHtml}
    * @returns {Promise<{ subject: string, html: string, text: string }>}
    */
   async previewNotification(key, organization, template) {
+    if (key.startsWith('application.event.') || key.startsWith('application.standing.')) {
+      const context = { ...SAMPLE_APPLICATION_CONTEXT, organization: { name: organization.name || '', email: '' } };
+      const msg = this.buildApplicationMessage({
+        to: 'pat@example.com',
+        subject: renderTemplate(template.subject, context),
+        body: renderTemplate(template.body, context),
+        organization,
+      });
+      return { subject: msg.subject, html: msg.html, text: msg.text };
+    }
     const build = SAMPLES[key];
     if (!build) throw new Error(`No preview for notification ${key}`);
     const msg = await build(this, organization, template);
@@ -732,7 +760,11 @@ ${manageTicketsHtml}
    *   `staff: true` (digest, dispute alerts) keeps the platform sender and
    *   colors and drops the logo: those links open the Eventimus admin.
    */
-  async sendApplicationMessage({ to, subject, body, organization = {}, staff = false }) {
+  async sendApplicationMessage(params) {
+    await deliver(this.buildApplicationMessage(params));
+  }
+
+  buildApplicationMessage({ to, subject, body, organization = {}, staff = false }) {
     const b = emailBrand(staff ? null : organization.brandColor);
     const orgName = organization.name || 'the organizer';
     const paragraphs = textToHtml(body, b);
@@ -757,7 +789,7 @@ ${manageTicketsHtml}
         </html>
       `,
     };
-    await deliver(msg);
+    return msg;
   }
 
   /**

@@ -38,6 +38,8 @@ const REMINDER = {
   optional: true,
 };
 
+const APPROVED = { ...DEFAULT, label: 'Approved', when: 'Sent on approval.', blocks: [], subject: 'You are in: {{event.name}}', body: 'Hi {{applicant.firstName}}' };
+
 async function mockApi(page: Page) {
   let template = { ...DEFAULT };
   let reminder = { ...REMINDER };
@@ -54,7 +56,16 @@ async function mockApi(page: Page) {
     const body = req.postData() ? req.postDataJSON() : undefined;
     calls.push({ method, path, body });
     if (path === '/admin/settings/notifications') {
-      return route.fulfill(json({ groups: [{ key: 'orders', label: 'Orders & tickets', notifications: [template] }, { key: 'rsvps', label: 'RSVPs', notifications: [reminder] }] }));
+      return route.fulfill(
+        json({
+          groups: [
+            { key: 'orders', label: 'Orders & tickets', notifications: [template] },
+            { key: 'rsvps', label: 'RSVPs', notifications: [reminder] },
+            { key: 'applications', label: 'Event applications', notifications: [{ ...APPROVED, key: 'application.event.APPROVED' }] },
+            { key: 'standingForms', label: 'Standing forms (Content › Forms)', notifications: [{ ...APPROVED, key: 'application.standing.APPROVED' }] },
+          ],
+        })
+      );
     }
     if (path === '/admin/settings/notifications/rsvp.reminder' && method === 'PUT') {
       reminder = { ...reminder, ...body, isDefault: false };
@@ -72,7 +83,7 @@ async function mockApi(page: Page) {
       return route.fulfill(json({ subject: `Rendered: ${body.subject}`, html: `<html><body><p>${body.body}</p><a>View Tickets</a></body></html>` }));
     }
     if (path === `/admin/settings/notifications/${KEY}/test`) return route.fulfill(json({ sentTo: 'admin@notif.test' }));
-    if (path === '/admin/settings/application-templates') return route.fulfill(json({ data: [], mergeFields: [] }));
+    if (path === '/admin/settings/application-digest' && method === 'PATCH') return route.fulfill(json({ enabled: body.enabled, lastRunAt: null }));
     if (path === '/admin/settings/application-digest') return route.fulfill(json({ enabled: true, lastRunAt: null }));
     return route.fulfill(json({ message: `unmocked ${method} ${path}` }, 404));
   });
@@ -148,6 +159,23 @@ test.describe('Settings › Notifications', () => {
 
     await page.getByRole('button', { name: 'Edit Order confirmation email' }).click();
     await expect(page.getByRole('dialog', { name: 'Order confirmation' }).getByRole('switch')).toHaveCount(0);
+  });
+
+  test('application emails list per group; standing rows say so; the digest toggles', async ({ page }) => {
+    const { calls } = await mockApi(page);
+    await page.goto('/admin/settings/notifications');
+    await expect(page.getByRole('button', { name: 'Edit Approved email', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit Approved email (standing forms)' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Approved (standing forms)' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).not.toContainText('Added automatically');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    const digest = page.getByTestId('application-digest').getByRole('checkbox');
+    await expect(digest).toBeChecked();
+    await digest.uncheck();
+    await expect(page.getByRole('status')).toContainText('Daily digest off');
+    expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ enabled: false });
   });
 
   test('the dialog has no axe violations', async ({ page }) => {

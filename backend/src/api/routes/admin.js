@@ -1030,11 +1030,11 @@ router.get('/settings/application-templates', wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json({ data: await applicationTemplateService.listTemplates(organizationId, scope), mergeFields: applicationTemplateService.mergeFields() });
 }));
-router.put('/settings/application-templates/:action', requirePermission('settings.applications'), validateTemplateBody, wrap(async (req, res) => {
+router.put('/settings/application-templates/:action', requirePermission('settings.notifications'), validateTemplateBody, wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body, scope));
 }));
-router.delete('/settings/application-templates/:action', requirePermission('settings.applications'), wrap(async (req, res) => {
+router.delete('/settings/application-templates/:action', requirePermission('settings.notifications'), wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action, scope));
 }));
@@ -1077,7 +1077,7 @@ router.post('/settings/notifications/:key/test', requirePermission('settings.not
 router.get('/settings/application-digest', wrap(async (req, res) => {
   res.json(await applicationDigestService.getSettings(await activeOrgFor(req)));
 }));
-router.patch('/settings/application-digest', requirePermission('settings.applications'), wrap(async (req, res) => {
+router.patch('/settings/application-digest', requirePermission('settings.notifications'), wrap(async (req, res) => {
   if (typeof req.body?.enabled !== 'boolean') throw new ValidationError('enabled must be a boolean');
   res.json(await applicationDigestService.updateSettings(await activeOrgFor(req), { enabled: req.body.enabled }));
 }));

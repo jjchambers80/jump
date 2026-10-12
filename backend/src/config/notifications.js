@@ -10,6 +10,48 @@
 //
 // `optional: true` lets the store switch the email off (only reminders;
 // confirmations, receipts and cancellations always go out).
+//
+// Application decision emails (spec 011 / 044) have no system blocks: the
+// message is the whole email, and staff can still edit it per applicant in
+// the decision dialog. Their defaults and merge fields live in
+// config/applications.js; spec 053-D moved their storage here.
+
+import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from './applications.js';
+
+const EVENT_APPLICATION_COPY = {
+  RECEIVED: ['Application received', 'Sent when someone submits an application.'],
+  APPROVED: ['Approved', 'Free forms: sent on approval. Paid forms: sent once the space is paid.'],
+  CHOOSE_SPACE: ['Choose your space', 'Paid forms: sent on approval, asking the vendor to pick a space and pay.'],
+  REJECTED: ['Rejected', 'Sent when you reject an application.'],
+  WAITLISTED: ['Waitlisted', 'Sent when you move an application to the waitlist.'],
+  WITHDRAWN: ['Withdrawn', 'Sent when an application is withdrawn.'],
+  PAYMENT_DUE: ['Payment due', 'Paid forms: sent when a balance is due.'],
+  ADD_ONS_CHANGED: ['Add-ons changed', 'Paid forms: sent when you change the add-ons on an application.'],
+  TIER_CHANGED: ['Tier changed', 'Paid forms: sent when you move an application to another tier.'],
+  WAIVED: ['Balance waived', 'Paid forms: sent when you waive the balance.'],
+  OFFLINE_PAID: ['Payment recorded offline', 'Paid forms: sent when you record a payment taken outside Eventimus.'],
+};
+const STANDING_APPLICATION_COPY = {
+  RECEIVED: ['Application received', 'Sent when someone submits a standing form.'],
+  APPROVED: ['Approved', 'Sent when you approve a standing-form application.'],
+  WAITLISTED: ['Waitlisted', 'Sent when you move a standing-form application to the waitlist.'],
+  REJECTED: ['Rejected', 'Sent when you reject a standing-form application.'],
+};
+
+/** Registry key of an application decision email. */
+export const applicationKey = (scope, action) => `application.${scope === 'STANDING' ? 'standing' : 'event'}.${action}`;
+
+const applicationEntries = (scope, actions, copy, defaults) =>
+  actions.map((action) => ({
+    key: applicationKey(scope, action),
+    group: scope === 'STANDING' ? 'standingForms' : 'applications',
+    label: copy[action][0],
+    when: copy[action][1],
+    mergeFields: MERGE_FIELDS,
+    blocks: [],
+    application: { scope, action },
+    defaults: defaults[action],
+  }));
 
 export const NOTIFICATIONS = [
   {
@@ -113,12 +155,16 @@ export const NOTIFICATIONS = [
       body: "Hi {{applicant.firstName}},\n\nThis is your receipt for {{profile.businessName}}'s application to {{event.name}}{{#tier.name}} ({{tier.name}}){{/tier.name}}.",
     },
   },
+  ...applicationEntries('EVENT', TEMPLATE_ACTIONS, EVENT_APPLICATION_COPY, DEFAULT_TEMPLATES),
+  ...applicationEntries('STANDING', STANDING_TEMPLATE_ACTIONS, STANDING_APPLICATION_COPY, STANDING_DEFAULT_TEMPLATES),
 ];
 
 export const NOTIFICATION_GROUPS = [
   { key: 'orders', label: 'Orders & tickets' },
   { key: 'rsvps', label: 'RSVPs' },
   { key: 'applicationPayments', label: 'Application payments' },
+  { key: 'applications', label: 'Event applications' },
+  { key: 'standingForms', label: 'Standing forms (Content › Forms)' },
 ];
 
 export const NOTIFICATIONS_BY_KEY = new Map(NOTIFICATIONS.map((n) => [n.key, n]));

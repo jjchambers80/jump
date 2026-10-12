@@ -12,6 +12,7 @@ const { prisma } = await import('@jump/db');
 const { default: permissionService } = await import('../../src/services/PermissionService.js');
 const { default: resend } = await import('../../src/config/resend.js');
 const { default: emailService } = await import('../../src/services/EmailService.js');
+const { default: applicationTemplateService } = await import('../../src/services/ApplicationTemplateService.js');
 
 const TAG = 'notif-tpl-ct';
 const KEY = 'order.confirmation';
@@ -156,17 +157,19 @@ describe('Settings › Notifications (spec 053)', () => {
       orders: ['order.confirmation'],
       rsvps: ['rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled'],
       applicationPayments: ['application.receipt'],
+      applications: ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'].map((a) => `application.event.${a}`),
+      standingForms: ['RECEIVED', 'APPROVED', 'WAITLISTED', 'REJECTED'].map((a) => `application.standing.${a}`),
     });
     const optional = res.body.groups.flatMap((g) => g.notifications).filter((n) => n.optional).map((n) => n.key);
     expect(optional).toEqual(['rsvp.reminder']);
   });
 
   it('every email previews against sample data', async () => {
-    for (const key of ['order.confirmation', 'rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled', 'application.receipt']) {
+    for (const key of ['order.confirmation', 'rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled', 'application.receipt', 'application.event.CHOOSE_SPACE', 'application.standing.RECEIVED']) {
       const res = await request(app).post(`/admin/settings/notifications/${key}/preview`).set(...auth(adminToken)).send({});
       expect(res.status).toBe(200);
       expect(res.body.subject).not.toMatch(/\{\{/);
-      expect(res.body.html).toContain('Sample');
+      expect(res.body.html).toMatch(/Sample|Pat/);
     }
   });
 
@@ -198,6 +201,17 @@ describe('Settings › Notifications (spec 053)', () => {
 
     const reset = await request(app).delete('/admin/settings/notifications/rsvp.reminder').set(...auth(adminToken));
     expect(reset.body).toMatchObject({ enabled: true, isDefault: true });
+  });
+
+  it('application decision emails save through Settings › Notifications and the decision flow reads them', async () => {
+    const key = 'application.event.WAITLISTED';
+    const put = await request(app).put(`/admin/settings/notifications/${key}`).set(...auth(adminToken)).send({ subject: 'Waitlist: {{event.name}}', body: 'Hang tight, {{applicant.firstName}}.' });
+    expect(put.status).toBe(200);
+    const legacy = await request(app).get('/admin/settings/application-templates').set(...auth(adminToken));
+    expect(legacy.body.data.find((t) => t.action === 'WAITLISTED')).toMatchObject({ subject: 'Waitlist: {{event.name}}', isDefault: false });
+    const rendered = await applicationTemplateService.render(org.id, 'WAITLISTED', { eventId: 'e1', organizationId: org.id, contact: { firstName: 'Pat' }, event: { name: 'Expo' } });
+    expect(rendered).toEqual({ subject: 'Waitlist: Expo', body: 'Hang tight, Pat.' });
+    await request(app).delete(`/admin/settings/notifications/${key}`).set(...auth(adminToken));
   });
 
   it('the RSVP cancellation replies to the store and no longer names support@jump.events', async () => {
