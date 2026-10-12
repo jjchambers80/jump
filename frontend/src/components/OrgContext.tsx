@@ -195,7 +195,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         : {
             // ORGANIZER defaults: every feature plus the actions marked
             // `organizer: true` in backend/src/permissions/catalog.js.
-            granted: new Set(role === 'ADMIN' || role === 'SYSTEM_ADMIN' ? ['*'] : ['*feature', 'applications.forms', 'addOns.manage']),
+            granted: new Set(role === 'ADMIN' || role === 'SYSTEM_ADMIN' ? ['*'] : ['*feature', 'applications.forms', 'addOns.manage', 'customers.lists']),
             hiddenPaths: [],
           },
     [loaded, role]

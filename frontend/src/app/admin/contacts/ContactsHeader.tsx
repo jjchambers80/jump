@@ -3,10 +3,11 @@ import type { ReactNode } from 'react';
 
 const TABS = [
   { key: 'contacts', label: 'Contacts', href: '/admin/contacts' },
+  { key: 'lists', label: 'Lists', href: '/admin/contacts/lists' },
   { key: 'forms', label: 'Forms', href: '/admin/contacts/forms' },
 ] as const;
 
-/** Title, section tabs and the primary action shared by the Contacts list and Forms. */
+/** Title, section tabs and the primary action shared by Contacts, Lists and Forms. */
 export default function ContactsHeader({
   active,
   subtitle,

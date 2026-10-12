@@ -24,6 +24,8 @@ export interface CustomerListState {
   search?: string;
   tag?: string;
   scope?: CustomerScope;
+  /** Spec 055: one list's contacts (built-in or saved list id) */
+  list?: string;
   rsvp?: 'going' | '';
   eventId?: string;
   source?: CustomerSource | '';
@@ -38,6 +40,7 @@ export function customerListQuery(state: CustomerListState): URLSearchParams {
   if (state.search) params.set('search', state.search);
   if (state.tag) params.set('tag', state.tag);
   if (state.scope === 'customers') params.set('scope', 'customers');
+  if (state.list) params.set('list', state.list);
   if (state.rsvp) params.set('rsvp', state.rsvp);
   if (state.rsvp && state.eventId) params.set('eventId', state.eventId);
   if (state.source) params.set('source', state.source);
