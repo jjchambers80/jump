@@ -55,7 +55,8 @@ export default function EventHeroMeta({ event, preview }: { event: EventPageEven
               ) : (
                 <p className="font-semibold text-white">{event.venue.name}</p>
               )}
-              <p className="text-sm text-gray-300">{event.venue.address}</p>
+              {/* An address-only location (Venues off) is named after its street. */}
+              {event.venue.address !== event.venue.name && <p className="text-sm text-gray-300">{event.venue.address}</p>}
             </div>
           ) : (
             <p className="leading-snug">

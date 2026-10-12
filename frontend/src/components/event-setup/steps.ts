@@ -124,7 +124,7 @@ function datePayload(ctx: StepCtx): Record<string, unknown> | null {
 
 export function validateDates(ctx: StepCtx): FieldError[] {
   const errors: FieldError[] = [];
-  if (!ctx.fields.venueId) errors.push({ field: FIELD_IDS.venueId, step: 'venue', message: 'Choose a venue first: the time is entered in its time zone' });
+  if (!ctx.fields.venueId) errors.push({ field: FIELD_IDS.venueId, step: 'venue', message: 'Add where it happens first: the time is entered in its time zone' });
   const start = zonedInputToInstant(ctx.fields.date, ctx.zone);
   const end = zonedInputToInstant(ctx.fields.endDate, ctx.zone);
   if (!start) errors.push({ field: FIELD_IDS.date, message: 'Enter a start date and time' });
@@ -163,7 +163,7 @@ export const EVENT_STEPS: EventStep[] = [
   {
     key: 'venue', title: 'Where is it?', rule: 'R', anchor: 'event-venue', built: true, visible: always,
     complete: (ctx) => !!ctx.fields.venueId,
-    validate: (ctx) => (ctx.fields.venueId ? [] : [{ field: FIELD_IDS.venueId, message: 'Choose a venue' }]),
+    validate: (ctx) => (ctx.fields.venueId ? [] : [{ field: FIELD_IDS.venueId, message: 'Add where the event happens' }]),
     payload: (ctx) => {
       if (!ctx.saved || !ctx.fields.venueId || ctx.fields.venueId === ctx.saved.venueId) return null;
       // The typed wall-clock time stays and moves to the new venue's zone (spec 033).

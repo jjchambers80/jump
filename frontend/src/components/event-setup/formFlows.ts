@@ -82,7 +82,9 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
 
 export const isFormFlow = isApplicationStep;
 
-export const flowSteps = (flow: FormFlowKey, form: FlowForm | null) => FORM_FLOWS[flow].steps.filter((step) => step.visible(form));
+/** `maps: false` (Maps off or hidden for the role) drops the floor-map step. */
+export const flowSteps = (flow: FormFlowKey, form: FlowForm | null, { maps = true } = {}) =>
+  FORM_FLOWS[flow].steps.filter((step) => step.visible(form) && (maps || step.key !== 'floor-map'));
 
 /** `/admin/events/<id>/setup/<flow>?step=&form=&org=`. */
 export function formFlowHref(

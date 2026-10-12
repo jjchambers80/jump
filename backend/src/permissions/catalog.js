@@ -33,7 +33,9 @@ export const FEATURES = [
       { key: 'addOns.manage', label: 'Create and edit add-ons and saved add-ons', organizer: true },
     ],
   },
-  { key: 'venues', label: 'Venues', locked: true, adminPaths: ['/admin/venues'], actions: [] },
+  // Off or hidden: the event wizard asks for a plain address instead of a
+  // venue and keeps a private venue behind it (POST …/venues/from-address).
+  { key: 'venues', label: 'Venues', adminPaths: ['/admin/venues'], actions: [] },
   {
     key: 'orders',
     label: 'Orders and check-in',

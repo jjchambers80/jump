@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useOrg } from '@/components/OrgContext';
+import { useCan, useOrg } from '@/components/OrgContext';
 import { stepForPurpose } from './applicationSteps';
 import { flowSteps, formEditHref, formFlowHref, type FlowStep, type FlowStepKey, type FormFlowKey } from './formFlows';
 import { useSetupData } from './useSetupData';
@@ -17,6 +17,7 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const router = useRouter();
   const params = useSearchParams();
   const { selectedOrgId: orgId, loading: orgLoading } = useOrg();
+  const maps = useCan('maps');
   const data = useSetupData(orgId, orgLoading, eventId);
   const forms = useSetupForms(eventId);
   const [revision, setRevision] = useState(0);
@@ -24,7 +25,7 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const org = params.get('org');
   const formId = params.get('form');
   const form = (formId && forms.forms.find((f) => f.id === formId)) || null;
-  const list = flowSteps(flow, form);
+  const list = flowSteps(flow, form, { maps });
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
   const fallback = form ? list.find((step) => step.key === 'details')! : list[0];

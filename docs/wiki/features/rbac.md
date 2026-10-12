@@ -66,6 +66,8 @@ Authorization always uses the **role in the organization the request acts on**. 
 
 - Environment flags (`BILLING_ENABLED`, `AGENT_ACCESS_ENABLED`, `THEME_EDITOR_ENABLED`, …) stay separate. The platform switches cover only catalog features, so nothing has two off switches.
 - Other backend instances see a change up to 30 s late (per-instance cache).
+- **Venues off or hidden** (switchable since 2026-10-11): `/admin/venues` and the venue admin API (`requireFeature('venues')`) go away, and the event wizard's *Where is it?* step asks for a plain address (`LocationStep`). `POST /organizations/:orgId/venues/from-address` (organizer, not feature-gated) returns the org's venue at that exact address or creates a **private** one, so events still keep a `venueId` for time zone, tax region and tenancy. `GET /organizations/:orgId/venues` also stays ungated because the wizard reads it. Existing public venues keep their public page; untick *Public* on one to hide it.
+- **Maps off or hidden**: `/admin/maps` and the map APIs go away, the vendor flow drops its Floor map step, and the form editor stops offering *Choose a spot on the floor map*. While Maps is off platform-wide, `validateFormBody` refuses `spaceSelection: 'MAP'`. Forms already on MAP keep working for vendors, and the public `/events/:id/map` stays up for their published maps.
 - Contract tests must not write the `roles` setting with overrides, because suites share one database. Pin `permissionService._cache` in the worker instead (see `tests/contract/orgRole.test.js`).
 - Staff with no membership get 403 on admin routes, not empty lists.
 - The frontend check is for UX only. The backend enforces every key.

@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
 import { staffToken, joinOrgByToken } from '../helpers/staff.js';
+import permissionService from '../../src/services/PermissionService.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -523,6 +524,49 @@ describe('Venue Contract Tests', () => {
       const res = await request(app)
         .delete(`/organizations/${inactiveOrgId}/venues/${emptyVenueId}`)
         .set('Authorization', `Bearer ${organizerToken}`);
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('Venues turned off platform-wide', () => {
+    const pin = (disabled) => {
+      permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: {}, ORGANIZER: {}, disabled } };
+    };
+    beforeEach(() => pin(['venues']));
+    afterAll(() => permissionService.clearCache());
+
+    it('404s the venue admin routes but keeps the list the event wizard reads', async () => {
+      const auth = ['Authorization', `Bearer ${adminToken}`];
+      expect((await request(app).post(`/organizations/${testOrgId}/venues`).set(...auth).send({ name: 'X', address: '1 X St' })).status).toBe(404);
+      expect((await request(app).get(`/organizations/${testOrgId}/venues/${publicVenueId}`).set(...auth)).status).toBe(404);
+      expect((await request(app).patch(`/organizations/${testOrgId}/venues/${publicVenueId}`).set(...auth).send({ name: 'Y' })).status).toBe(404);
+      expect((await request(app).get(`/organizations/${testOrgId}/venues`).set(...auth)).status).toBe(200);
+    });
+
+    it('403s the venue admin routes for a role with Venues hidden', async () => {
+      permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: {}, ORGANIZER: { venues: false }, disabled: [] } };
+      const res = await request(app).get(`/organizations/${testOrgId}/venues/${publicVenueId}`).set('Authorization', `Bearer ${organizerToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('POST /from-address reuses the venue at the same address, else creates a private one', async () => {
+      const auth = ['Authorization', `Bearer ${organizerToken}`];
+      const body = { name: '500 Fayetteville St', address: '500 Fayetteville St', city: 'Raleigh', state: 'NC', postalCode: '27601' };
+      const first = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send(body);
+      expect(first.status).toBe(200);
+      expect(first.body).toMatchObject({ address: body.address, state: 'NC', isPublic: false, timezone: 'America/New_York' });
+      const again = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ ...body, address: '500 fayetteville st' });
+      expect(again.body.id).toBe(first.body.id);
+      const other = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ ...body, name: 'Other', address: '1 Other St' });
+      expect(other.body.id).not.toBe(first.body.id);
+      expect((await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ name: 'No address' })).status).toBe(400);
+    });
+
+    it('from-address is scoped to the caller’s organizations', async () => {
+      const res = await request(app)
+        .post(`/organizations/${inactiveOrgId}/venues/from-address`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'X', address: '1 X St' });
       expect(res.status).toBe(403);
     });
   });

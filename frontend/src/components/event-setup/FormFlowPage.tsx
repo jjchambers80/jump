@@ -43,6 +43,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const api = useApplicationsApi(eventId);
   const participants = useParticipantsApi();
   const canEdit = useCan('applications.forms');
+  const maps = useCan('maps');
   const isDesktop = useIsDesktop();
   const [templates, setTemplates] = useState<FormTemplateSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -111,7 +112,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     setBusy(false);
     if (!ok) return;
     // From the saved form: choosing a floor map on this step adds the Floor map step next.
-    const steps = flowSteps(flow, updated);
+    const steps = flowSteps(flow, updated, { maps });
     const after = steps[steps.findIndex((s) => s.key === step.key) + 1];
     if (after) f.go(after.key);
     else f.exit(true);

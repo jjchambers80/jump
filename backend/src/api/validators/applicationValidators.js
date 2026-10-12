@@ -2,6 +2,7 @@
 // ranges, question options, state transitions) are validated in the services.
 
 import { ValidationError } from '../../middleware/errorHandler.js';
+import permissionService from '../../services/PermissionService.js';
 
 const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'purpose', 'collectBusiness', 'buttonLabel', 'successMessage']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
@@ -13,10 +14,13 @@ function onlyFields(body, allowed, label) {
   if (unknown.length) throw new ValidationError(`Unknown ${label} field(s): ${unknown.join(', ')}`);
 }
 
-export const validateFormBody = (req, res, next) => {
+export const validateFormBody = async (req, res, next) => {
   try {
     const body = req.body || {};
     onlyFields(body, FORM_FIELDS, 'form');
+    // Maps off platform-wide: no new floor-map choosing. Forms already on MAP keep working.
+    if (body.spaceSelection === 'MAP' && (await permissionService.effective(null)).disabled.has('maps'))
+      throw new ValidationError('Floor maps are turned off. Vendors choose a tier instead');
     if (req.method === 'POST' && req.params?.eventId && !body.kind) throw new ValidationError('kind is required');
     if (body.tiers !== undefined && !Array.isArray(body.tiers)) throw new ValidationError('tiers must be an array');
     if (body.questions !== undefined && !Array.isArray(body.questions)) throw new ValidationError('questions must be an array');
