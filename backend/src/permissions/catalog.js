@@ -51,6 +51,7 @@ export const FEATURES = [
       { key: 'customers.email', label: "Change a contact's email address" },
       { key: 'customers.comments', label: "Delete other staff members' timeline comments" },
       { key: 'customers.privacy', label: "Export, erase or anonymize a contact's data" },
+      { key: 'customers.lists', label: 'Create, edit and delete contact lists', organizer: true },
       { key: 'applications.standingForms', label: 'Build standing application forms (Contacts › Forms)' },
     ],
   },

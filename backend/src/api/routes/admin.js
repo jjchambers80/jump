@@ -36,6 +36,7 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
+import contactListService from '../../services/ContactListService.js';
 import buyerDataExportService from '../../services/BuyerDataExportService.js';
 import contactErasureService from '../../services/ContactErasureService.js';
 import { requireRecentAuth } from '../../middleware/recentAuth.js';
@@ -1797,7 +1798,7 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { page, limit, search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId, list } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1828,6 +1829,7 @@ router.get('/customers', async (req, res, next) => {
       eventId,
       source,
       formId,
+      list,
       sort,
       direction,
     });
@@ -1844,7 +1846,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const { search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId, list } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1856,6 +1858,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
       eventId,
       source,
       formId,
+      list,
       sort,
       direction,
     });
@@ -1866,6 +1869,15 @@ router.get('/customers/:contactId', async (req, res, next) => {
 });
 
 /** GET /admin/customers/:contactId/timeline — comments and derived customer events. */
+/** GET /admin/customers/:contactId/lists — manual lists the contact is on (spec 055). */
+router.get('/customers/:contactId/lists', async (req, res, next) => {
+  try {
+    res.json({ lists: await contactListService.listsForContact(await activeOrgFor(req), req.params.contactId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/customers/:contactId/timeline', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);

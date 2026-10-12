@@ -54,6 +54,8 @@ export const MODEL_FEATURES = {
   Contact: { feature: 'Customers', label: 'email' },
   ContactComment: { feature: 'Customers' },
   ErasureSuppression: { feature: 'Customers' },
+  ContactList: { feature: 'Customers', label: 'name' }, // spec 055
+  ContactListMember: { feature: 'Customers', org: 'list' },
 
   // Applications and maps
   ApplicationForm: { feature: 'Applications', label: 'name' },

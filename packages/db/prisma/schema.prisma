@@ -76,6 +76,7 @@ model User {
   agentAuditLogs    AgentAuditLog[]
   securityEvents    SecurityEvent[]
   contactComments   ContactComment[]
+  contactLists      ContactList[]  @relation("ContactListCreatedBy")
 
   @@index([role])
   @@index([email])
@@ -600,6 +601,7 @@ model Organization {
   oauthAuthCodes           OAuthAuthCode[]
   agentAuditLogs           AgentAuditLog[]
   pageTemplates            PageTemplate[]
+  contactLists             ContactList[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -863,6 +865,7 @@ model Contact {
   applications      Application[]
   contactComments   ContactComment[]
   rsvps             EventRsvp[]
+  listMemberships   ContactListMember[]
 
   @@unique([organizationId, email])
   @@index([email])
@@ -2546,4 +2549,47 @@ model EventGuest {
 
   @@unique([applicationId]) // one lineup row per application (add-to-lineup 409)
   @@index([eventId, displayOrder])
+}
+
+// Spec 055: Contacts › Lists. AUTOMATIC lists are saved filters (no member
+// rows); MANUAL lists hold exactly the contacts staff put in. The three
+// built-in lists live in code (ContactListService.BUILT_IN_LISTS).
+model ContactList {
+  id             String              @id @default(cuid())
+  organizationId String
+  name           String // unique per org ignoring case (ContactListService checks)
+  type           ContactListType
+  filters        Json? // AUTOMATIC only, see services/contactListFilters.js
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User?               @relation("ContactListCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members        ContactListMember[]
+
+  @@index([organizationId])
+}
+
+model ContactListMember {
+  listId    String
+  contactId String
+  addedById String? // null = import or system
+  source    ContactListMemberSource
+  addedAt   DateTime                @default(now())
+  list      ContactList             @relation(fields: [listId], references: [id], onDelete: Cascade)
+  contact   Contact                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([listId, contactId])
+  @@index([contactId])
+}
+
+enum ContactListType {
+  AUTOMATIC
+  MANUAL
+}
+
+enum ContactListMemberSource {
+  MANUAL
+  PICKED
+  IMPORT
 }
