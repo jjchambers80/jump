@@ -124,7 +124,10 @@ jobs:
         run: npm run test:unit
       - name: Contract + integration tests
         working-directory: backend
-        run: npm test -- --runInBand tests/contract tests/integration
+        # One worker, recycled past 1 GB: still serial like --runInBand, but the
+        # module registry no longer piles up across 200 files until V8 runs
+        # out of heap (exit 134 on every main run from 2026-10-12).
+        run: npm test -- --maxWorkers=1 --workerIdleMemoryLimit=1GB tests/contract tests/integration
 
   # ── Frontend typecheck + unit tests ──────────────────────────────────
   frontend:
