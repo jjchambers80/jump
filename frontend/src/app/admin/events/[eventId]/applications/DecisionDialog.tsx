@@ -252,7 +252,7 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
               </label>
               <textarea id="decision-body" rows={9} value={body} onChange={(e) => setBody(e.target.value)} className={`${fieldClass} font-mono text-xs`} disabled={!template} />
               <p className={hintClass}>
-                {edited ? 'Edited for this applicant only — the template is unchanged.' : 'Rendered from your template. Edit the template on Settings › Applications.'}
+                {edited ? 'Edited for this applicant only — the template is unchanged.' : 'Rendered from your template. Edit the template on Settings › Notifications.'}
               </p>
               {!template && !error && <p className={errorClass}>{assignsCategory && !tierId ? 'Choose a category to preview the email.' : 'Loading template…'}</p>}
             </div>

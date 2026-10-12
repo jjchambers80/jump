@@ -37,7 +37,7 @@ Derived from the 2026-09-15 Eventeny organizer interview (`docs/research/`).
 | `frontend/src/app/events/[eventId]/apply/*` | Public index, form, status page; `GetInvolved.tsx` on the event page |
 | `frontend/src/app/organizations/[orgId]/account/ApplicationsSection.tsx`, `ApplicantProfileSection.tsx` + `frontend/src/app/api/buyer/me/applications*`, `applicant-profile[/photos]` | Applicant account view and business-profile editor (proxied through Next route handlers; the photo upload route forwards multipart) |
 | `frontend/src/app/admin/events/[eventId]/applications/*` | Admin list page (since spec 019 it mounts the shared `components/applications/SubmissionsTable` with `eventId`; saved views in `localStorage`, bulk bar), detail (payment card with price-changed note, retry charge, `RefundDialog`, Stripe link), `DecisionDialog`, forms list, form editor, `useApplicationsApi` |
-| `frontend/src/app/admin/settings/applications/page.tsx` | Settings › Applications (daily digest toggle, email templates) |
+| `frontend/src/app/admin/settings/notifications/page.tsx` | Settings › Notifications (daily digest toggle; one row per email, edited in a dialog) |
 | `frontend/src/app/admin/events/DuplicateEventDialog.tsx` | Duplicate button on the admin events list |
 
 ## Configuration
