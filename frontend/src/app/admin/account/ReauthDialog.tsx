@@ -39,6 +39,21 @@ export default function ReauthDialog({ onVerified, onCancel }: Props) {
       .catch((e: any) => setError(e.message || 'Unable to start verification.'));
   }, []);
 
+  // Email codes go out as soon as email is the method: no extra "Send code"
+  // click. Once per dialog (StrictMode runs effects twice); "Send again" resends.
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (method !== 'email' || autoSent.current) return;
+    autoSent.current = true;
+    sendCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method]);
+
+  // The code box is disabled until the code is sent: focus it then.
+  useEffect(() => {
+    if (sentTo) inputRef.current?.focus();
+  }, [sentTo]);
+
   const sendCode = async () => {
     setBusy(true);
     setError(null);
@@ -149,7 +164,8 @@ export default function ReauthDialog({ onVerified, onCancel }: Props) {
                 <>We emailed a 6-digit code to <span className="font-medium">{sentTo}</span>. It expires in 10 minutes.{' '}
                   <button type="button" onClick={sendCode} className="font-medium text-accent-600 dark:text-accent-400">Send again</button></>
               ) : (
-                'We’ll email a 6-digit code to your account address.'
+                // A failed send leaves the "Send code" button to retry.
+                error ? 'We couldn’t send the code.' : 'Sending a 6-digit code to your account email…'
               )}
             </p>
           </div>

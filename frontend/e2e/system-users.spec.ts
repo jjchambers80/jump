@@ -126,7 +126,6 @@ test('invite asks for step-up, posts the email and announces success', async ({ 
 
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await expect(reauth).toBeVisible();
-  await reauth.getByRole('button', { name: 'Send code' }).click();
   await reauth.getByLabel('Verification code').fill('123456');
   await reauth.getByRole('button', { name: 'Verify' }).click();
 
