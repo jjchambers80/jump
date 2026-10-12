@@ -46,7 +46,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   vendors: {
     title: 'Vendor application',
     steps: [
-      s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.'),
+      s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.', { formAnchor: 'apply-top' }),
       details,
       s('payment', 'Spaces and pricing', 'The categories vendors pay for, and how they choose a space.', { visible: paid, formAnchor: 'apply-summary' }),
       s('floor-map', 'Floor map', 'Vendors pick their spot on this map.', { visible: onMap, anchor: 'floor-map' }),
@@ -58,7 +58,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     title: 'Special guests',
     steps: [
       s('lineup', 'Special guest lineup', 'Add the guests you have booked. The lineup shows on the event page.', { anchor: 'guests' }),
-      s('start', 'Application form', 'Optional. Let artists, creators and celebrities apply to appear.', { anchor: 'guests' }),
+      s('start', 'Application form', 'Optional. Let artists, creators and celebrities apply to appear.', { anchor: 'guests', formAnchor: 'apply-top' }),
       { ...details, anchor: 'guests' },
       { ...questions, anchor: 'guests' },
       { ...review, anchor: 'guests' },
@@ -67,7 +67,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   volunteers: {
     title: 'Volunteer application',
     steps: [
-      s('start', 'Start a volunteer application', 'People sign up to help run your event.'),
+      s('start', 'Start a volunteer application', 'People sign up to help run your event.', { formAnchor: 'apply-top' }),
       details,
       s('shifts', 'Shifts', 'Optional. The shifts volunteers can sign up for.', { formAnchor: 'step-shifts' }),
       questions,
@@ -76,7 +76,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   },
   'other-applications': {
     title: 'Application',
-    steps: [s('start', 'Start an application', 'Sponsors, press, panels and anything else people apply for.'), details, questions, review],
+    steps: [s('start', 'Start an application', 'Sponsors, press, panels and anything else people apply for.', { formAnchor: 'apply-top' }), details, questions, review],
   },
 };
 

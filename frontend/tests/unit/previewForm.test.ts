@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PREVIEW_MESSAGE, isPreviewMessage, previewForm } from '@/components/event-setup/previewMessages';
+import { PREVIEW_MESSAGE, draftPreviewForm, isPreviewMessage, previewForm } from '@/components/event-setup/previewMessages';
 import type { AdminForm } from '@/lib/applications';
 
 const admin = {
@@ -30,5 +30,14 @@ describe('previewForm (spec 051)', () => {
     expect(isPreviewMessage({ ...base, form: null })).toBe(true);
     expect(isPreviewMessage({ ...base, form: { name: 'x' } })).toBe(false);
     expect(isPreviewMessage({ ...base, form: 'x' })).toBe(false);
+  });
+});
+
+describe('draftPreviewForm (spec 051 Start step)', () => {
+  it('previews the form being set up: typed name, kind, purpose, no questions yet', () => {
+    expect(draftPreviewForm({ name: '  Makers  ', kind: 'PAID', purpose: 'VENDOR' }, 'Retro Org')).toMatchObject({
+      name: 'Makers', kind: 'PAID', purpose: 'VENDOR', questions: [], tiers: [], collectBusiness: true, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
+    });
+    expect(draftPreviewForm({ name: '', kind: 'FREE', purpose: 'VOLUNTEER' })).toMatchObject({ name: 'Untitled application', collectBusiness: false });
   });
 });

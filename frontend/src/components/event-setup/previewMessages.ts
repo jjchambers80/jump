@@ -36,6 +36,32 @@ export interface PreviewMessage {
   form?: PublicForm | null;
 }
 
+/** What Start knows before the form exists: its preview is the form's frame with no questions yet. */
+export interface DraftForm {
+  name: string;
+  kind: PublicForm['kind'];
+  purpose: NonNullable<PublicForm['purpose']>;
+}
+
+export function draftPreviewForm(draft: DraftForm, organizationName?: string | null): PublicForm {
+  return {
+    id: 'draft',
+    kind: draft.kind,
+    purpose: draft.purpose,
+    name: draft.name.trim() || 'Untitled application',
+    slug: 'draft',
+    intro: null,
+    acceptance: { open: true, reason: null },
+    chargeTiming: null,
+    feeMode: null,
+    organizationName: organizationName ?? null,
+    tiers: [],
+    questions: [],
+    // Volunteers skip the business step (backend applicationFormDefaults.js).
+    collectBusiness: draft.purpose !== 'VOLUNTEER',
+  };
+}
+
 /**
  * The form being built, as the public apply page would get it (spec 051): the
  * saved form, with the unsaved name and intro typed on Form details on top.

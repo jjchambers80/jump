@@ -12,7 +12,8 @@
 // above, to continue one instead.
 
 import Link from 'next/link';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import type { DraftForm } from '../previewMessages';
 import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
 import { FREE_ONLY, PURPOSE_LABEL, templatesFor, type ApplicationStepConfig } from '../applicationSteps';
@@ -36,6 +37,8 @@ interface Props {
   existing: { id: string; name: string; status: string; href: string }[];
   /** Create in flight (the footer's Next waits). */
   onBusyChange: (busy: boolean) => void;
+  /** Every change to name, purpose or kind: the live preview shows the form as it is set up. */
+  onDraftChange: (draft: DraftForm) => void;
   eventName: string;
   /** null while the org's templates are still loading. */
   templates: FormTemplateSummary[] | null;
@@ -48,7 +51,7 @@ interface Props {
 
 const STATUS: Record<string, string> = { DRAFT: 'Draft', OPEN: 'Open', CLOSED: 'Closed' };
 
-export default function StartFormStep({ config, existing, onBusyChange, eventName, templates, canManage, onDeleteTemplate, onCreate }: Props) {
+export default function StartFormStep({ config, existing, onBusyChange, onDraftChange, eventName, templates, canManage, onDeleteTemplate, onCreate }: Props) {
   const [name, setName] = useState(`${eventName} ${config.nameSuffix}`.trim());
   const [purpose, setPurpose] = useState<FormPurpose>(config.purposes[0]);
   const [paid, setPaid] = useState(config.defaultKind === 'PAID');
@@ -58,6 +61,7 @@ export default function StartFormStep({ config, existing, onBusyChange, eventNam
   const [allPurposes, setAllPurposes] = useState(false);
   const freeOnly = FREE_ONLY[purpose];
   const kind: FormKind = paid && !freeOnly ? 'PAID' : 'FREE';
+  useEffect(() => onDraftChange({ name, kind, purpose }), [name, kind, purpose, onDraftChange]);
   const loading = templates === null;
   const options = loading ? [] : allPurposes ? templates.filter((t) => t.kind === kind) : templatesFor(templates, purpose, kind);
   const removeTemplate = async (template: FormTemplateSummary) => {
