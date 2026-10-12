@@ -489,14 +489,14 @@ test('admin list: add-ons column and "has add-on" filter', async ({ page, baseUR
   await expect(page).toHaveURL(/addOn=addon-badge/);
 });
 
-test('vendor flow Spaces and pricing: tier rows show offered add-ons; ADMIN attaches a restricted one on save', async ({ page, baseURL }) => {
+test('vendor flow Options and pricing: tier rows show offered add-ons; ADMIN attaches a restricted one on save', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
   test.setTimeout(120000);
   await mockWizard(page);
   // The old form editor URL opens the form in its application flow (spec 051).
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
   await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/vendors\\?step=details&form=${FORM_ID}`), { timeout: 60000 });
-  await page.goto(`/admin/events/${EVENT_ID}/setup/vendors?step=payment&form=${FORM_ID}`);
+  await page.goto(`/admin/events/${EVENT_ID}/setup/vendors?step=options&form=${FORM_ID}`);
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs', { timeout: 30000 });
   await page.getByTestId(`tier-row-${cornerTier.id}`).getByRole('button', { name: 'Edit' }).click();
   const fieldset = page.getByTestId(`tier-add-ons-${cornerTier.id}`);
@@ -509,7 +509,7 @@ test('vendor flow Spaces and pricing: tier rows show offered add-ons; ADMIN atta
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Extra vendor badge');
 });
 
-test('vendor flow Spaces and pricing: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
+test('vendor flow How vendors choose and pay: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
   test.setTimeout(120000);
   await mockWizard(page);
@@ -520,12 +520,12 @@ test('vendor flow Spaces and pricing: how vendors choose their space (spec 039);
   await expect(page.getByTestId('form-space-tiers')).toBeChecked();
 
   await page.getByTestId('form-space-map').check();
-  await expect(page.getByTestId('form-space-map-hint')).toContainText('publish the event');
+  await expect(page.getByTestId('form-space-map-hint')).toContainText('Publish the floor map');
   await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/vendors?step=floor-map&form=${FORM_ID}`);
   await next.click();
   // The refused save keeps the organizer on the step, with the server's reason.
   await expect(page.getByText('Add spots on the floor map for: Corner')).toBeVisible();
-  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Spaces and pricing' })).toBeVisible();
+  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'How vendors choose and pay' })).toBeVisible();
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'MAP' });
 
   await page.getByTestId('form-space-tiers').check();

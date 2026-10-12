@@ -253,7 +253,7 @@ test('Start a vendor application: Start from offers same-kind saved templates; c
   // The new form's flow continues at its details, deep-linked.
   await expect(page).toHaveURL(/\/setup\/vendors\?step=details&form=form-new-\d+/);
   const details = page.url();
-  await page.goto(details.replace('step=details', 'step=payment'));
+  await page.goto(details.replace('step=details', 'step=options'));
   await expect(main(page).getByTestId('form-tiers')).toContainText('Corner', COLD);
   await page.goto(details.replace('step=details', 'step=questions'));
   await expect(main(page).getByTestId('form-questions')).toContainText('Booth style', COLD);

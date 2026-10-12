@@ -5,9 +5,9 @@ const keys = (flow: Parameters<typeof flowSteps>[0], form: FlowForm | null) => f
 
 describe('application flows (spec 051)', () => {
   it('walks a vendor form: spaces only when it charges, the floor map only on MAP', () => {
-    expect(keys('vendors', null)).toEqual(['start', 'details', 'payment', 'questions', 'review']);
-    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['start', 'details', 'payment', 'questions', 'review']);
-    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['start', 'details', 'payment', 'floor-map', 'questions', 'review']);
+    expect(keys('vendors', null)).toEqual(['start', 'details', 'options', 'payment', 'questions', 'review']);
+    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['start', 'details', 'options', 'payment', 'questions', 'review']);
+    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['start', 'details', 'options', 'payment', 'floor-map', 'questions', 'review']);
     // Maps off or hidden for the role: no floor-map step even on a MAP form.
     expect(flowSteps('vendors', { kind: 'PAID', spaceSelection: 'MAP' }, { maps: false }).map((s) => s.key)).not.toContain('floor-map');
     expect(keys('vendors', { kind: 'FREE', spaceSelection: null })).toEqual(['start', 'details', 'questions', 'review']);
