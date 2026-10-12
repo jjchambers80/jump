@@ -182,6 +182,18 @@ async function listWhereFor(organizationId, list) {
 
 class CustomerService {
   /**
+   * Prisma where for the Contacts list with these filters (spec 055: "select
+   * all N matching" adds exactly what the list shows).
+   */
+  async whereFor(organizationId, { search, tag, scope, rsvp, eventId, source, formId, list } = {}) {
+    return customerWhere(
+      organizationId,
+      { search, tag, scope, rsvp, eventId, source, formId },
+      await listWhereFor(organizationId, list)
+    );
+  }
+
+  /**
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)

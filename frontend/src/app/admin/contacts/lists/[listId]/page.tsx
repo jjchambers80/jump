@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, UserMinus, UserPlus } from 'lucide-react';
 import api from '@/services/api';
 import { useCan, useOrg } from '@/components/OrgContext';
 import ActionsMenu from '@/components/ActionsMenu';
@@ -53,6 +53,24 @@ function ListPage({ listId }: { listId: string }) {
       router.push(contactListHref(copy.id));
     } catch (err) {
       showToast((err as Error)?.message || 'Could not duplicate the list');
+    }
+  };
+
+  const [removing, setRemoving] = useState(false);
+  // Takes people off this manual list; they stay in Contacts.
+  const removeMembers = async (contactIds: string[], done: () => void) => {
+    setRemoving(true);
+    try {
+      const { removed } = await api.delete<{ removed: number }>(`/admin/contact-lists/${encodeURIComponent(listId)}/members`, {
+        body: JSON.stringify({ contactIds }),
+      });
+      showToast(`Removed ${removed} ${removed === 1 ? 'contact' : 'contacts'} from the list`);
+      done();
+      load();
+    } catch (err) {
+      showToast((err as Error)?.message || 'Could not remove them from the list');
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -104,7 +122,16 @@ function ListPage({ listId }: { listId: string }) {
           </p>
         </div>
         {list && canEdit && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {list.type === 'MANUAL' && (
+              <Link
+                href={`/admin/contacts?addTo=${encodeURIComponent(list.id)}`}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
+              >
+                <UserPlus className="h-4 w-4" aria-hidden />
+                Add contacts
+              </Link>
+            )}
             {!list.builtIn && (
               <button
                 type="button"
@@ -155,8 +182,27 @@ function ListPage({ listId }: { listId: string }) {
         header={header}
         emptyState={
           list?.type === 'MANUAL'
-            ? { title: 'Nobody on this list yet', body: 'This manual list is empty.' }
+            ? {
+                title: 'Nobody on this list yet',
+                body: canEdit ? 'Choose Add contacts, select people in Contacts, then Add to list.' : 'This manual list is empty.',
+              }
             : { title: 'Nobody matches this list yet', body: 'Contacts join as soon as they match its filters.' }
+        }
+        selectAllMatching={false}
+        bulkActions={
+          list?.type === 'MANUAL' && canEdit
+            ? (selection, done) => (
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={() => selection.kind === 'ids' && removeMembers(selection.ids, () => done(true))}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-red-300 px-4 text-sm font-semibold text-red-800 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
+                >
+                  <UserMinus className="h-4 w-4" aria-hidden />
+                  {removing ? 'Removing…' : 'Remove from list'}
+                </button>
+              )
+            : undefined
         }
       />
 

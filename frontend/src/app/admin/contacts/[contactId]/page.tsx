@@ -11,6 +11,8 @@ import { ChevronRightIcon, EllipsisIcon } from '@/app/admin/settings/icons';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import CustomerTimeline from './CustomerTimeline';
 import EraseCustomerDialog from './EraseCustomerDialog';
+import ContactListsCard from './ContactListsCard';
+import ToastHost from '@/components/content/Toast';
 import { ReauthProvider } from '@/app/admin/account/useReauth';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
 import { customerApiQuery, guestAccountNote } from '@/lib/customers';
@@ -1036,6 +1038,9 @@ function CustomerDetailPageContent() {
             </div>
           </div>
 
+          {/* Lists (spec 055-C) */}
+          <ContactListsCard contactId={customer.id} contactName={`${customer.firstName} ${customer.lastName}`.trim()} />
+
           {/* Account card */}
           <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg">
             <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
@@ -1148,6 +1153,7 @@ function CustomerDetailPageContent() {
           </div>
         </div>
       </div>
+      <ToastHost />
     </div>
   );
 }
