@@ -90,13 +90,16 @@ export default function NewFormPage() {
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Applicants see this name. The link is made from it; you can change it in Settings.</p>
           </div>
 
-          <fieldset className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
-            <legend className="text-sm font-medium text-gray-700 dark:text-slate-300">Start from</legend>
+          {/* Only a choice once the org has a template (spec 051): otherwise every form starts blank. */}
+          {templates.length > 0 && (
+          <fieldset aria-describedby="start-with-hint" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
+            <legend className="text-sm font-medium text-gray-700 dark:text-slate-300">Start with</legend>
+            <p id="start-with-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">A template copies a form you saved before: its intro and questions.</p>
             <div className="mt-2 space-y-2">
               <label className={choice} data-testid="start-from-blank">
                 <input type="radio" name="start-from" checked={!templateId} onChange={() => setTemplateId('')} className="mt-0.5" />
                 <span>
-                  <span className="block font-medium text-gray-900 dark:text-white">Blank</span>
+                  <span className="block font-medium text-gray-900 dark:text-white">Blank form</span>
                   <span className="block text-gray-600 dark:text-slate-400">Name, email and business details, plus any questions you add.</span>
                 </span>
               </label>
@@ -106,13 +109,14 @@ export default function NewFormPage() {
                   <span>
                     <span className="block font-medium text-gray-900 dark:text-white">{t.name}</span>
                     <span className="block text-gray-600 dark:text-slate-400">
-                      Template · {t.questionCount} {t.questionCount === 1 ? 'question' : 'questions'}
+                      Your template · {t.questionCount} {t.questionCount === 1 ? 'question' : 'questions'}
                     </span>
                   </span>
                 </label>
               ))}
             </div>
           </fieldset>
+          )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Link href="/admin/content/forms" className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">

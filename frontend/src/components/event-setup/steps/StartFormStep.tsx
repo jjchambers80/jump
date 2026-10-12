@@ -2,10 +2,12 @@
 
 // Start of an application flow (spec 051, from the spec 050 "Add a …
 // application" dialog): name, what the form is for (Other applications only),
-// whether it charges, and where it starts: blank with Jump's defaults for the
-// purpose (backend applicationFormDefaults.js), or one of the org's templates
-// for that purpose ("Show templates for all purposes" widens the list to every
-// template of the same kind). Templates are edited on their editor page and
+// whether it charges, and where it starts ("Start with", shown only when the
+// org has a template of this kind): the standard form with Jump's suggested
+// questions for the purpose (backend applicationFormDefaults.js), or one of
+// the org's templates for that purpose ("Also show templates from other kinds
+// of forms" widens the list to every template of the same kind, and appears
+// only when there are some). Templates are edited on their editor page and
 // deleted here: there is no template library page (spec 037 D2). The wizard
 // footer's Next submits this form (`START_FORM_ID`); the flow then moves to
 // the new form's details. This event's existing forms of the type are listed
@@ -21,8 +23,13 @@ import { hintClass, inputClass, labelClass, textButton } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
 
-/** Purposes whose blank form starts with Jump's suggested questions. */
-const SUGGESTED = new Set<FormPurpose>(['VENDOR', 'SPECIAL_GUEST', 'VOLUNTEER']);
+/** What the suggested questions ask, for purposes that get them (backend applicationFormDefaults.js). */
+const SUGGESTED: Partial<Record<FormPurpose, string>> = {
+  VENDOR: 'what they sell, power and tables',
+  SPECIAL_GUEST: 'appearance fee, travel, A/V needs and availability',
+  VOLUNTEER: 'availability, roles, T-shirt size and an emergency contact',
+};
+const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 export interface NewFormBody {
   name: string;
@@ -63,7 +70,17 @@ export default function StartFormStep({ config, existing, onBusyChange, onDraftC
   const kind: FormKind = paid && !freeOnly ? 'PAID' : 'FREE';
   useEffect(() => onDraftChange({ name, kind, purpose }), [name, kind, purpose, onDraftChange]);
   const loading = templates === null;
-  const options = loading ? [] : allPurposes ? templates.filter((t) => t.kind === kind) : templatesFor(templates, purpose, kind);
+  // Templates that could start this form (same kind); the purpose-matched ones first, the rest on request.
+  const sameKind = (templates ?? []).filter((t) => t.kind === kind);
+  const matching = templatesFor(sameKind, purpose, kind);
+  const others = sameKind.filter((t) => !matching.includes(t));
+  const options = allPurposes ? sameKind : matching;
+  // Nothing saved that fits: no choice to make, so the section stays out of the way.
+  const showStartWith = !loading && sameKind.length > 0;
+  const suggested = SUGGESTED[purpose];
+  const standard = suggested
+    ? { title: `Standard ${PURPOSE_LABEL[purpose].toLowerCase()} form`, detail: `Starts with suggested questions about ${suggested}. Change them on the Questions step.` }
+    : { title: 'Blank form', detail: 'Starts with no questions. Add your own on the Questions step.' };
   const removeTemplate = async (template: FormTemplateSummary) => {
     setError(null);
     try {
@@ -150,45 +167,51 @@ export default function StartFormStep({ config, existing, onBusyChange, onDraftC
                 </p>
               </div>
             )}
-            <fieldset>
-              <legend className={labelClass}>Start from</legend>
-              <label className="mt-1 flex min-h-11 items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
-                <input type="checkbox" checked={allPurposes} onChange={(e) => setAllPurposes(e.target.checked)} className="h-5 w-5 accent-accent-600" />
-                Show templates for all purposes
-              </label>
-              {loading && (
-                <p id="add-form-templates-loading" role="status" className={`${hintClass} mt-2`}>
-                  Loading templates…
+            {showStartWith ? (
+              <fieldset aria-describedby="add-form-start-hint">
+                <legend className={labelClass}>Start with</legend>
+                <p id="add-form-start-hint" className={hintClass}>
+                  A template copies a form you saved before: its intro, categories, prices and questions.
                 </p>
-              )}
-              <ul className="mt-1 space-y-2" hidden={loading}>
-                {[{ id: '', name: 'Blank form' }, ...options].map((t) => (
-                  <li key={t.id || 'blank'}>
-                    <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5 text-sm has-[:checked]:border-accent-500 dark:border-slate-600">
-                      <input type="radio" name="add-form-template" checked={chosen === t.id} onChange={() => setTemplateId(t.id)} className="mt-0.5 h-4 w-4 accent-accent-600" />
-                      <span className="min-w-0">
-                        <span className="block font-medium text-gray-900 dark:text-white">{t.name}</span>
-                        <span className="block text-gray-600 dark:text-slate-400">
-                          {t.id ? 'Saved template' : SUGGESTED.has(purpose) ? `Suggested questions for a ${PURPOSE_LABEL[purpose].toLowerCase()} form` : 'No questions yet'}
+                <ul className="mt-2 space-y-2">
+                  {[{ id: '', name: standard.title }, ...options].map((t) => (
+                    <li key={t.id || 'standard'}>
+                      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5 text-sm has-[:checked]:border-accent-500 dark:border-slate-600">
+                        <input type="radio" name="add-form-template" checked={chosen === t.id} onChange={() => setTemplateId(t.id)} className="mt-0.5 h-4 w-4 accent-accent-600" />
+                        <span className="min-w-0">
+                          <span className="block font-medium text-gray-900 dark:text-white">{t.name}</span>
+                          <span className="block text-gray-600 dark:text-slate-400">
+                            {t.id
+                              ? ['Your template', (t as FormTemplateSummary).tierCount > 0 && plural((t as FormTemplateSummary).tierCount, 'category', 'categories'), plural((t as FormTemplateSummary).questionCount, 'question')].filter(Boolean).join(' · ')
+                              : standard.detail}
+                          </span>
                         </span>
-                      </span>
-                    </label>
-                    {t.id && canManage && (
-                      <div className="mt-1 flex flex-wrap gap-1 pl-7">
-                        <Link href={`/admin/events/templates/${t.id}`} className={textButton} aria-label={`Edit template ${t.name}`}>
-                          <Pencil className="h-4 w-4" aria-hidden />
-                          Edit
-                        </Link>
-                        <button type="button" onClick={() => void removeTemplate(t as FormTemplateSummary)} className={`${textButton} text-red-700 dark:text-red-300`} aria-label={`Delete template ${t.name}`}>
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </fieldset>
+                      </label>
+                      {t.id && canManage && (
+                        <div className="mt-1 flex flex-wrap gap-1 pl-7">
+                          <Link href={`/admin/events/templates/${t.id}`} className={textButton} aria-label={`Edit template ${t.name}`}>
+                            <Pencil className="h-4 w-4" aria-hidden />
+                            Edit
+                          </Link>
+                          <button type="button" onClick={() => void removeTemplate(t as FormTemplateSummary)} className={`${textButton} text-red-700 dark:text-red-300`} aria-label={`Delete template ${t.name}`}>
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {others.length > 0 && (
+                  <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-gray-800 dark:text-slate-200">
+                    <input type="checkbox" checked={allPurposes} onChange={(e) => setAllPurposes(e.target.checked)} className="h-5 w-5 accent-accent-600" />
+                    Also show templates from other kinds of forms ({others.length})
+                  </label>
+                )}
+              </fieldset>
+            ) : (
+              !loading && <p className={hintClass}>{standard.detail}</p>
+            )}
           </div>
         </form>
     </div>

@@ -286,7 +286,7 @@ test.describe('edit mode', () => {
     await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
   });
 
-  test('templates stay manageable from Start from: edit, delete, all purposes', async ({ page }) => {
+  test('templates stay manageable from Start with: edit, delete, other kinds of forms', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('volunteers'));
     await expect(heading(page, 'Start a volunteer application')).toBeFocused(COLD);
@@ -294,7 +294,7 @@ test.describe('edit mode', () => {
     await expect(dialog.getByRole('link', { name: 'Edit template Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
     // Other purposes' templates appear on request; a PAID one is another kind and never fits a free-only step.
     await expect(dialog.getByText('Press desk')).toHaveCount(0);
-    await dialog.getByLabel('Show templates for all purposes').check();
+    await dialog.getByLabel('Also show templates from other kinds of forms (1)').check();
     await expect(dialog.getByText('Press desk')).toBeVisible();
     await expect(dialog.getByText('Makers market')).toHaveCount(0);
     page.once('dialog', (d) => void d.accept());
