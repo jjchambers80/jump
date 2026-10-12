@@ -82,6 +82,40 @@ function fromLocalInput(local: string, zone?: string | null): string | null {
   return zone ? zonedInputToIso(local, zone) : new Date(local).toISOString();
 }
 
+/** A radio group as stacked choices with a title and one line each (spec 051): fieldset + legend, native radios. */
+function ChoiceGroup<V extends string>({
+  legend,
+  name,
+  value,
+  disabled,
+  onChange,
+  options,
+}: {
+  legend: string;
+  name: string;
+  value: V;
+  disabled: boolean;
+  onChange: (value: V) => void;
+  options: { value: V; title: string; detail: string; testId: string }[];
+}) {
+  return (
+    <fieldset className="sm:col-span-2">
+      <legend className={labelClass}>{legend}</legend>
+      <div className="mt-1 space-y-2">
+        {options.map((o) => (
+          <label key={o.value} className="flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5 text-sm has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50/40 dark:border-slate-700 dark:has-[:checked]:bg-slate-800">
+            <input type="radio" name={name} checked={value === o.value} disabled={disabled} onChange={() => onChange(o.value)} data-testid={o.testId} className="mt-0.5 h-4 w-4 accent-accent-600" />
+            <span className="min-w-0">
+              <span className="block font-medium text-gray-900 dark:text-white">{o.title}</span>
+              <span className="block text-gray-600 dark:text-slate-400">{o.detail}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 export function SettingsCard({
@@ -188,7 +222,7 @@ export function SettingsCard({
   const paidBlocked = !template && form.kind === 'PAID' && !form.paymentsEnabled;
 
   return (
-    <form id={formId} onSubmit={submit} className={card} data-testid="form-settings">
+    <form id={formId} onSubmit={submit} className={section ? undefined : card} data-testid="form-settings">
       <h2 className={section ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Settings</h2>
       {paidBlocked && section !== 'details' && (
         <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
@@ -260,107 +294,68 @@ export function SettingsCard({
         )}
         {form.kind === 'PAID' && show('payment') && (
           <>
-            {/* Spec 037 phase 5: vendors apply for free; after approval they choose a space and pay. */}
-            <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
-              Vendors apply without paying. After you approve one, they choose their space and pay.
-            </p>
-            {/* Spec 039 D1: what an approved vendor chooses. */}
+            {/* Spec 037 phase 5: vendors apply for free; after approval they choose a space and pay. Spec 051 trimmed the copy. */}
+            {!section && (
+              <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
+                Vendors apply without paying. After you approve one, they choose their space and pay.
+              </p>
+            )}
+            <ChoiceGroup
+              legend="How vendors choose their space"
+              name="f-space"
+              value={state.spaceSelection}
+              disabled={!canEdit}
+              onChange={(value) => update({ spaceSelection: value })}
+              options={[
+                { value: 'TIERS', title: 'Pick an option', detail: 'They pay for one of your options. You place them on the floor later.', testId: 'form-space-tiers' },
+                { value: 'MAP', title: 'Pick a spot on the floor map', detail: 'They choose a spot in the category you approve. Spots can have their own price.', testId: 'form-space-map' },
+              ]}
+            />
+            {state.spaceSelection === 'MAP' && (
+              <p className="-mt-2 text-xs text-gray-600 dark:text-slate-400 sm:col-span-2" data-testid="form-space-map-hint">
+                Publish the floor map with a spot for every option before this form opens.
+                {!template && form.eventId && (
+                  <>
+                    {' '}
+                    <Link href={wizardLink(form.eventId, 'floor-map', form.id).href} className="font-medium text-accent-600 underline dark:text-accent-400">
+                      {wizardLink(form.eventId, 'floor-map', form.id).label}
+                    </Link>
+                  </>
+                )}
+              </p>
+            )}
+            <ChoiceGroup
+              legend="When you approve a vendor"
+              name="f-reserve"
+              value={state.reserveOnApproval ? 'on' : 'off'}
+              disabled={!canEdit}
+              onChange={(value) => update({ reserveOnApproval: value === 'on' })}
+              options={[
+                { value: 'on', title: 'Hold a space for them', detail: 'Approval is refused when the category is full.', testId: 'form-reserve-on' },
+                { value: 'off', title: 'First come, first served', detail: 'Approved vendors take spaces in the order they pay.', testId: 'form-reserve-off' },
+              ]}
+            />
             <div className="sm:col-span-2">
-              <span className={labelClass} id="f-space-label">How vendors choose their space</span>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="f-space-label">
-                {(
-                  [
-                    ['TIERS', 'Choose a tier', 'Vendors pay for one of your tiers: the one you approve them as, or their own pick. You place them on the floor later.'],
-                    ['MAP', 'Choose a spot on the floor map', 'Vendors pick a spot within the category you approve them for. Spots can have their own price.'],
-                  ] as const
-                )
-                  // Maps off or hidden: no floor-map choosing, except on a form already set to it.
-                  .filter(([value]) => value !== 'MAP' || maps || form.spaceSelection === 'MAP')
-                  .map(([value, title, detail]) => (
-                  <label key={value} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-accent-500 dark:border-slate-700">
-                    <input
-                      type="radio"
-                      name="f-space"
-                      checked={state.spaceSelection === value}
-                      disabled={!canEdit}
-                      onChange={() => update({ spaceSelection: value })}
-                      data-testid={`form-space-${value.toLowerCase()}`}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      <span className="block font-medium text-gray-900 dark:text-white">{title}</span>
-                      <span className="block text-gray-600 dark:text-slate-400">{detail}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {state.spaceSelection === 'MAP' && (
-                <p className="mt-2 text-xs text-gray-600 dark:text-slate-400" data-testid="form-space-map-hint">
-                  Before this form opens, publish the event&apos;s floor map with at least one spot for every active tier.
-                  {!template && form.eventId && (
-                    <>
-                      {' '}
-                      <Link href={wizardLink(form.eventId, 'floor-map', form.id).href} className="font-medium text-accent-600 underline dark:text-accent-400">
-                        {wizardLink(form.eventId, 'floor-map', form.id).label}
-                      </Link>
-                    </>
-                  )}
-                </p>
-              )}
-            </div>
-            <div className="sm:col-span-2">
-              <span className={labelClass} id="f-reserve-label">When you approve a vendor</span>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="f-reserve-label">
-                {(
-                  [
-                    [true, 'Reserve a space in their category', 'Approval is refused when the category is full, so an approved vendor always has a space.'],
-                    [false, 'First come, first served', 'Approval reserves nothing; approved vendors take spaces in the order they pay.'],
-                  ] as const
-                ).map(([value, title, detail]) => (
-                  <label key={String(value)} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-accent-500 dark:border-slate-700">
-                    <input
-                      type="radio"
-                      name="f-reserve"
-                      checked={state.reserveOnApproval === value}
-                      disabled={!canEdit}
-                      onChange={() => update({ reserveOnApproval: value })}
-                      data-testid={`form-reserve-${value ? 'on' : 'off'}`}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      <span className="block font-medium text-gray-900 dark:text-white">{title}</span>
-                      <span className="block text-gray-600 dark:text-slate-400">{detail}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {state.spaceSelection === 'TIERS' && state.reserveOnApproval && (
-                <p className="mt-2 text-xs text-gray-600 dark:text-slate-400">
-                  A space is reserved only when you approve a vendor into a tier. When you let the vendor choose, their space is taken when they pay.
-                </p>
-              )}
-            </div>
-            <div>
               <label htmlFor="f-fee" className={labelClass}>Fees</label>
               <select id="f-fee" value={state.feeMode} disabled={!canEdit} onChange={(e) => update({ feeMode: e.target.value as AdminForm['feeMode'] })} className={field}>
-                <option value="PASS">Applicant pays fees on top of the price</option>
-                <option value="ABSORB">I absorb fees — applicant pays the listed price</option>
+                <option value="PASS">Vendor pays the fees on top of the price</option>
+                <option value="ABSORB">I pay the fees; vendors pay the listed price</option>
               </select>
             </div>
-            <div>
-              <label htmlFor="f-due" className={labelClass}>Days to choose a space and pay, after approval</label>
-              <input id="f-due" type="number" min={1} max={30} value={state.paymentDueDays} disabled={!canEdit} onChange={(e) => update({ paymentDueDays: Number(e.target.value) })} className={field} />
+            <div className="sm:col-span-2">
+              <label htmlFor="f-due" className={labelClass}>Days to pay after approval</label>
+              <input id="f-due" type="number" inputMode="numeric" min={1} max={30} value={state.paymentDueDays} disabled={!canEdit} onChange={(e) => update({ paymentDueDays: Number(e.target.value) })} className={`${field} max-w-[8rem]`} />
             </div>
-            <div>
-              <label htmlFor="f-overdue" className={labelClass}>When payment is overdue</label>
+            <div className="sm:col-span-2">
+              <label htmlFor="f-overdue" className={labelClass}>If they don&apos;t pay in time</label>
               <select id="f-overdue" value={state.overduePolicy} disabled={!canEdit} onChange={(e) => update({ overduePolicy: e.target.value as AdminForm['overduePolicy'] })} className={field}>
-                <option value="WITHDRAW">Withdraw and release the spot</option>
-                <option value="HOLD">Keep the spot and flag it</option>
+                <option value="WITHDRAW">Withdraw them and free the space</option>
+                <option value="HOLD">Keep the space and flag it</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-slate-200 sm:col-span-2">
-              <input type="checkbox" checked={state.taxable} disabled={!canEdit} onChange={(e) => update({ taxable: e.target.checked })} />
-              Charge sales tax on these options (uses the event&apos;s tax rate)
+            <label className="flex min-h-11 items-center gap-2 text-sm text-gray-800 dark:text-slate-200 sm:col-span-2">
+              <input type="checkbox" checked={state.taxable} disabled={!canEdit} onChange={(e) => update({ taxable: e.target.checked })} className="h-5 w-5" />
+              Charge sales tax at the event&apos;s rate
             </label>
           </>
         )}
@@ -384,9 +379,12 @@ export function TiersCard({
   onDelete,
   onSetAddOns,
   mode = 'form',
+  embedded = false,
 }: {
   form: EditorForm;
   canEdit: boolean;
+  /** A wizard step of its own (spec 051): the step's h1 names it, so no card and no visible heading. */
+  embedded?: boolean;
   onAdd: (body: Record<string, unknown>) => Promise<void>;
   onUpdate: (tierId: string, body: Record<string, unknown>) => Promise<void>;
   onDelete: (tierId: string) => Promise<void>;
@@ -413,9 +411,9 @@ export function TiersCard({
   };
 
   return (
-    <div className={card} data-testid="form-tiers">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Options and pricing</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+    <div className={embedded ? undefined : card} data-testid="form-tiers">
+      <h2 className={embedded ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Options and pricing</h2>
+      <p className={`${embedded ? '' : 'mt-1 '}text-sm text-gray-600 dark:text-slate-400`}>
         Applicants pick one. Capacity is taken when you approve, so more people can apply than there are spots.
         {!template && eventAddOns.length === 0 && (
           <>

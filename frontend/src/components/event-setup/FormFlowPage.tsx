@@ -243,10 +243,11 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onChange={(s) => setTyped({ name: s.name as string, intro: (s.intro as string | null) ?? null })}
             />
           )}
-          {form && step.key === 'payment' && (
+          {form && step.key === 'options' && (
             <TiersCard
               form={form}
               canEdit={canEdit}
+              embedded
               onAdd={(b) => run('Category added.', () => api.addTier(form.id, b)).then(noop)}
               onUpdate={(tierId, b) => run('Category saved.', () => api.updateTier(form.id, tierId, b)).then(noop)}
               onDelete={(tierId) => run('Category deleted.', () => api.deleteTier(form.id, tierId)).then(noop)}

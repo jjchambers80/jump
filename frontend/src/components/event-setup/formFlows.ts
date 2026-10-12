@@ -9,7 +9,7 @@ import type { FormPurpose } from '@/lib/applications';
 import { isApplicationStep, stepForPurpose, type ApplicationStepKey } from './applicationSteps';
 
 export type FormFlowKey = ApplicationStepKey;
-export type FlowStepKey = 'lineup' | 'start' | 'details' | 'payment' | 'floor-map' | 'shifts' | 'questions' | 'review';
+export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'shifts' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
 export interface FlowForm {
@@ -48,7 +48,8 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     steps: [
       s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.', { formAnchor: 'apply-top' }),
       details,
-      s('payment', 'Spaces and pricing', 'The categories vendors pay for, and how they choose a space.', { visible: paid, formAnchor: 'apply-summary' }),
+      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary' }),
+      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary' }),
       s('floor-map', 'Floor map', 'Vendors pick their spot on this map.', { visible: onMap, anchor: 'floor-map' }),
       questions,
       review,

@@ -53,7 +53,8 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
     { label: 'Name', value: form.name, step: 'details' },
     { label: 'For', value: `${PURPOSE_LABEL[form.purpose ?? 'OTHER']} · ${form.kind === 'PAID' ? 'Paid' : 'Free'}`, step: 'details' },
     { label: 'Takes applications', value: dates || 'No open or close date', step: 'details' },
-    ...(has('payment') ? [{ label: 'Spaces', value: `${count(form.tiers.length, 'category', 'categories')} · ${form.spaceSelection === 'MAP' ? 'chosen on the floor map' : 'chosen by tier'}`, step: 'payment' as const }] : []),
+    ...(has('options') ? [{ label: 'Options', value: form.tiers.length ? `${count(form.tiers.length, 'option')} · ${form.tiers.map((t) => t.name).join(', ')}` : 'None yet', step: 'options' as const }] : []),
+    ...(has('payment') ? [{ label: 'Spaces', value: form.spaceSelection === 'MAP' ? 'Chosen on the floor map' : 'Chosen by option', step: 'payment' as const }] : []),
     ...(has('shifts') ? [{ label: 'Shifts', value: form.shifts?.length ? count(form.shifts.length, 'shift') : 'No shifts', step: 'shifts' as const }] : []),
     { label: 'Questions', value: count(form.questions.length, 'question'), step: 'questions' },
   ];

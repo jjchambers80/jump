@@ -147,7 +147,7 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('vendors'));
     await expect(heading(page, 'Start a vendor application')).toBeFocused(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 6');
     await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair Vendor Application');
     await expect(main(page).getByLabel('Charge for space')).toBeChecked();
     // Before the form exists, the preview is already the application form, not the event page.
@@ -158,14 +158,14 @@ test.describe('desktop', () => {
     await expect(main(page).getByText('Old free form')).toHaveCount(0);
     // No step menu or step labels: a progress bar, and Back / Next (spec 051).
     await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 6');
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
     expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair Vendor Application', kind: 'PAID', purpose: 'VENDOR' });
     await expect(page).toHaveURL(/\/setup\/vendors\?step=details&form=form-/);
     await expect(heading(page, 'Form details')).toBeFocused();
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 5, Form details');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 6, Form details');
     // The details part of the settings card only; the footer's Next saves it.
     await expect(main(page).getByLabel('Intro shown to applicants')).toBeVisible();
     await expect(main(page).getByTestId('form-space-tiers')).toHaveCount(0);
@@ -174,16 +174,22 @@ test.describe('desktop', () => {
     await next(page).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().intro)).toContain('Tables and power included.');
 
-    await expect(heading(page, 'Spaces and pricing')).toBeFocused();
-    await expect(main(page).getByTestId('form-space-tiers')).toBeChecked();
+    // Spec 051: options and pricing are a step of their own, then how vendors choose and pay.
+    await expect(heading(page, 'Options and pricing')).toBeFocused();
     await expect(main(page).getByTestId('form-tiers')).toBeVisible();
+    await expect(main(page).getByTestId('form-space-tiers')).toHaveCount(0);
+    await next(page).click();
+    await expect(heading(page, 'How vendors choose and pay')).toBeFocused();
+    await expect(main(page).getByTestId('form-space-tiers')).toBeChecked();
+    await expect(main(page).getByTestId('form-tiers')).toHaveCount(0);
+    await expect(main(page).getByRole('group', { name: 'How vendors choose their space' })).toBeVisible();
     await next(page).click();
     await expect(heading(page, 'Questions')).toBeFocused();
     await expect(main(page).getByText('What do you sell?')).toBeVisible();
     await next(page).click();
 
     await expect(heading(page, 'Review and open')).toBeFocused();
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 5');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 6');
     const summary = main(page).getByRole('region', { name: 'Summary' });
     await expect(summary.getByText('3 questions')).toBeVisible();
     await expect(summary.getByRole('link', { name: 'Edit questions' })).toHaveAttribute('href', /step=questions&form=form-/);
@@ -256,17 +262,18 @@ test.describe('desktop', () => {
 
   test('switching a vendor form to MAP adds the Floor map step', async ({ page }) => {
     const calls = await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths' })]);
+    await page.goto(flowUrl('vendors', 'step=options&form=form-paid'));
+    await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`, COLD);
     await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
-    await expect(heading(page, 'Spaces and pricing')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 3 of 5');
+    await expect(heading(page, 'How vendors choose and pay')).toBeVisible(COLD);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 4 of 6');
     await main(page).getByTestId('form-space-map').check();
     await expect(main(page).getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/vendors?step=floor-map&form=form-paid`);
-    await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await next(page).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
     // The saved form decides the next step: the new Floor map step.
     await expect(heading(page, 'Floor map')).toBeFocused();
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 4 of 6');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 7');
   });
 
   test('a volunteer form is always free, then shifts and questions', async ({ page }) => {
@@ -354,8 +361,11 @@ test.describe('desktop', () => {
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
       await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair Vendor Application' })).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);
-      await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
+      await page.goto(flowUrl('vendors', 'step=options&form=form-paid'));
       await expect(main(page).getByTestId('form-tiers')).toBeVisible(COLD);
+      expect(await serious(page)).toEqual([]);
+      await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
+      await expect(main(page).getByTestId('form-space-tiers')).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);
       await page.goto(flowUrl('vendors', 'step=review&form=form-paid'));
       await expect(heading(page, 'Review and open')).toBeVisible(COLD);
