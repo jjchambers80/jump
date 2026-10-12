@@ -363,7 +363,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
   const awaitingSpaceActive = query.status === 'APPROVED' && query.payment === 'AWAITING_SELECTION';
   const columns = (standing ? 8 : 10) + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0) + (showShifts ? 1 : 0);
   const detailHref = (row: ApplicationRow) =>
-    standing ? `/admin/content/forms/${standingFormId}/submissions/${row.id}` : `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
+    standing ? `/admin/contacts/forms/${standingFormId}/submissions/${row.id}` : `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
   return (
     <>

@@ -21,7 +21,7 @@ const response = {
       id: 'contact-1',
       title: 'Summer Jones',
       subtitle: 'summer@example.com',
-      href: '/admin/customers/contact-1',
+      href: '/admin/contacts/contact-1',
       meta: { email: 'summer@example.com' },
     },
     {
@@ -100,15 +100,15 @@ test('submits a query, groups results, and navigates when a result is selected',
   const results = page.getByRole('listbox', { name: 'Administration search results' });
   await expect(results.getByRole('option', { name: /^Summer Festival/ })).toBeVisible();
   await expect(results.getByText('Events', { exact: true })).toBeVisible();
-  await expect(results.getByText('Customers', { exact: true })).toBeVisible();
+  await expect(results.getByText('Contacts', { exact: true })).toBeVisible();
   await expect.poll(() => calls).toEqual(['summer']);
   await expect(page.getByRole('option', { name: /View all events/i })).toHaveAttribute(
     'href',
     '/admin/events'
   );
-  await expect(page.getByRole('option', { name: /View all customers/i })).toHaveAttribute(
+  await expect(page.getByRole('option', { name: /View all contacts/i })).toHaveAttribute(
     'href',
-    '/admin/customers'
+    '/admin/contacts'
   );
   await expect(page.getByRole('option', { name: /View all tickets/i })).toHaveAttribute(
     'href',

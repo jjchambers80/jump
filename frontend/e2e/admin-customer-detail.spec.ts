@@ -6,6 +6,7 @@
 // Backend is fully mocked via page.route. Auth uses signInAsStaff.
 
 import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { signInAsStaff } from './helpers/session';
 
 const API = 'http://localhost:3002';
@@ -30,7 +31,6 @@ interface CustomerDetail {
   lastSignInAt: string | null;
   accountUrl: string | null;
   tags: string[];
-  segment: string | null;
   createdAt: string;
   transactionCount: number;
   ticketOrderCount: number;
@@ -91,7 +91,6 @@ interface Customer {
   totalRefunded: number;
   lastActivityAt: string | null;
   createdAt: string;
-  segment: 'Prospect' | 'New' | 'Repeat' | 'Lapsed';
 }
 
 // ── Fixture builders ────────────────────────────────────────────────────────
@@ -113,7 +112,6 @@ function buildCustomerAccount(overrides: Partial<CustomerDetail> = {}): Customer
     lastSignInAt: new Date().toISOString(),
     accountUrl: 'http://localhost:3001/organizations/org-cust-detail/account',
     tags: ['vip', 'local'],
-    segment: 'New',
     createdAt: '2026-06-01T08:00:00.000Z',
     transactionCount: 5,
     ticketOrderCount: 3,
@@ -174,7 +172,6 @@ function buildGuestCustomer(): CustomerDetail {
     accountCreatedAt: null,
     lastSignInAt: null,
     accountUrl: null,
-    segment: null,
     orders: [],
     applications: [],
     transactionCount: 1,
@@ -188,9 +185,9 @@ function buildGuestCustomer(): CustomerDetail {
 
 function buildCustomerList(overrides: Partial<Customer>[] = []): { data: Customer[]; pagination: { page: number; limit: number; total: number; totalPages: number } } {
   const base: Customer[] = [
-    { id: 'cust-001', firstName: 'Jane', lastName: 'Doe', email: 'jane.doe@example.com', location: 'Raleigh, NC', note: 'Prefers email.', emailSubscribed: true, transactionCount: 5, ticketOrderCount: 3, applicationCount: 2, totalSpent: 450, totalRefunded: 0, lastActivityAt: '2026-09-19T12:00:00.000Z', createdAt: '2026-06-01T08:00:00.000Z', segment: 'Repeat' },
-    { id: 'cust-002', firstName: 'Bob', lastName: 'Smith', email: 'bob@example.com', location: null, note: null, emailSubscribed: false, transactionCount: 1, ticketOrderCount: 1, applicationCount: 0, totalSpent: 25, totalRefunded: 0, lastActivityAt: null, createdAt: '2026-09-10T10:00:00.000Z', segment: 'New' },
-    { id: 'cust-003', firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com', location: 'Durham, NC', note: 'Volunteer', emailSubscribed: true, transactionCount: 12, ticketOrderCount: 8, applicationCount: 4, totalSpent: 1200, totalRefunded: 50, lastActivityAt: '2026-09-20T08:00:00.000Z', createdAt: '2025-11-15T09:00:00.000Z', segment: 'Lapsed' },
+    { id: 'cust-001', firstName: 'Jane', lastName: 'Doe', email: 'jane.doe@example.com', location: 'Raleigh, NC', note: 'Prefers email.', emailSubscribed: true, transactionCount: 5, ticketOrderCount: 3, applicationCount: 2, totalSpent: 450, totalRefunded: 0, lastActivityAt: '2026-09-19T12:00:00.000Z', createdAt: '2026-06-01T08:00:00.000Z' },
+    { id: 'cust-002', firstName: 'Bob', lastName: 'Smith', email: 'bob@example.com', location: null, note: null, emailSubscribed: false, transactionCount: 1, ticketOrderCount: 1, applicationCount: 0, totalSpent: 25, totalRefunded: 0, lastActivityAt: null, createdAt: '2026-09-10T10:00:00.000Z' },
+    { id: 'cust-003', firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com', location: 'Durham, NC', note: 'Volunteer', emailSubscribed: true, transactionCount: 12, ticketOrderCount: 8, applicationCount: 4, totalSpent: 1200, totalRefunded: 50, lastActivityAt: '2026-09-20T08:00:00.000Z', createdAt: '2025-11-15T09:00:00.000Z' },
   ];
   return {
     data: base.map((c, i) => ({ ...c, ...(overrides[i] || {}) })),
@@ -276,22 +273,22 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Breadcrumb
-    await expect(page.getByRole('link', { name: 'Customers' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Contacts', exact: true }).last()).toBeVisible();
 
-    // Header with editable name and segment badge
+    // Header with editable name; segments are gone
     const nameButton = page.getByTestId('customer-name-edit');
     await expect(nameButton).toContainText('Jane Doe');
-    await expect(page.getByTestId('customer-segment')).toContainText('New');
+    await expect(page.getByText('Segment', { exact: true })).toHaveCount(0);
 
     // Stats bar
     await expect(page.getByText('Amount spent')).toBeVisible();
     await expect(page.getByText('$450.00')).toBeVisible();
     await expect(page.getByText('Transactions')).toBeVisible();
     await expect(page.getByText('5', { exact: true })).toBeVisible();
-    await expect(page.getByText('Customer since')).toBeVisible();
+    await expect(page.getByText('Contact since')).toBeVisible();
     await expect(page.getByText('Last activity')).toBeVisible();
 
     // Order history
@@ -309,7 +306,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Open name dialog
     await page.getByTestId('customer-name-edit').click();
@@ -344,7 +341,7 @@ test.describe('Customer detail Phase 1', () => {
       return route.fulfill({ status: 405 });
     });
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Open name dialog
     await page.getByTestId('customer-name-edit').click();
@@ -361,7 +358,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Click phone to start editing
     await page.getByRole('button', { name: '(555) 123-4567' }).click();
@@ -382,7 +379,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount({ phone: null });
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Click "Add phone..." to start editing
     await page.getByText('Add phone...').click();
@@ -401,7 +398,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Click location to start editing
     await page.getByRole('button', { name: 'Raleigh, NC' }).click();
@@ -420,7 +417,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Start editing location
     await page.getByRole('button', { name: 'Raleigh, NC' }).click();
@@ -438,7 +435,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Open tags dialog
     await page.getByTestId('edit-tags-button').click();
@@ -475,7 +472,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount({ tags: fullTags });
     await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     await page.getByTestId('edit-tags-button').click();
     await expect(page.getByRole('dialog', { name: 'Edit tags' })).toBeVisible();
@@ -494,7 +491,7 @@ test.describe('Customer detail Phase 1', () => {
     });
     const { patches } = await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Marketing card exists
     await expect(page.getByText('Marketing')).toBeVisible();
@@ -515,7 +512,7 @@ test.describe('Customer detail Phase 1', () => {
       const fixture = buildCustomerAccount();
       await mockCustomerDetail(page, fixture);
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
       await expect(page.getByText('Account since')).toBeVisible();
@@ -532,7 +529,7 @@ test.describe('Customer detail Phase 1', () => {
       const fixture = buildGuestCustomer();
       await mockCustomerDetail(page, fixture);
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
       await expect(page.getByText('Guest', { exact: true })).toBeVisible();
@@ -546,7 +543,7 @@ test.describe('Customer detail Phase 1', () => {
       const fixture = buildCustomerAccount();
       await mockCustomerDetail(page, fixture);
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       await page.getByRole('button', { name: /Send sign-in link/i }).first().click();
       await expect(page.getByText('Sign-in link sent.')).toBeVisible();
@@ -564,7 +561,7 @@ test.describe('Customer detail Phase 1', () => {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) });
       });
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       // Open More actions menu
       await page.getByRole('button', { name: 'More actions' }).click();
@@ -584,7 +581,7 @@ test.describe('Customer detail Phase 1', () => {
         return route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ message: 'Too many sign-in links sent recently. Try again later.' }) });
       });
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       await page.getByRole('button', { name: /Send sign-in link/i }).first().click();
       await expect(page.getByText(/Too many sign-in links/i)).toBeVisible();
@@ -602,7 +599,7 @@ test.describe('Customer detail Phase 1', () => {
       });
       await mockCustomerDetail(page, fixture);
 
-      await page.goto(`/admin/customers/${fixture.id}`);
+      await page.goto(`/admin/contacts/${fixture.id}`);
 
       await page.getByRole('button', { name: /Copy account URL/i }).click();
       // The button text changes to "Copied"
@@ -614,7 +611,7 @@ test.describe('Customer detail Phase 1', () => {
     const fixture = buildCustomerAccount();
     await mockCustomerDetail(page, fixture);
 
-    await page.goto(`/admin/customers/${fixture.id}`);
+    await page.goto(`/admin/contacts/${fixture.id}`);
 
     // Open More actions
     await page.getByRole('button', { name: 'More actions' }).click();
@@ -624,7 +621,7 @@ test.describe('Customer detail Phase 1', () => {
     await expect(page.getByRole('button', { name: 'Copy account URL' }).first()).toBeVisible();
 
     // Erase should be disabled
-    const eraseButton = page.getByRole('button', { name: /Erase customer data/i });
+    const eraseButton = page.getByRole('button', { name: /Erase contact data/i });
     await expect(eraseButton).toBeDisabled();
     await expect(eraseButton).toHaveAttribute('title', /future update/);
     // The "coming soon" label should be visible
@@ -639,103 +636,112 @@ test.describe('Customer detail Phase 1', () => {
     await mockCustomerDetail(page, fixture);
 
     // Navigate from the customer list into the detail page
-    await page.goto('/admin/customers');
-    await expect(page.getByText('Jane Doe').first()).toBeVisible();
+    await page.goto('/admin/contacts');
+    await expect(page.getByText('Jane Doe').locator('visible=true').first()).toBeVisible();
 
     // Click on Jane Doe's row to navigate to detail
-    await page.getByText('Jane Doe').first().click();
-    await expect(page).toHaveURL(/\/admin\/customers\/cust-001/);
+    await page.getByRole('link', { name: 'Jane Doe' }).locator('visible=true').first().click();
+    await expect(page).toHaveURL(/\/admin\/contacts\/cust-001/);
 
     // Detail page should render correctly
     await expect(page.getByTestId('customer-name-edit')).toContainText('Jane Doe');
   });
 
   test('handles 404/not-found gracefully', async ({ page }) => {
-    await page.route(`${API}/admin/customers/missing-id`, (route) =>
+    await page.route(`${API}/admin/customers/missing-id*`, (route) =>
       route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ message: 'Customer not found' }) })
     );
 
-    await page.goto('/admin/customers/missing-id');
+    await page.goto('/admin/contacts/missing-id');
 
     // Error state with back link
     await expect(page.getByText('Customer not found').or(page.getByText('Failed to load'))).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Back to customers' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to contacts' })).toBeVisible();
   });
 
-  test.describe('Customer list scope and search', () => {
-    test('renders and persists the segment filter in the URL', async ({ page }) => {
+  test.describe('Contacts list', () => {
+    test('filters live in the URL; Show narrows to paying contacts', async ({ page }) => {
       const fullList = buildCustomerList();
+      const requests: URL[] = [];
       await page.route(`${API}/admin/customers*`, async (route) => {
-        const segment = new URL(route.request().url()).searchParams.get('segment');
-        const data = segment ? fullList.data.filter((customer) => customer.segment === segment) : fullList.data;
+        const url = new URL(route.request().url());
+        requests.push(url);
+        const data = url.searchParams.get('scope') === 'customers' ? [fullList.data[0]] : fullList.data;
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            data,
-            pagination: { page: 1, limit: 20, total: data.length, totalPages: 1 },
-          }),
+          body: JSON.stringify({ data, pagination: { page: 1, limit: 20, total: data.length, totalPages: 1 } }),
         });
       });
 
-      await page.goto('/admin/customers?search=jane&sort=name&direction=asc&page=3');
-      await expect(page.getByText('Segment', { exact: true })).toBeVisible();
-      await expect(page.locator('span').filter({ hasText: /^Repeat$/ }).first()).toBeVisible();
+      await page.goto('/admin/contacts?search=jane&sort=name&direction=asc&page=3');
+      await expect(page.getByLabel('Segment')).toHaveCount(0);
+      await expect(page.getByLabel('Show')).toHaveValue('all');
+      await expect.poll(() => requests.at(-1)?.searchParams.get('scope')).toBe('all');
 
-      await page.getByLabel('Segment').selectOption('Repeat');
-      await expect(page).toHaveURL(/segment=Repeat/);
+      await page.getByLabel('Show').selectOption('customers');
+      await expect(page).toHaveURL(/scope=customers/);
       await expect(page).toHaveURL(/search=jane/);
       await expect(page).toHaveURL(/sort=name/);
       await expect(page).not.toHaveURL(/page=3/);
-      await expect(page.getByText('Jane Doe').first()).toBeVisible();
       await expect(page.getByText('Bob Smith')).toHaveCount(0);
 
       await page.reload();
-      await expect(page.getByLabel('Segment')).toHaveValue('Repeat');
-      await expect(page.getByText('Jane Doe').first()).toBeVisible();
+      await expect(page.getByLabel('Show')).toHaveValue('customers');
 
-      await page.getByLabel('Segment').selectOption('');
-      await expect(page).not.toHaveURL(/segment=/);
-      await expect(page).toHaveURL(/search=jane/);
-      await expect(page.getByText('Bob Smith').first()).toBeVisible();
+      await page.getByLabel('Show').selectOption('all');
+      await expect(page).not.toHaveURL(/scope=/);
+      await expect(page.getByText('Bob Smith').locator('visible=true').first()).toBeVisible();
     });
 
-    test('navigates customers list with scope toggle', async ({ page }) => {
-      const listData = buildCustomerList();
-      await mockCustomerList(page, listData);
+    test('shows Contacts with its tabs and passes axe on phone and desktop', async ({ page }) => {
+      await mockCustomerList(page, buildCustomerList());
 
-      await page.goto('/admin/customers');
-      await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
-
-      // Verify customer rows render
-      await expect(page.getByText('Jane Doe').first()).toBeVisible();
-      await expect(page.getByText('Bob Smith').first()).toBeVisible();
-      await expect(page.getByText('Alice Johnson').first()).toBeVisible();
+      for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 900 }]) {
+        await page.setViewportSize(viewport);
+        await page.goto('/admin/contacts');
+        await expect(page.getByRole('heading', { name: 'Contacts', level: 1 })).toBeVisible();
+        await expect(page.getByRole('navigation', { name: 'Contacts sections' }).getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByText('Jane Doe').locator('visible=true').first()).toBeVisible();
+        await expect(page.getByText('Alice Johnson').locator('visible=true').first()).toBeVisible();
+        expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
+      }
     });
 
-    test('search filters customer list', async ({ page }) => {
+    test('a row opens the contact from the keyboard', async ({ page }) => {
+      await mockCustomerList(page, buildCustomerList());
+      await mockCustomerDetail(page, buildCustomerAccount());
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.goto('/admin/contacts');
+
+      const row = page.getByRole('row', { name: /Jane Doe/ });
+      await row.getByRole('link', { name: 'Jane Doe' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page).toHaveURL(/\/admin\/contacts\/cust-001/);
+    });
+
+    test('search filters the list as you type', async ({ page }) => {
       const fullList = buildCustomerList();
       const searchList = { data: [fullList.data[0]], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } };
       await page.route(`${API}/admin/customers*`, async (route) => {
         const url = new URL(route.request().url());
-        const searchParam = url.searchParams.get('search');
-        if (searchParam === 'jane') {
-          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(searchList) });
-        }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fullList) });
+        const body = url.searchParams.get('search') === 'jane' ? searchList : fullList;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       });
       await mockOrganizations(page);
 
-      await page.goto('/admin/customers');
+      await page.goto('/admin/contacts');
+      await page.getByLabel('Search', { exact: true }).fill('jane');
 
-      // Type in search
-      const searchInput = page.getByPlaceholder('Search by name or email...');
-      await searchInput.fill('jane');
-      await searchInput.press('Enter');
-
-      // Should only show Jane
-      await expect(page.getByText('Jane Doe').first()).toBeVisible();
+      await expect(page).toHaveURL(/search=jane/);
+      await expect(page.getByText('Jane Doe').locator('visible=true').first()).toBeVisible();
       await expect(page.getByText('Bob Smith')).toHaveCount(0);
+    });
+
+    test('old Customers links redirect to Contacts', async ({ page }) => {
+      await mockCustomerList(page, buildCustomerList());
+      await page.goto('/admin/customers?search=jane');
+      await expect(page).toHaveURL(/\/admin\/contacts\?search=jane/);
     });
   });
 });

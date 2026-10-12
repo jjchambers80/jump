@@ -102,10 +102,10 @@ export default function RsvpsListPage({ params }: { params: { eventId: string } 
         actions={
           <>
             <Link
-              href={`/admin/customers?rsvp=going&eventId=${encodeURIComponent(params.eventId)}`}
+              href={`/admin/contacts?rsvp=going&eventId=${encodeURIComponent(params.eventId)}`}
               className="inline-flex items-center rounded-md border border-gray-300 dark:border-slate-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
             >
-              View customers
+              View contacts
             </Link>
             <button
               onClick={handleCsvExport}

@@ -30,7 +30,7 @@ export interface AdminSearchResponse {
 export const GROUP_LABEL: Record<AdminSearchType, string> = {
   EVENT: 'Events',
   VENUE: 'Venues',
-  CUSTOMER: 'Customers',
+  CUSTOMER: 'Contacts',
   ORDER: 'Orders',
   TICKET: 'Tickets',
   APPLICATION: 'Applications',
@@ -42,12 +42,12 @@ export const GROUP_LABEL: Record<AdminSearchType, string> = {
 const GROUP_LIST_PATH: Record<AdminSearchType, string> = {
   EVENT: '/admin/events',
   VENUE: '/admin/venues',
-  CUSTOMER: '/admin/customers',
+  CUSTOMER: '/admin/contacts',
   ORDER: '/admin/orders',
   TICKET: '/admin/orders',
   // Spec 037 D3: no org-wide applications list; an applicant's history across
   // events is on their customer record.
-  APPLICATION: '/admin/customers',
+  APPLICATION: '/admin/contacts',
   PAGE: '/admin/online-store/pages',
   BLOG_POST: '/admin/content/blog-posts',
   FILE: '/admin/content/files',

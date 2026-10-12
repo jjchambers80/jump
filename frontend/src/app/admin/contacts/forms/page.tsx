@@ -1,9 +1,9 @@
 'use client';
 
-// Content › Forms (spec 044): the organization's standing application forms —
+// Contacts › Forms (spec 044): the organization's standing application forms —
 // always-on forms with no event (become a vendor, press, volunteers). Each row
 // opens the form's Submissions / Fields / Settings. Submitters land in
-// Customers like every other contact; there is no second contact list here.
+// Contacts like every other contact; there is no second contact list here.
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,6 +12,7 @@ import api from '@/services/api';
 import { useOrg, useCan } from '@/components/OrgContext';
 import { formatDate, type AdminForm } from '@/lib/applications';
 import { FORM_STATUS_LABEL, FormStatusBadge } from './FormStatusBadge';
+import ContactsHeader from '../ContactsHeader';
 
 type StatusFilter = 'ALL' | AdminForm['status'];
 const FILTERS: StatusFilter[] = ['ALL', 'OPEN', 'DRAFT', 'CLOSED'];
@@ -47,25 +48,22 @@ export default function FormsPage() {
   const shown = (forms ?? []).filter((f) => (filter === 'ALL' || f.status === filter) && (!term || f.name.toLowerCase().includes(term) || f.slug.includes(term)));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-accent-600 dark:text-accent-300">Content</p>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Forms</h1>
-          <p className="mt-1 max-w-xl text-sm text-gray-600 dark:text-slate-400">
-            Always-on application forms that don&apos;t belong to an event. Everyone who submits one shows up in Customers.
-          </p>
-        </div>
-        {canEdit && (
-          <Link
-            href="/admin/content/forms/new"
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            New form
-          </Link>
-        )}
-      </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <ContactsHeader
+        active="forms"
+        subtitle="Always-on application forms that don’t belong to an event. Everyone who submits one shows up in Contacts."
+        action={
+          canEdit && (
+            <Link
+              href="/admin/contacts/forms/new"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 shadow-sm hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              New form
+            </Link>
+          )
+        }
+      />
 
       {error && (
         <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
@@ -125,7 +123,7 @@ export default function FormsPage() {
                 {forms?.length ? 'Try another status or search.' : 'Collect vendor, press or volunteer applications any time of year — then put the form on a page.'}
               </p>
               {!forms?.length && canEdit && (
-                <Link href="/admin/content/forms/new" className="mt-5 inline-flex min-h-[44px] items-center rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover">
+                <Link href="/admin/contacts/forms/new" className="mt-5 inline-flex min-h-[44px] items-center rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover">
                   Create your first form
                 </Link>
               )}
@@ -135,7 +133,7 @@ export default function FormsPage() {
               {shown.map((form) => (
                 <li key={form.id} data-testid={`form-row-${form.id}`}>
                   <Link
-                    href={`/admin/content/forms/${form.id}`}
+                    href={`/admin/contacts/forms/${form.id}`}
                     className="group grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3.5 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-600 dark:hover:bg-slate-700/40 sm:grid-cols-[1fr_7rem_7rem_8rem]"
                   >
                     <span className="min-w-0">

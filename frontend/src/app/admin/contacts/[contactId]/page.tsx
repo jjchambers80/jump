@@ -13,7 +13,7 @@ import CustomerTimeline from './CustomerTimeline';
 import EraseCustomerDialog from './EraseCustomerDialog';
 import { ReauthProvider } from '@/app/admin/account/useReauth';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
-import { guestAccountNote, segmentBadgeClass, type CustomerSegment } from '@/lib/customers';
+import { customerApiQuery, guestAccountNote } from '@/lib/customers';
 import { formatEventDateTime } from '@/lib/eventTime';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -88,7 +88,6 @@ interface CustomerDetail {
   lastSignInAt: string | null;
   accountUrl: string | null;
   tags: string[];
-  segment: CustomerSegment | null;
   prevId?: string | null;
   nextId?: string | null;
   upcomingTickets?: UpcomingTicket[];
@@ -212,10 +211,10 @@ function CustomerDetailPageContent() {
     try {
       setLoading(true);
       setError(null);
-      const result = await api.get<CustomerDetail>(`/admin/customers/${contactId}${listQuery ? `?${listQuery}` : ''}`);
+      const result = await api.get<CustomerDetail>(`/admin/customers/${contactId}?${customerApiQuery(listQuery)}`);
       setCustomer(result);
     } catch (err: any) {
-      setError(err.message || 'Failed to load customer');
+      setError(err.message || 'Failed to load contact');
     } finally {
       setLoading(false);
     }
@@ -225,8 +224,8 @@ function CustomerDetailPageContent() {
     fetchCustomer();
   }, [fetchCustomer]);
 
-  const customerHref = (id: string) => `/admin/customers/${id}${listQuery ? `?${listQuery}` : ''}`;
-  const customersHref = `/admin/customers${listQuery ? `?${listQuery}` : ''}`;
+  const customerHref = (id: string) => `/admin/contacts/${id}${listQuery ? `?${listQuery}` : ''}`;
+  const customersHref = `/admin/contacts${listQuery ? `?${listQuery}` : ''}`;
 
   // Close actions menu on outside click
   useEffect(() => {
@@ -367,7 +366,7 @@ function CustomerDetailPageContent() {
     }
   };
 
-  // ── Export customer data (spec 040 PA-11) ──────────────────────────────
+  // ── Export contact data (spec 040 PA-11) ──────────────────────────────
 
   const exportData = async () => {
     if (!customer) return;
@@ -382,11 +381,11 @@ function CustomerDetailPageContent() {
       link.download = `${name}-customer-data-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      setSignInLinkResult({ ok: true, message: 'Customer data downloaded.' });
+      setSignInLinkResult({ ok: true, message: 'Contact data downloaded.' });
     } catch (err: any) {
       setSignInLinkResult({
         ok: false,
-        message: err.status === 403 ? 'Only administrators can export customer data.' : err.message || 'Could not export customer data.',
+        message: err.status === 403 ? 'Only administrators can export contact data.' : err.message || 'Could not export contact data.',
       });
     }
   };
@@ -402,7 +401,7 @@ function CustomerDetailPageContent() {
       setSignInLinkResult({ ok: true, message: 'Sign-in link sent.' });
     } catch (err: any) {
       if (err.status === 422) {
-        setSignInLinkResult({ ok: false, message: 'This customer checked out as a guest and does not have an account to sign in to.' });
+        setSignInLinkResult({ ok: false, message: 'This contact checked out as a guest and does not have an account to sign in to.' });
       } else if (err.status === 429) {
         setSignInLinkResult({ ok: false, message: 'Too many sign-in links sent recently. Try again later.' });
       } else {
@@ -472,9 +471,9 @@ function CustomerDetailPageContent() {
       return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 text-center">
-            <p className="text-red-800 dark:text-red-300">{error || 'Customer not found'}</p>
+            <p className="text-red-800 dark:text-red-300">{error || 'Contact not found'}</p>
             <Link href={customersHref} className="mt-3 inline-block text-sm text-accent-600 dark:text-accent-400 hover:underline">
-              Back to customers
+              Back to contacts
             </Link>
           </div>
         </div>
@@ -581,7 +580,7 @@ function CustomerDetailPageContent() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
             <Link href={customersHref} className="hover:text-accent-600 dark:hover:text-accent-400">
-              Customers
+              Contacts
             </Link>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -601,11 +600,6 @@ function CustomerDetailPageContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
-            {customer.segment && (
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${segmentBadgeClass(customer.segment)}`}>
-                {customer.segment}
-              </span>
-            )}
           </div>
         </div>
 
@@ -640,7 +634,7 @@ function CustomerDetailPageContent() {
                 onClick={() => { setActionsMenuOpen(false); exportData(); }}
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700/50"
               >
-                Export customer data
+                Export contact data
               </button>
               <hr className="my-1 border-gray-200 dark:border-slate-700" />
               <button
@@ -650,7 +644,7 @@ function CustomerDetailPageContent() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                Erase customer data
+                Erase contact data
               </button>
             </div>
           )}
@@ -662,14 +656,14 @@ function CustomerDetailPageContent() {
             onClose={() => setEraseOpen(false)}
             onErased={() => {
               setEraseOpen(false);
-              setSignInLinkResult({ ok: true, message: 'Customer data erased.' });
+              setSignInLinkResult({ ok: true, message: 'Contact data erased.' });
               fetchCustomer();
             }}
           />
         )}
-        <nav aria-label="Customer navigation" className="flex items-center gap-2 mr-2">
+        <nav aria-label="Contact navigation" className="flex items-center gap-2 mr-2">
           {customer.prevId ? (
-            <Link href={customerHref(customer.prevId)} aria-label="Previous customer" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
+            <Link href={customerHref(customer.prevId)} aria-label="Previous contact" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
               Previous
             </Link>
           ) : (
@@ -678,7 +672,7 @@ function CustomerDetailPageContent() {
             </span>
           )}
           {customer.nextId ? (
-            <Link href={customerHref(customer.nextId)} aria-label="Next customer" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
+            <Link href={customerHref(customer.nextId)} aria-label="Next contact" className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
               Next
             </Link>
           ) : (
@@ -699,11 +693,11 @@ function CustomerDetailPageContent() {
       )}
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Amount spent', value: formatCurrency(customer.totalSpent), hint: customer.totalRefunded > 0 ? `${formatCurrency(customer.totalRefunded)} refunded` : undefined },
           { label: 'Transactions', value: String(customer.transactionCount), hint: customer.applicationCount > 0 ? `${customer.ticketOrderCount} order${customer.ticketOrderCount !== 1 ? 's' : ''} · ${customer.applicationCount} application${customer.applicationCount !== 1 ? 's' : ''}` : undefined },
-          { label: 'Customer since', value: formatRelative(customer.createdAt) },
+          { label: 'Contact since', value: formatRelative(customer.createdAt) },
           { label: 'Last activity', value: customer.lastActivityAt ? formatRelative(customer.lastActivityAt) : 'N/A' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3">
@@ -712,12 +706,6 @@ function CustomerDetailPageContent() {
             {stat.hint && <p className="text-[11px] text-gray-400 dark:text-slate-500">{stat.hint}</p>}
           </div>
         ))}
-        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3">
-          <p className="text-xs text-gray-500 dark:text-slate-400 mb-1">Segment</p>
-          <span data-testid="customer-segment" className={`inline-flex rounded-full px-2.5 py-1 text-sm font-semibold ${customer.segment ? segmentBadgeClass(customer.segment) : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'}`}>
-            {customer.segment || '—'}
-          </span>
-        </div>
       </div>
 
       {/* Error banner */}
@@ -1135,7 +1123,7 @@ function CustomerDetailPageContent() {
                     autoFocus
                     rows={3}
                     className="w-full px-2 py-1.5 text-sm rounded border border-accent-300 dark:border-accent-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-accent-500 resize-none"
-                    placeholder="Add a note about this customer..."
+                    placeholder="Add a note about this contact..."
                   />
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={cancelEdit} className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-slate-300 border border-gray-300 dark:border-slate-600 rounded hover:bg-gray-50 dark:hover:bg-slate-700">
@@ -1162,7 +1150,7 @@ function CustomerDetailPageContent() {
 export default function CustomerDetailPage() {
   return (
     <ReauthProvider>
-      <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading customer…</div>}>
+      <Suspense fallback={<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">Loading contact…</div>}>
         <CustomerDetailPageContent />
       </Suspense>
     </ReauthProvider>

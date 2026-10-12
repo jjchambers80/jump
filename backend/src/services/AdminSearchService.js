@@ -193,7 +193,7 @@ class AdminSearchService {
         id: contact.id,
         title: fullName(contact),
         subtitle: contact.email,
-        href: `/admin/customers/${contact.id}`,
+        href: `/admin/contacts/${contact.id}`,
         meta: { email: contact.email },
       })),
       ...orders.map((order) => ({
@@ -226,7 +226,7 @@ class AdminSearchService {
         subtitle: [fullName(application.contact), application.event?.name || application.form?.name].filter(Boolean).join(' · '),
         href: application.eventId
           ? `/admin/events/${application.eventId}/applications/${application.id}`
-          : `/admin/content/forms/${application.formId}/submissions/${application.id}`,
+          : `/admin/contacts/forms/${application.formId}/submissions/${application.id}`,
         meta: { eventId: application.eventId, formId: application.formId, status: application.status },
       })),
       ...pages.map((page) => ({

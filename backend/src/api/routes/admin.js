@@ -85,7 +85,7 @@ router.use(requireOrganizer);
 router.use('/customers', requireFeature('customers'));
 router.use('/finance', requireFeature('finance'));
 router.use(['/pages', '/page-templates', '/online-store'], requireFeature('onlineStore'));
-router.use('/standing-application-forms', requireFeature('content'));
+router.use('/standing-application-forms', requireFeature('customers'));
 router.use('/events/:eventId/map', requireFeature('maps'));
 
 // Organization the Settings pages act on — see routes/adminScope.js.
@@ -1812,7 +1812,7 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { page, limit, search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1839,7 +1839,6 @@ router.get('/customers', async (req, res, next) => {
       search,
       tag,
       scope: effectiveScope,
-      segment,
       rsvp,
       eventId,
       source,
@@ -1860,7 +1859,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const { search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1868,7 +1867,6 @@ router.get('/customers/:contactId', async (req, res, next) => {
       search,
       tag,
       scope: customerScope,
-      segment,
       rsvp,
       eventId,
       source,

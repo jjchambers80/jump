@@ -22,7 +22,7 @@ test('customer detail lists paid applications beside orders with combined totals
   await signInAsStaff(page, { id: 'txn-rep-admin', email: 'txn-rep@test.com', role: 'ADMIN' }, baseURL!);
   await mockOrg(page);
   const event = { id: EVENT_ID, name: 'Geek Expo 2027', date: '2027-09-18T15:00:00.000Z', logoUrl: null };
-  await page.route(`${API}/admin/customers/c-both`, (route) =>
+  await page.route(`${API}/admin/customers/c-both?*`, (route) =>
     route.fulfill(
       json({
         id: 'c-both',
@@ -65,7 +65,7 @@ test('customer detail lists paid applications beside orders with combined totals
     )
   );
 
-  await page.goto('/admin/customers/c-both');
+  await page.goto('/admin/contacts/c-both');
   await expect(page.getByText('Amount spent')).toBeVisible();
   await expect(page.getByText('$236.95')).toBeVisible();
   await expect(page.getByText('$5.00 refunded').first()).toBeVisible();

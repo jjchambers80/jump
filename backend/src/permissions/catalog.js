@@ -45,12 +45,13 @@ export const FEATURES = [
   },
   {
     key: 'customers',
-    label: 'Customers',
-    adminPaths: ['/admin/customers'],
+    label: 'Contacts',
+    adminPaths: ['/admin/contacts'],
     actions: [
-      { key: 'customers.email', label: "Change a customer's email address" },
+      { key: 'customers.email', label: "Change a contact's email address" },
       { key: 'customers.comments', label: "Delete other staff members' timeline comments" },
-      { key: 'customers.privacy', label: "Export, erase or anonymize a customer's data" },
+      { key: 'customers.privacy', label: "Export, erase or anonymize a contact's data" },
+      { key: 'applications.standingForms', label: 'Build standing application forms (Contacts › Forms)' },
     ],
   },
   {
@@ -71,7 +72,7 @@ export const FEATURES = [
     key: 'content',
     label: 'Content',
     adminPaths: ['/admin/content'],
-    actions: [{ key: 'applications.standingForms', label: 'Build standing application forms (Content › Forms)' }],
+    actions: [],
   },
   {
     key: 'developer',
