@@ -115,7 +115,7 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto('/admin/events/new');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
-    await expect(page.getByText('Step 1 of 8 — Name your event')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 8');
     await expect(page.getByRole('button', { name: 'Exit' })).toBeVisible();
 
     const name = main(page).getByLabel('Event name');
@@ -229,7 +229,7 @@ test.describe('desktop', () => {
     await expect(preview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
     const frame = pane.locator('iframe');
     await expect(frame).toHaveCSS('width', '390px');
-    await pane.getByText('Desktop', { exact: true }).click();
+    await pane.getByTitle('Desktop').click();
     await expect(pane.getByRole('radio', { name: 'Desktop' })).toBeChecked();
     await expect(frame).toHaveCSS('width', '1280px');
     // Native radios: arrow keys move the choice.
@@ -243,7 +243,8 @@ test.describe('desktop', () => {
     await expect(preview(page).getByRole('heading', { level: 1, name: 'Summer Fair' })).toBeVisible();
     await expect.poll(() => calls.patch.length).toBe(1);
     expect(calls.patch[0].postDataJSON()).toEqual({ name: 'Summer Fair' });
-    await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+    // Routine saves say nothing (spec 051): only problems show in the footer.
+    await expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toHaveCount(0);
   });
 
   test('a published event saves only when asked, never on navigation', async ({ page }) => {

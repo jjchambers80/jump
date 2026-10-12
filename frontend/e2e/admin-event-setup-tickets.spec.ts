@@ -258,7 +258,8 @@ test.describe('desktop', () => {
     await expect
       .poll(() => calls.patch.map((r) => r.postDataJSON()).reduce((a, b) => ({ ...a, ...b }), {}), COLD)
       .toEqual({ admissionMode: 'RSVP', rsvpLimit: 40, rsvpMaxPartySize: 2 });
-    await expect(indicator(page)).toHaveText('Saved');
+    // Fixed and saved: the footer's save problem goes away (spec 051: no "Saved" line).
+    await expect(indicator(page)).toHaveCount(0);
   });
 
   // Carried over from the old create / edit form specs (retired in 050-P).

@@ -136,7 +136,6 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
 
   const ready = flow.initialised && !loadError && !flow.redirecting;
   const done = current === 'done';
-  const editing = mode === 'edit' && !done;
 
   return (
     <SetupShell
@@ -153,13 +152,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       }
       progress={
         ready && !done && (
-          <SetupProgress
-            index={at + 1}
-            total={list.length}
-            title={step.title}
-            editMode={editing}
-            aside={<SaveIndicator status={saveState.status} invalidCount={saveState.invalidCount} savedAt={saveState.savedAt} hasRow={!!saved} onRetry={() => void saveState.retry()} />}
-          />
+          <SetupProgress index={at + 1} total={list.length} />
         )
       }
       footer={
@@ -167,6 +160,12 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           <SetupFooter
             onBack={actions.onBack}
             locked={publishing ? 'Publishing… Back returns when it finishes.' : undefined}
+            // Only save problems show (spec 051): routine Saving… / Saved is not news.
+            status={
+              saved && (saveState.status === 'error' || saveState.status === 'invalid' || (saveState.status === 'dirty' && saved.status !== 'DRAFT')) ? (
+                <SaveIndicator status={saveState.status} invalidCount={saveState.invalidCount} savedAt={saveState.savedAt} hasRow onRetry={() => void saveState.retry()} />
+              ) : undefined
+            }
             onSkip={actions.onSkip}
             onSave={actions.onSave}
             onNext={current === 'review' ? undefined : () => void actions.onNext()}

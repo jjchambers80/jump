@@ -48,7 +48,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 
 - `/admin/events/new` → wizard, steps 1–3, no row. `/admin/events/[eventId]/setup?step=<key>` → wizard on an existing event; no `?step=` resumes at `setupStep`. `/admin/events/preview-frame` → the chrome-less document the preview iframe loads.
 - `AdminLayoutClient` `FULL_SCREEN` matches all three; they keep `AdminRoute`, `OrgProvider` and the edge guard. `src/middleware.ts` sends `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` for the exact path `/admin/events/preview-frame` only.
-- `EventSetupPage` (container) → `useSetupFlow` / `useSetupData` / `useSetupForms` / `useSetupActions` / `useStepSave`; `SetupShell` (layout), `SetupHeader`, `SetupProgress` (a `role="progressbar"` fill and "Step n of N — Title"; the step list, menu button, sheet and edit-mode rail were removed in spec 051: Back / Next move between steps), `SetupFooter`, `PreviewPane` + `PreviewDevice` (phone / laptop frames, spec 051), `StepContent`, `ErrorSummary`, `SaveIndicator`. `OrgFromUrlGate` selects `?org=` before anything loads.
+- `EventSetupPage` (container) → `useSetupFlow` / `useSetupData` / `useSetupForms` / `useSetupActions` / `useStepSave`; `SetupShell` (layout), `SetupHeader`, `SetupProgress` (the `role="progressbar"` fill only; the step list, step line, menu button, sheet and edit-mode rail were removed in spec 051: Back / Next move between steps), `SetupFooter`, `PreviewPane` + `PreviewDevice` (phone / laptop frames, spec 051), `StepContent`, `ErrorSummary`, `SaveIndicator` (in the footer, problems only since spec 051). `OrgFromUrlGate` selects `?org=` before anything loads.
 - Step change: focus to the step h1 (`tabIndex={-1}`), polite live region "Step n of N, Title". A failed Next renders a focused `role="alert"` summary whose links focus the field, or open the step that owns it. Next is never disabled without a reason.
 - Mobile (below lg): header [Menu] [Eye] [Exit / Save & exit], 44 × 44, labelled. The preview becomes a full-screen dialog (`useDialog`); while closed it is `hidden`, `inert`, `aria-hidden` (the frame keeps its state).
 
@@ -103,7 +103,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 
 ### Edit mode (050-O)
 
-An event with `setupCompletedAt` set opens the wizard in edit mode: the fill bar with "Editing <step>" instead of "Step n of N"; Back / Next move between steps. **Save & exit** returns to `/admin/events/<id>?saved=1` (or `?saved=0` after "Leave anyway" on a failed save); Details announces "Saved." / "Your latest changes were not saved." in an always-mounted `role="status"`, drops the marker, and returns focus to the exact Edit control used (`lib/detailsReturn.ts`, href + accessible name in `sessionStorage`).
+An event with `setupCompletedAt` set opens the wizard in edit mode: the same fill bar; Back / Next move between steps. **Save & exit** returns to `/admin/events/<id>?saved=1` (or `?saved=0` after "Leave anyway" on a failed save); Details announces "Saved." / "Your latest changes were not saved." in an always-mounted `role="status"`, drops the marker, and returns focus to the exact Edit control used (`lib/detailsReturn.ts`, href + accessible name in `sessionStorage`).
 
 Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard.ts`, all with `withOrg` → `&org=`):
 

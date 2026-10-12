@@ -291,7 +291,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           onExit={() => f.exit()}
         />
       }
-      progress={show && <SetupProgress index={at + 1} total={list.length} title={step.title} aside={null} />}
+      progress={show && <SetupProgress index={at + 1} total={list.length} />}
       footer={
         show && (
           <SetupFooter

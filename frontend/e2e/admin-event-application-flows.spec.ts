@@ -146,7 +146,7 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('vendors'));
     await expect(heading(page, 'Start a vendor application')).toBeFocused(COLD);
-    await expect(page.getByText('Step 1 of 5 — Start a vendor application')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
     await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair Vendor Application');
     await expect(main(page).getByLabel('Charge for space')).toBeChecked();
     // Purpose-matched templates only (the PAID vendor one).
@@ -179,7 +179,7 @@ test.describe('desktop', () => {
     await next(page).click();
 
     await expect(heading(page, 'Review and open')).toBeFocused();
-    await expect(page.getByText('Step 5 of 5 — Review and open')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 5');
     const summary = main(page).getByRole('region', { name: 'Summary' });
     await expect(summary.getByText('3 questions')).toBeVisible();
     await expect(summary.getByRole('link', { name: 'Edit questions' })).toHaveAttribute('href', /step=questions&form=form-/);
@@ -206,7 +206,7 @@ test.describe('desktop', () => {
     await expect(formFrame.getByRole('button', { name: 'Submit application' })).toBeDisabled();
     // Phone and laptop frames share one iframe: switching does not reload it.
     await formFrame.locator('body').evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
-    await pane.getByText('Desktop', { exact: true }).click();
+    await pane.getByTitle('Desktop').click();
     await expect(pane.getByRole('radio', { name: 'Desktop' })).toBeChecked();
     await expect(pane.locator('iframe')).toHaveCSS('width', '1280px');
     expect(await formFrame.locator('body').evaluate(() => (window as unknown as { __kept?: boolean }).__kept)).toBe(true);
@@ -220,7 +220,7 @@ test.describe('desktop', () => {
     const calls = await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths' })]);
     await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
     await expect(heading(page, 'Spaces and pricing')).toBeVisible(COLD);
-    await expect(page.getByText('Step 3 of 5 — Spaces and pricing')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 3 of 5');
     await main(page).getByTestId('form-space-map').check();
     await expect(main(page).getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/vendors?step=floor-map&form=form-paid`);
     await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`);
@@ -228,7 +228,7 @@ test.describe('desktop', () => {
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
     // The saved form decides the next step: the new Floor map step.
     await expect(heading(page, 'Floor map')).toBeFocused();
-    await expect(page.getByText('Step 4 of 6 — Floor map')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 4 of 6');
   });
 
   test('a volunteer form is always free, then shifts and questions', async ({ page }) => {
@@ -304,7 +304,7 @@ test.describe('desktop', () => {
     await mockApi(page);
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await expect(heading(page, 'Collect more')).toBeVisible(COLD);
-    await expect(page.getByText('Step 7 of 8 — Collect more')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 8');
   });
 
   for (const scheme of ['light', 'dark'] as const) {
