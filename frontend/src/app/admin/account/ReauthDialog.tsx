@@ -102,7 +102,7 @@ export default function ReauthDialog({ onVerified, onCancel }: Props) {
     >
       <fieldset disabled={busy} className="space-y-5">
         <p className="text-sm text-gray-600 dark:text-slate-400">
-          Changing how you sign in needs a quick check. You won&apos;t be asked again for 10 minutes.
+          This change needs a quick security check. You won&apos;t be asked again for 10 minutes.
         </p>
         {error && <div role="alert" className={formAlertClass}>{error}</div>}
         {!methods && !error && <p className="text-sm text-gray-500">Loading…</p>}
