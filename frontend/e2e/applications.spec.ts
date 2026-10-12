@@ -372,25 +372,6 @@ test('admin detail: answers, notes, waitlist with edited email and history', asy
 // covered on the setup wizard steps by admin-event-setup-applications.spec.ts
 // since spec 050-P deleted the old forms pages.
 
-test('settings: notification emails open in a dialog and save', async ({ page, baseURL }) => {
-  const api = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/settings/notifications');
-  await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Notifications' })).toHaveAttribute('aria-current', 'page');
-  const row = page.getByRole('button', { name: 'Edit Approved email', exact: true });
-  await expect(row).not.toContainText('Customized');
-  await row.click();
-  const dialog = page.getByRole('dialog', { name: 'Approved' });
-  const save = dialog.getByRole('button', { name: 'Save' });
-  await expect(save).toBeDisabled();
-  await dialog.getByLabel('Subject').fill('Approved: {{event.name}}');
-  await save.click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole('status')).toContainText('Approved email saved');
-  await expect(row).toContainText('Customized');
-  await expect(row).toBeFocused();
-  expect(api.calls.find((c) => c.method === 'PUT')?.body).toEqual({ subject: 'Approved: {{event.name}}', body: 'Hi {{applicant.firstName}},\n\nGood news.' });
-});
-
 test('settings: old Applications URL redirects to Notifications', async ({ page, baseURL }) => {
   await mockAdmin(page, baseURL!);
   await page.goto('/admin/settings/applications');
@@ -446,18 +427,7 @@ test('admin detail shows the price-changed note for a PAID application', async (
   await expect(note).toContainText('keeps the $303.30');
 });
 
-test('settings: daily digest toggle', async ({ page, baseURL }) => {
-  const api = await mockAdmin(page, baseURL!);
-  await page.goto('/admin/settings/notifications');
-  const card = page.getByTestId('application-digest');
-  await expect(card).toContainText('Daily application digest');
-  const toggle = card.getByRole('checkbox');
-  await expect(toggle).toBeChecked();
-  await toggle.uncheck();
-  await expect(page.getByRole('status')).toContainText('Daily digest off');
-  expect(api.calls.find((c) => c.method === 'PATCH' && c.path === '/admin/settings/application-digest')?.body).toEqual({ enabled: false });
-  await expect(card).toContainText('Off');
-});
+// Settings › Notifications (templates, digest) is covered by admin-settings-notifications.spec.ts.
 
 test('admin events: duplicate dialog creates a draft copy with forms', async ({ page, baseURL }) => {
   await mockAdmin(page, baseURL!);

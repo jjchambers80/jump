@@ -1,7 +1,7 @@
 'use client';
 
-// Settings › Notifications (spec 053): store-edited system emails. Application
-// decision emails still come from useTemplatesApi until 053-D moves them here.
+// Settings › Notifications (spec 053): store-edited system emails, including
+// the application decision emails (053-D).
 
 import { useMemo } from 'react';
 import api from '@/services/api';
