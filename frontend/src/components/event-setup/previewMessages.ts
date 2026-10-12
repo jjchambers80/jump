@@ -4,6 +4,7 @@
 // event itself (GET …/preview-payload) and lays the overlay on top.
 
 import type { EventPageEvent, EventVenue } from '@/app/events/[eventId]/eventPage';
+import type { AdminForm, PublicForm } from '@/lib/applications';
 
 export const PREVIEW_MESSAGE = 'jump:event-preview';
 export const PREVIEW_READY = 'jump:event-preview-ready';
@@ -28,6 +29,37 @@ export interface PreviewMessage {
   revision: number;
   /** Element id to scroll to; the frame falls back to #event-hero. */
   anchor: string;
+  /**
+   * Spec 051 application flows: the form being built, as applicants will see
+   * it. Present = the frame shows the application form instead of the event page.
+   */
+  form?: PublicForm | null;
+}
+
+/**
+ * The form being built, as the public apply page would get it (spec 051): the
+ * saved form, with the unsaved name and intro typed on Form details on top.
+ * Always shown as open, whatever its status or dates.
+ */
+export function previewForm(form: AdminForm, overlay: { name?: string; intro?: string | null } = {}, organizationName?: string | null): PublicForm {
+  return {
+    id: form.id,
+    kind: form.kind,
+    purpose: form.purpose,
+    name: overlay.name?.trim() || form.name,
+    slug: form.slug,
+    intro: overlay.intro !== undefined ? overlay.intro || null : form.intro,
+    acceptance: { open: true, reason: null },
+    chargeTiming: form.chargeTiming,
+    feeMode: form.feeMode,
+    paymentDueDays: form.paymentDueDays,
+    organizationName: organizationName ?? null,
+    tiers: form.tiers.map((t) => ({ id: t.id, name: t.name, description: t.description, price: t.price, applicantPays: t.price, feesIncluded: 0, tax: 0, soldOut: false, addOns: [] })),
+    questions: form.questions,
+    collectBusiness: form.collectBusiness,
+    shifts: (form.shifts ?? []).map((s) => ({ id: s.id, name: s.name, description: s.description, startsAt: s.startsAt, endsAt: s.endsAt, remaining: s.remaining, full: s.remaining === 0 })),
+    timezone: form.timezone,
+  };
 }
 
 const ID = /^[\w-]{1,64}$/;
@@ -48,6 +80,8 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
   if (o.admissionMode !== undefined && o.admissionMode !== 'TICKETED' && o.admissionMode !== 'RSVP') return false;
   const venue = o.venue as Record<string, unknown> | null | undefined;
   if (venue !== undefined && venue !== null && (typeof venue !== 'object' || typeof venue.id !== 'string' || typeof venue.name !== 'string')) return false;
+  const form = m.form as Record<string, unknown> | null | undefined;
+  if (form !== undefined && form !== null && (typeof form !== 'object' || typeof form.name !== 'string' || !Array.isArray(form.questions) || !Array.isArray(form.tiers))) return false;
   return true;
 }
 

@@ -1,8 +1,8 @@
 // Wizard header (spec 050 §11.2): 56 px, the Eventimus mark or the event's
-// name, the step menu and preview buttons (labelled, 44 × 44) where those live
+// name, the preview button (labelled, 44 × 44) below lg
 // behind buttons, and Exit (before the row exists) or Save & exit.
 
-import { Eye, Menu } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import EventimusLogo from '@/components/EventimusLogo';
 import { iconButton, secondaryButton } from './ui';
 
@@ -10,10 +10,6 @@ export default function SetupHeader({
   eventName,
   hasRow,
   saving,
-  showMenuButton,
-  menuButtonClass,
-  menuLockedBy,
-  onMenu,
   onPreview,
   onExit,
   viewEvent,
@@ -21,12 +17,6 @@ export default function SetupHeader({
   eventName: string | null;
   hasRow: boolean;
   saving: boolean;
-  showMenuButton: boolean;
-  /** Breakpoint classes: the edit-mode rail replaces the button from xl. */
-  menuButtonClass: string;
-  /** Id of the text saying why the step menu waits; set while a publish is in flight. */
-  menuLockedBy?: string;
-  onMenu: () => void;
   onPreview: () => void;
   onExit: () => void;
   /** "View event" (once the row exists). */
@@ -34,18 +24,6 @@ export default function SetupHeader({
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-2 dark:border-slate-700 dark:bg-slate-900 sm:px-4">
-      {showMenuButton && (
-        <button
-          type="button"
-          onClick={onMenu}
-          aria-label="Setup steps"
-          aria-disabled={menuLockedBy ? true : undefined}
-          aria-describedby={menuLockedBy}
-          className={`${iconButton} ${menuButtonClass} aria-disabled:cursor-not-allowed aria-disabled:opacity-60`}
-        >
-          <Menu className="h-5 w-5" aria-hidden />
-        </button>
-      )}
       <button type="button" onClick={onPreview} aria-label="Show preview" className={`${iconButton} lg:hidden`}>
         <Eye className="h-5 w-5" aria-hidden />
       </button>

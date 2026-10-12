@@ -125,7 +125,6 @@ const RETURN_TO = encodeURIComponent(MAP_STEP);
 
 const main = (page: Page) => page.locator('main');
 const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
-const steps = (page: Page) => page.getByRole('list', { name: 'Setup steps' });
 const preview = (page: Page) => page.frameLocator('iframe[title="Event page preview"]');
 const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
@@ -163,13 +162,12 @@ test.describe('desktop', () => {
     const next = page.locator('footer').getByRole('button', { name: 'Next' });
     await page.goto(flowUrl('step=payment&form=form-paid'));
     await expect(heading(page, 'Spaces and pricing')).toBeVisible(COLD);
-    await expect(steps(page)).toBeVisible();
-    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
+    await expect(page.getByText('Step 3 of 5 — Spaces and pricing')).toBeVisible();
     await main(page).getByTestId('form-space-map').check();
     await next.click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
     await expect(heading(page, 'Floor map')).toBeVisible();
-    await expect(steps(page).getByText('Floor map')).toBeVisible();
+    await expect(page.getByText('Step 4 of 6 — Floor map')).toBeVisible();
 
     await page.locator('footer').getByRole('button', { name: 'Back' }).click();
     await expect(heading(page, 'Spaces and pricing')).toBeVisible();
@@ -177,7 +175,7 @@ test.describe('desktop', () => {
     await next.click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('TIERS');
     await expect(heading(page, 'Questions')).toBeVisible();
-    await expect(steps(page).getByText('Floor map')).toHaveCount(0);
+    await expect(page.getByText('Step 4 of 5 — Questions')).toBeVisible();
   });
 
   test('no map yet: create a blank map, then open the builder with returnTo', async ({ page }) => {

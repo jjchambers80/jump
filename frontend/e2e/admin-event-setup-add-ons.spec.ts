@@ -285,7 +285,7 @@ test.describe('desktop', () => {
     await mockApi(page, adminEvent({ admissionMode: 'RSVP', priceTiers: [], setupStep: 'tickets' }));
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=tickets`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Tickets or RSVP' })).toBeVisible(COLD);
-    await expect(page.getByRole('list', { name: 'Setup steps' }).getByText('Collect more')).toHaveCount(1);
+    await expect(page.getByText('Step 6 of 8 — Tickets or RSVP')).toBeVisible();
     await page.goto(STEP_URL);
     await expect(heading(page)).toBeVisible(COLD);
     await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeVisible();

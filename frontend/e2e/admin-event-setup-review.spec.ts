@@ -198,11 +198,10 @@ test.describe('desktop', () => {
     await main(page).getByRole('checkbox', { name: 'Open applications when I publish: Volunteers' }).uncheck();
     await main(page).getByRole('button', { name: 'Publish' }).click();
 
-    // While the publish is out, Back and the step menu wait, and say why.
+    // While the publish is out, Back waits, and says why.
     const back = page.getByRole('button', { name: 'Back' });
     await expect(back).toHaveAttribute('aria-disabled', 'true');
-    await expect(back).toHaveAccessibleDescription('Publishing… Back and the step menu return when it finishes.');
-    await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(back).toHaveAccessibleDescription('Publishing… Back returns when it finishes.');
     // aria-disabled keeps it focusable; pressing it does nothing.
     await back.focus();
     await page.keyboard.press('Enter');

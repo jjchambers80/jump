@@ -252,7 +252,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
       </Step>
 
       {form.collectBusiness !== false && (
-        <Step n={next()} title="Your business" hint="This is what the organizer reviews. Show them your best.">
+        <Step n={next()} id={id('step-business')} title="Your business" hint="This is what the organizer reviews. Show them your best.">
           <div>
             <label htmlFor={id('businessName')} className={label}>Business or outlet name</label>
             <input id={id('businessName')} required autoComplete="organization" className={input} value={profile.businessName} onChange={(e) => update({ profile: { ...profile, businessName: e.target.value } })} />
@@ -288,7 +288,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
                 >
                   <ImagePlus className="h-6 w-6" aria-hidden />
                   <span>{apply.photos.length === 0 ? 'Add photos' : 'Add more'}</span>
-                  {apply.photos.length === 0 && <span className="font-normal text-gray-500 dark:text-slate-500">JPG, PNG, GIF or WebP · {MAX_PHOTO_MB} MB each</span>}
+                  {apply.photos.length === 0 && <span className="font-normal text-gray-500 dark:text-slate-400">JPG, PNG, GIF or WebP · {MAX_PHOTO_MB} MB each</span>}
                   <input
                     id={id('photos')}
                     type="file"
@@ -309,7 +309,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
       )}
 
       {form.questions.length > 0 && (
-        <Step n={next()} title="A few questions" hint={`From ${orgName}.`}>
+        <Step n={next()} id={id('step-questions')} title="A few questions" hint={`From ${orgName}.`}>
           {form.questions.map((q) => (
             <QuestionField
               key={q.id}
@@ -324,7 +324,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
       )}
 
       {form.purpose === 'VOLUNTEER' && (form.shifts?.length ?? 0) > 0 && (
-        <Step n={next()} title="Pick your shifts" hint="Choose every shift you could work. The organizer confirms yours when they approve you.">
+        <Step n={next()} id={id('step-shifts')} title="Pick your shifts" hint="Choose every shift you could work. The organizer confirms yours when they approve you.">
           <ShiftPicker
             shifts={form.shifts ?? []}
             zone={form.timezone}
@@ -420,9 +420,10 @@ function ShiftPicker({ shifts, zone, selected, onChange, idPrefix }: { shifts: P
 }
 
 /** A numbered form step. The number rides in a brand disc beside the title. */
-function Step({ n, title, hint, children }: { n: number; title: string; hint?: string; children: ReactNode }) {
+function Step({ n, title, hint, id, children }: { n: number; title: string; hint?: string; id?: string; children: ReactNode }) {
   return (
     <section
+      id={id}
       className="rounded-2xl border border-gray-200 bg-white p-5 motion-safe:animate-card-in dark:border-slate-700 dark:bg-slate-800 sm:p-6"
       style={{ animationDelay: `${Math.min(n, 5) * 50}ms` }}
     >

@@ -98,7 +98,7 @@ export function SettingsCard({
   /** Form mode: PATCH the form. */
   onSave?: (body: Record<string, unknown>) => Promise<void>;
   mode?: EditorMode;
-  /** Template mode: every change is reported as the settings half of a definition. */
+  /** Every change, as the settings half of a definition (template mode) or the live preview (setup flows). */
   onChange?: (settings: Record<string, unknown>) => void;
   /**
    * Spec 051 setup flows: one step's part of the card (details = name, slug,
@@ -161,7 +161,8 @@ export function SettingsCard({
   const update = (patch: Partial<typeof state>) => {
     const next = { ...state, ...patch };
     setState(next);
-    if (template) onChange?.({ name: next.name, intro: next.intro || null, ...paidSettings(next) });
+    // Template mode builds its definition from this; the setup flows (spec 051) feed the live preview.
+    onChange?.({ name: next.name, intro: next.intro || null, ...paidSettings(next) });
   };
 
   const submit = async (e: FormEvent) => {
