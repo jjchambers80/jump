@@ -39,7 +39,12 @@ There are no customer segments (Prospect / New / Repeat / Lapsed were removed wi
 
   `describeFilters` (`frontend/src/lib/contactLists.ts`) says them in plain words.
 - **Permission:** `customers.lists` (ORGANIZER by default) to create, edit, duplicate and delete. Viewing needs only the `customers` feature.
-- **Still to come:** picking members from Contacts (055-C), CSV import (055-D), CSV export (055-E).
+- **Picking members (055-C):**
+  - Staff with `customers.lists` get row checkboxes on Contacts. A sticky "Selected contacts" bar offers **Add to list** (`lists/AddToListDialog.tsx`: an existing manual list or "New manual list…").
+  - Once a whole page is ticked, **Select all N matching** sends the page's filters as `{ query }` to `POST /admin/contact-lists/:id/members`. The backend resolves them with `CustomerService.whereFor` inside the active organization, up to 10,000 contacts (409 `TOO_MANY_CONTACTS`).
+  - A manual list's page has **Add contacts**, a link to `/admin/contacts?addTo=<id>` that preselects the list, and a **Remove from list** bulk action (picked rows only).
+  - A contact's page shows a **Lists** card (`[contactId]/ContactListsCard.tsx`) with its manual lists, remove ×, and Add to list.
+- **Still to come:** CSV import (055-D), CSV export (055-E).
 
 ## API
 

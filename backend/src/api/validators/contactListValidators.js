@@ -44,7 +44,31 @@ export function validatePreview(req, res, next) {
   next();
 }
 
-/** POST | DELETE /admin/contact-lists/:listId/members — { contactIds: [id, …] }, 1–500. */
+const QUERY_KEYS = ['search', 'tag', 'scope', 'rsvp', 'eventId', 'source', 'formId', 'list'];
+
+/**
+ * POST /admin/contact-lists/:listId/members — `{ contactIds }`, or `{ query }`:
+ * the Contacts list filters, to add every match ("select all N matching").
+ */
+export function validateAddMembers(req, res, next) {
+  const query = req.body?.query;
+  if (query === undefined) return validateMembers(req, res, next);
+  const ok =
+    query &&
+    typeof query === 'object' &&
+    !Array.isArray(query) &&
+    req.body.contactIds === undefined &&
+    Object.entries(query).every(
+      ([key, value]) => QUERY_KEYS.includes(key) && (value === undefined || (typeof value === 'string' && value.length <= 200))
+    );
+  if (!ok) return next(fail('query', `query takes only ${QUERY_KEYS.join(', ')} as text`));
+  if (query.scope !== undefined && !['customers', 'all'].includes(query.scope)) {
+    return next(fail('query.scope', 'scope must be customers or all'));
+  }
+  next();
+}
+
+/** DELETE /admin/contact-lists/:listId/members — { contactIds: [id, …] }, 1–500. */
 export function validateMembers(req, res, next) {
   const ids = req.body?.contactIds;
   const ok =

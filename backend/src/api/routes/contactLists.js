@@ -7,7 +7,9 @@ import { requireAuth } from '../../middleware/auth.js';
 import { requireFeature, requirePermission } from '../../middleware/rbac.js';
 import { activeOrgFor } from './adminScope.js';
 import contactListService from '../../services/ContactListService.js';
+import customerService from '../../services/CustomerService.js';
 import {
+  validateAddMembers,
   validateCreateList,
   validateMembers,
   validatePreview,
@@ -51,10 +53,15 @@ router.post('/:listId/duplicate', canEdit, wrap(async (req, res) => {
   res.status(201).json(await contactListService.duplicate(await activeOrgFor(req), req.user.id, req.params.listId));
 }));
 
-router.post('/:listId/members', canEdit, validateMembers, wrap(async (req, res) => {
-  res.json(
-    await contactListService.addMembers(await activeOrgFor(req), req.user.id, req.params.listId, req.body.contactIds)
-  );
+router.post('/:listId/members', canEdit, validateAddMembers, wrap(async (req, res) => {
+  const organizationId = await activeOrgFor(req);
+  if (req.body.query) {
+    // Everyone the Contacts list shows for these filters (scope defaults to all, like the page).
+    const where = await customerService.whereFor(organizationId, { scope: 'all', ...req.body.query });
+    res.json(await contactListService.addMembersWhere(organizationId, req.user.id, req.params.listId, where));
+    return;
+  }
+  res.json(await contactListService.addMembers(organizationId, req.user.id, req.params.listId, req.body.contactIds));
 }));
 
 router.delete('/:listId/members', canEdit, validateMembers, wrap(async (req, res) => {

@@ -13,6 +13,7 @@ export const BUILT_IN_LISTS = [
 ];
 
 const MAX_MEMBERS_PER_CALL = 500;
+const MAX_MEMBERS_FROM_QUERY = 10_000;
 
 /** The error handler copies `err.code` onto the response body. */
 function coded(error, code) {
@@ -234,6 +235,32 @@ class ContactListService {
       skipDuplicates: true,
     });
     return { added: count, alreadyOn: ids.length - count };
+  }
+
+  /**
+   * Add every contact matching a Contacts query (`where` from
+   * CustomerService.whereFor), up to MAX_MEMBERS_FROM_QUERY.
+   */
+  async addMembersWhere(organizationId, userId, listId, where) {
+    const list = await this._manual(organizationId, listId);
+    const scoped = { ...where, organizationId };
+    const total = await prisma.contact.count({ where: scoped });
+    if (total > MAX_MEMBERS_FROM_QUERY) {
+      throw coded(
+        new ConflictError(`At most ${MAX_MEMBERS_FROM_QUERY.toLocaleString('en-US')} contacts at a time; narrow the filters`),
+        'TOO_MANY_CONTACTS'
+      );
+    }
+    const ids = (await prisma.contact.findMany({ where: scoped, select: { id: true } })).map((c) => c.id);
+    let added = 0;
+    for (let i = 0; i < ids.length; i += 1000) {
+      const { count } = await prisma.contactListMember.createMany({
+        data: ids.slice(i, i + 1000).map((contactId) => ({ listId: list.id, contactId, addedById: userId ?? null, source: 'PICKED' })),
+        skipDuplicates: true,
+      });
+      added += count;
+    }
+    return { added, alreadyOn: ids.length - added };
   }
 
   async removeMembers(organizationId, listId, contactIds) {

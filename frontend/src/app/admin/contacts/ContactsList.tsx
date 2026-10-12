@@ -96,11 +96,18 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   );
 }
 
+/** What the selection bar acts on: picked rows, or every contact the filters match. */
+export type ContactSelection =
+  | { kind: 'ids'; ids: string[]; count: number }
+  | { kind: 'query'; query: Record<string, string>; count: number };
+
 export default function ContactsList({
   basePath,
   listId,
   header,
   emptyState,
+  bulkActions,
+  selectAllMatching = true,
 }: {
   /** Page the filters write to (`/admin/contacts` or a list's page). */
   basePath: string;
@@ -109,7 +116,14 @@ export default function ContactsList({
   /** Page header, given the live count line. */
   header: (count: ReactNode) => ReactNode;
   /** Title and text when nothing is filtered and there is nobody to show. */
-  emptyState?: { title: string; body: string };
+  emptyState?: { title: ReactNode; body: ReactNode };
+  /**
+   * Row checkboxes and a selection bar with these actions (spec 055-C). `done`
+   * clears the selection; `done(true)` also reloads the rows.
+   */
+  bulkActions?: (selection: ContactSelection, done: (reload?: boolean) => void) => ReactNode;
+  /** Offer "Select all N matching" once a whole page is picked. */
+  selectAllMatching?: boolean;
 }) {
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const router = useRouter();
@@ -142,6 +156,9 @@ export default function ContactsList({
   const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(state.search ?? '');
   const [standingForms, setStandingForms] = useState<{ id: string; name: string }[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allMatching, setAllMatching] = useState(false);
+  const [reload, setReload] = useState(0);
 
   const update = (patch: Partial<CustomerListState>) => {
     const next = customerListQuery({ ...state, page: 1, ...patch });
@@ -176,7 +193,13 @@ export default function ContactsList({
     return () => {
       cancelled = true;
     };
-  }, [orgLoading, selectedOrgId, queryString, state.scope]);
+  }, [orgLoading, selectedOrgId, queryString, state.scope, reload]);
+
+  // A new page or filter starts a new selection.
+  useEffect(() => {
+    setSelected(new Set());
+    setAllMatching(false);
+  }, [queryString]);
 
   useEffect(() => {
     if (!selectedOrgId || state.source !== 'form') return;
@@ -192,6 +215,43 @@ export default function ContactsList({
   };
 
   const countLabel = `${total} contact${total === 1 ? '' : 's'}`;
+
+  // Selection (spec 055-C)
+  const selectable = Boolean(bulkActions);
+  const pageIds = contacts.map((c) => c.id);
+  const pageSelected = pageIds.filter((id) => selected.has(id)).length;
+  const wholePage = pageIds.length > 0 && pageSelected === pageIds.length;
+  const togglePage = () => {
+    setAllMatching(false);
+    setSelected(wholePage ? new Set() : new Set(pageIds));
+  };
+  const toggleOne = (id: string) => {
+    setAllMatching(false);
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => {
+    setSelected(new Set());
+    setAllMatching(false);
+  };
+  const matchQuery = () => {
+    const query = Object.fromEntries(new URLSearchParams(queryString));
+    delete query.page;
+    delete query.sort;
+    delete query.direction;
+    return { ...query, scope: state.scope ?? 'all' };
+  };
+  const selection: ContactSelection = allMatching
+    ? { kind: 'query', query: matchQuery(), count: total }
+    : { kind: 'ids', ids: [...selected], count: selected.size };
+  const pageCheckboxRef = (el: HTMLInputElement | null) => {
+    if (el) el.indeterminate = pageSelected > 0 && !wholePage;
+  };
+  const checkbox = 'h-5 w-5 rounded border-gray-400 text-accent-700 focus:ring-2 focus:ring-accent-500 dark:border-slate-500';
   const ariaSort = (column: 'name' | 'spent' | 'activity') =>
     sortedColumn === column ? (state.direction === 'asc' ? 'ascending' : 'descending') : undefined;
 
@@ -341,14 +401,20 @@ export default function ContactsList({
       )}
 
       {selectedOrgId && !loading && contacts.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="overflow-clip rounded-xl border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-800">
           {/* Phones and tablets: one card per contact */}
           <ul className="divide-y divide-gray-200 dark:divide-slate-700 lg:hidden" data-testid="contacts-cards">
             {contacts.map((contact) => (
-              <li key={contact.id}>
+              <li key={contact.id} className={selectable ? 'flex items-start' : undefined}>
+                {selectable && (
+                  <label className="flex min-h-[44px] min-w-[44px] cursor-pointer items-start justify-center pl-3 pt-4">
+                    <span className="sr-only">Select {contact.firstName} {contact.lastName}</span>
+                    <input type="checkbox" checked={allMatching || selected.has(contact.id)} onChange={() => toggleOne(contact.id)} className={checkbox} />
+                  </label>
+                )}
                 <Link
                   href={customerDetailHref(contact.id, listQuery)}
-                  className="block space-y-2 px-4 py-3.5 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-600 dark:hover:bg-slate-700/40"
+                  className="block min-w-0 flex-1 space-y-2 px-4 py-3.5 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-600 dark:hover:bg-slate-700/40"
                 >
                   <span className="flex items-baseline justify-between gap-3">
                     <span className="min-w-0 truncate font-medium text-gray-900 dark:text-white">
@@ -373,6 +439,18 @@ export default function ContactsList({
             <caption className="sr-only">Contacts{filtered ? ', filtered' : ''}</caption>
             <thead className="border-b border-gray-200 bg-gray-50 text-xs font-medium text-gray-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
               <tr>
+                {selectable && (
+                  <th scope="col" className="w-12 py-3 pl-4">
+                    <input
+                      ref={pageCheckboxRef}
+                      type="checkbox"
+                      aria-label="Select every contact on this page"
+                      checked={allMatching || wholePage}
+                      onChange={togglePage}
+                      className={checkbox}
+                    />
+                  </th>
+                )}
                 <th scope="col" aria-sort={ariaSort('name')} className="px-4 py-3 font-medium">Name</th>
                 <th scope="col" className="px-4 py-3 font-medium">Email</th>
                 <th scope="col" className="px-4 py-3 font-medium">Source</th>
@@ -383,6 +461,17 @@ export default function ContactsList({
             <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
               {contacts.map((contact) => (
                 <tr key={contact.id} className="relative hover:bg-gray-50 focus-within:bg-gray-50 dark:hover:bg-slate-700/40 dark:focus-within:bg-slate-700/40">
+                  {selectable && (
+                    <td className="relative z-10 w-12 py-3.5 pl-4">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${contact.firstName} ${contact.lastName}`}
+                        checked={allMatching || selected.has(contact.id)}
+                        onChange={() => toggleOne(contact.id)}
+                        className={checkbox}
+                      />
+                    </td>
+                  )}
                   <td className="max-w-[16rem] px-4 py-3.5">
                     {/* The link covers the whole row; it is the row's one tab stop. */}
                     <Link
@@ -404,6 +493,40 @@ export default function ContactsList({
               ))}
             </tbody>
           </table>
+
+          {selectable && (selected.size > 0 || allMatching) && (
+            <div
+              role="region"
+              aria-label="Selected contacts"
+              className="sticky bottom-0 z-20 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] dark:border-slate-700 dark:bg-slate-800"
+            >
+              <p aria-live="polite" className="text-sm font-semibold text-gray-900 dark:text-white">
+                {allMatching ? `All ${total} matching contacts selected` : `${selected.size} selected`}
+              </p>
+              {selectAllMatching && wholePage && !allMatching && total > pageIds.length && (
+                <button
+                  type="button"
+                  onClick={() => setAllMatching(true)}
+                  className="min-h-[44px] text-sm font-semibold text-accent-700 underline hover:no-underline dark:text-accent-300"
+                >
+                  Select all {total} matching
+                </button>
+              )}
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                {bulkActions?.(selection, (again) => {
+                  clearSelection();
+                  if (again) setReload((n) => n + 1);
+                })}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="inline-flex min-h-[44px] items-center rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
 
           {totalPages > 1 && (
             <nav aria-label="Pagination" className="flex items-center justify-between gap-3 border-t border-gray-200 px-4 py-3 dark:border-slate-700">

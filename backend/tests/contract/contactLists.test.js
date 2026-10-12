@@ -199,6 +199,29 @@ describe('Contact lists contract (spec 055-A)', () => {
     expect(noMembers.body.code).toBe('LIST_NOT_MANUAL');
   });
 
+  it('adds everyone matching a Contacts query ("select all N matching")', async () => {
+    const created = await request(app).post('/admin/contact-lists').set(...auth(organizerToken)).send({ name: `Picked ${RUN_ID}`, type: 'MANUAL' });
+    const listId = created.body.id;
+    const addQuery = (query) => request(app).post(`/admin/contact-lists/${listId}/members`).set(...auth(organizerToken)).send({ query });
+
+    expect((await addQuery({ source: 'subscribed' })).body).toEqual({ added: 1, alreadyOn: 0 });
+    expect((await addQuery({ scope: 'customers' })).body).toEqual({ added: 2, alreadyOn: 0 });
+    expect((await addQuery({ search: 'vip' })).body).toEqual({ added: 0, alreadyOn: 1 });
+    expect(await listContacts(listId)).toEqual(['big', 'small', 'vip']);
+    // Another org's contacts never match: the query runs inside the active organization.
+    expect(await prisma.contactListMember.count({ where: { listId, contactId: c.foreign.id } })).toBe(0);
+
+    // From another list's view (?list=), e.g. copying a built-in into a manual list.
+    const copy = await request(app).post('/admin/contact-lists').set(...auth(organizerToken)).send({ name: `Copy ${RUN_ID}`, type: 'MANUAL' });
+    const fromList = await request(app).post(`/admin/contact-lists/${copy.body.id}/members`).set(...auth(organizerToken)).send({ query: { list: 'builtin:paying' } });
+    expect(fromList.body).toEqual({ added: 2, alreadyOn: 0 });
+
+    expect((await addQuery({ segment: 'New' })).status).toBe(400);
+    expect((await addQuery({ scope: 'everyone' })).status).toBe(400);
+    const both = await request(app).post(`/admin/contact-lists/${listId}/members`).set(...auth(organizerToken)).send({ query: {}, contactIds: [c.plain.id] });
+    expect(both.status).toBe(400);
+  });
+
   it('keeps lists and contacts inside their organization', async () => {
     const mine = await request(app).post('/admin/contact-lists').set(...auth(adminToken)).send({ name: 'Mine', type: 'MANUAL' });
     // Another org's contact id is not found, never a silent add.
