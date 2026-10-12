@@ -194,6 +194,10 @@ class ApiClient {
     if (activeOrganizationId && !headers['X-Jump-Org']) {
       headers['X-Jump-Org'] = activeOrganizationId;
     }
+    // Step-up proof, as on every JSON request (spec 055 CSV import needs it)
+    if (reauthToken && !headers['X-Jump-Reauth']) {
+      headers['X-Jump-Reauth'] = reauthToken;
+    }
 
     if (typeof window !== 'undefined' && !headers['Authorization']) {
       try {
@@ -222,6 +226,7 @@ class ApiClient {
         message: data.message || 'Upload failed',
         error: data.error,
         code: data.code,
+        details: data.details,
       };
     }
     return data;

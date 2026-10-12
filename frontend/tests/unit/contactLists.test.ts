@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanFilters, contactListHref, describeFilters } from '../../src/lib/contactLists';
+import { cleanFilters, contactListHref, csvLine, describeFilters } from '../../src/lib/contactLists';
 import { formatRelative } from '../../src/app/admin/contacts/lists/listUi';
 
 describe('contact list helpers (spec 055)', () => {
@@ -33,5 +33,9 @@ describe('contact list helpers (spec 055)', () => {
     expect(formatRelative('2026-10-12T11:59:30Z', now)).toBe('just now');
     expect(formatRelative('2026-10-10T12:00:00Z', now)).toBe('2 days ago');
     expect(formatRelative('2026-02-12T12:00:00Z', now)).toBe('8 months ago');
+  });
+
+  it('writes CSV lines with quoting and formula neutralizing', () => {
+    expect(csvLine([3, 'a,b', 'say "hi"', '=HYPERLINK("x")', null])).toBe(`3,"a,b","say ""hi""","'=HYPERLINK(""x"")",`);
   });
 });

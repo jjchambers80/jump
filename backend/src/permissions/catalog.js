@@ -52,6 +52,7 @@ export const FEATURES = [
       { key: 'customers.comments', label: "Delete other staff members' timeline comments" },
       { key: 'customers.privacy', label: "Export, erase or anonymize a contact's data" },
       { key: 'customers.lists', label: 'Create, edit and delete contact lists', organizer: true },
+      { key: 'customers.import', label: 'Import contacts into a list from a CSV file' },
       { key: 'applications.standingForms', label: 'Build standing application forms (Contacts › Forms)' },
     ],
   },

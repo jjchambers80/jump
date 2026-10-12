@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ChevronLeft, UserMinus, UserPlus } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, FileUp, UserMinus, UserPlus } from 'lucide-react';
 import api from '@/services/api';
 import { useCan, useOrg } from '@/components/OrgContext';
 import ActionsMenu from '@/components/ActionsMenu';
@@ -15,19 +15,23 @@ import ConfirmDialog from '@/components/content/ConfirmDialog';
 import { contactListHref, describeFilters, type ContactList } from '@/lib/contactLists';
 import ContactsList from '../../ContactsList';
 import ListFormDialog from '../ListFormDialog';
+import ImportDialog from '../ImportDialog';
+import { ReauthProvider } from '@/app/admin/account/useReauth';
 import { ListTypeBadge, listMenuItems } from '../listUi';
 import { useListOptions } from '../useListOptions';
 
 function ListPage({ listId }: { listId: string }) {
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const canEdit = useCan('customers.lists');
+  const canImport = useCan('customers.import');
+  const [importing, setImporting] = useState(false);
   const router = useRouter();
   const [list, setList] = useState<ContactList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Remount the table after an edit so it reloads the new members.
+  // Bumped after an edit or import so the table reloads its rows.
   const [version, setVersion] = useState(0);
   const focusReturnRef = useRef<HTMLElement | null>(null);
   const { events, forms } = useListOptions(list?.type === 'AUTOMATIC');
@@ -132,6 +136,19 @@ function ListPage({ listId }: { listId: string }) {
                 Add contacts
               </Link>
             )}
+            {list.type === 'MANUAL' && canImport && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  focusReturnRef.current = e.currentTarget;
+                  setImporting(true);
+                }}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-gray-300 px-4 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 dark:border-slate-600 dark:text-white dark:hover:bg-slate-700"
+              >
+                <FileUp className="h-4 w-4" aria-hidden />
+                Import CSV
+              </button>
+            )}
             {!list.builtIn && (
               <button
                 type="button"
@@ -176,7 +193,7 @@ function ListPage({ listId }: { listId: string }) {
   return (
     <>
       <ContactsList
-        key={version}
+        reloadKey={version}
         basePath={contactListHref(listId)}
         listId={listId}
         header={header}
@@ -184,7 +201,11 @@ function ListPage({ listId }: { listId: string }) {
           list?.type === 'MANUAL'
             ? {
                 title: 'Nobody on this list yet',
-                body: canEdit ? 'Choose Add contacts, select people in Contacts, then Add to list.' : 'This manual list is empty.',
+                body: !canEdit
+                  ? 'This manual list is empty.'
+                  : canImport
+                  ? 'Choose Add contacts to pick people from Contacts, or Import CSV to bring in a file.'
+                  : 'Choose Add contacts, select people in Contacts, then Add to list.',
               }
             : { title: 'Nobody matches this list yet', body: 'Contacts join as soon as they match its filters.' }
         }
@@ -220,6 +241,18 @@ function ListPage({ listId }: { listId: string }) {
         />
       )}
 
+      {importing && list && (
+        <ImportDialog
+          list={list}
+          returnFocusRef={focusReturnRef}
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setVersion((v) => v + 1);
+            load();
+          }}
+        />
+      )}
+
       {deleting && list && (
         <ConfirmDialog
           titleId="delete-list-title"
@@ -246,8 +279,10 @@ function ListPage({ listId }: { listId: string }) {
 export default function ContactListPage({ params }: { params: { listId: string } }) {
   const listId = decodeURIComponent(params.listId);
   return (
-    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">Loading list…</div>}>
-      <ListPage listId={listId} />
-    </Suspense>
+    <ReauthProvider>
+      <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">Loading list…</div>}>
+        <ListPage listId={listId} />
+      </Suspense>
+    </ReauthProvider>
   );
 }
