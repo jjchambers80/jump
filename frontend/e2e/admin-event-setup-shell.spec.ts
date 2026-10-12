@@ -343,3 +343,41 @@ test.describe('mobile', () => {
     });
   }
 });
+
+test.describe('venues turned off', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('step 2 takes a plain address and the draft gets the venue behind it', async ({ page }) => {
+    const calls = await mockApi(page);
+    // System › Roles turned Venues off: `venues` is not granted.
+    await page.route(`${API}/admin/permissions`, (route) =>
+      route.fulfill(json({ granted: ['dashboard', 'events', 'orders', 'settings'], hiddenPaths: ['/admin/venues'] }))
+    );
+    const located = { id: 'v-loc', name: '500 Fayetteville St', address: '500 Fayetteville St', city: 'Raleigh', state: 'NC', postalCode: '27601', timezone: 'America/New_York', isPublic: false };
+    const fromAddress: Request[] = [];
+    await page.route(`${API}/organizations/${ORG_ID}/venues/from-address`, (route) => {
+      fromAddress.push(route.request());
+      route.fulfill(json(located));
+    });
+
+    await page.goto('/admin/events/new');
+    await main(page).getByLabel('Event name').fill('Spring Fair');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Where is it?')).toBeVisible(COLD);
+    await expect(main(page).getByLabel('Venue')).toHaveCount(0);
+
+    await main(page).getByLabel('Street address').fill('500 Fayetteville St');
+    await main(page).getByLabel('City').fill('Raleigh');
+    await main(page).getByRole('button', { name: 'Use this address' }).click();
+    await expect(main(page).getByText('500 Fayetteville St, Raleigh, NC')).toBeVisible();
+    expect(fromAddress[0].postDataJSON()).toMatchObject({ name: '500 Fayetteville St', address: '500 Fayetteville St', city: 'Raleigh' });
+    expect(await serious(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'When is it?')).toBeVisible(COLD);
+    await main(page).getByLabel('Starts').fill('2031-06-01T16:00');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect.poll(() => calls.create.length).toBe(1);
+    expect(calls.create[0].postDataJSON().venueId).toBe('v-loc');
+  });
+});

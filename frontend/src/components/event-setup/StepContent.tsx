@@ -9,6 +9,8 @@ import type { CreatedVenue } from '@/components/VenueFlyout';
 import ErrorSummary from './ErrorSummary';
 import NameStep from './steps/NameStep';
 import VenueStep from './steps/VenueStep';
+import LocationStep from './steps/LocationStep';
+import { useCan } from '@/components/OrgContext';
 import DateStep from './steps/DateStep';
 import PendingStep from './steps/PendingStep';
 import DoneStep from './steps/DoneStep';
@@ -23,7 +25,7 @@ import type { SavedRowProps, SetupVenue } from './steps/types';
 
 const INTRO: Partial<Record<EventStep['key'], string>> = {
   name: 'The name buyers will see and search for.',
-  venue: 'Where it happens. The venue sets the time zone for every time on this event.',
+  venue: 'Where it happens. Its address sets the time zone for every time on this event.',
   date: 'When it starts, and if you like, when it ends.',
   review: 'Check what buyers will see, then publish.',
   description: 'What buyers read before they decide. You can change it any time.',
@@ -58,6 +60,8 @@ interface Props {
 
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
   const { step, fields, onChange, summary, summaryRef, onOpenStep, status, readOnly } = props;
+  // Venues off or hidden for the role (System › Roles): a plain address instead.
+  const VenueForm = useCan('venues') ? VenueStep : LocationStep;
   const form = { fields, onChange, errors: Object.fromEntries(props.inline.map((e) => [e.field, e.message])), status };
   if (step.key === 'done' && props.event) return <DoneStep ref={headingRef} event={props.event} orgId={props.orgId} />;
 
@@ -81,7 +85,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
         <fieldset disabled={readOnly} className="min-w-0">
           <legend className="sr-only">{step.title}</legend>
           {step.key === 'name' && <NameStep {...form} savedSlug={props.event?.slug ?? null} />}
-          {step.key === 'venue' && <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
+          {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
           {step.key === 'description' && <DescribeStep {...form} />}

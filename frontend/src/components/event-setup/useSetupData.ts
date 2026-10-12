@@ -86,7 +86,8 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
   }, [orgId, orgLoading, eventId, attempt]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
-  const addVenue = useCallback((venue: SetupVenue) => setVenues((list) => [...list, venue]), []);
+  // The address step can hand back a venue already in the list (same address).
+  const addVenue = useCallback((venue: SetupVenue) => setVenues((list) => [...list.filter((v) => v.id !== venue.id), venue]), []);
 
   return { load, venues, saved, setSaved, setAddOnCount, setMapStatus, reload, addVenue };
 }

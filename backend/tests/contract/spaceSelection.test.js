@@ -27,6 +27,7 @@ const { prisma } = await import('@jump/db');
 const { statusToken } = await import('../../src/services/applicationLinks.js');
 const { default: applicationFormService } = await import('../../src/services/ApplicationFormService.js');
 const { default: applicationTemplateService } = await import('../../src/services/ApplicationTemplateService.js');
+const { default: permissionService } = await import('../../src/services/PermissionService.js');
 
 const TAG = `space-sel-${Date.now()}`;
 const STAFF_EMAIL = `${TAG}-admin@test.local`;
@@ -123,6 +124,17 @@ describe('Vendor space selection modes (spec 039)', () => {
       expect((await patchForm(mapForm, { spaceSelection: 'BOTH' })).status).toBe(400);
       const free = await prisma.applicationForm.create({ data: { organizationId: organization.id, eventId: event.id, kind: 'FREE', name: 'Press', slug: `${TAG}-press` } });
       expect((await patchForm(free, { spaceSelection: 'MAP' })).status).toBe(400);
+    });
+
+    it('refuses switching to MAP while maps are turned off platform-wide', async () => {
+      permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: {}, ORGANIZER: {}, disabled: ['maps'] } };
+      try {
+        const res = await patchForm(mapForm, { spaceSelection: 'MAP' });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/Floor maps are turned off/);
+      } finally {
+        permissionService.clearCache();
+      }
     });
 
     it('lets a draft form switch to MAP before the map is ready, but not open', async () => {

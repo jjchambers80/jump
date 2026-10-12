@@ -81,6 +81,32 @@ class VenueService {
     return venue;
   }
 
+  /**
+   * The organization's venue at this exact address, else a new private one
+   * named after the place (or the street address). Used by the event wizard
+   * when Venues is off, so typing the same address twice reuses one row.
+   */
+  async venueForAddress(orgId, data) {
+    const fields = {
+      name: data.name,
+      address: data.address,
+      city: data.city || null,
+      state: data.state || null,
+      postalCode: data.postalCode || null,
+      country: data.country || 'US',
+    };
+    const existing = await prisma.venue.findFirst({
+      where: {
+        organizationId: orgId,
+        ...fields,
+        name: { equals: fields.name, mode: 'insensitive' },
+        address: { equals: fields.address, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return existing ?? this.createVenue(orgId, { ...fields, isPublic: false });
+  }
+
   /** Get venue by ID, scoped to organization. */
   async getVenueById(orgId, id) {
     return prisma.venue.findFirst({

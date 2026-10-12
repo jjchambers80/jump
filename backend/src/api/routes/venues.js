@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer } from '../../middleware/rbac.js';
+import { requireFeature, requireOrganizer } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { validateCreateVenue, validateUpdateVenue } from '../validators/venueValidators.js';
 import venueService from '../../services/VenueService.js';
@@ -39,7 +39,7 @@ publicRouter.get('/:venueId', gateByVenueParam, async (req, res, next) => {
  * POST /organizations/:orgId/venues
  * Create a venue within an organization (organizer/admin)
  */
-orgRouter.post('/', requireAuth, requireOrganizer, verifyOrgOwnership, validateCreateVenue, async (req, res, next) => {
+orgRouter.post('/', requireAuth, requireFeature('venues'), verifyOrgOwnership, validateCreateVenue, async (req, res, next) => {
   try {
     const venue = await venueService.createVenue(req.params.orgId, req.body);
     res.status(201).json(venue);
@@ -49,8 +49,24 @@ orgRouter.post('/', requireAuth, requireOrganizer, verifyOrgOwnership, validateC
 });
 
 /**
+ * POST /organizations/:orgId/venues/from-address
+ * The event wizard's location when Venues is off or hidden for the role: the
+ * organization's venue at this address, else a new private one (no public
+ * venue page). Events keep a venue either way, because time zone, tax region
+ * and tenancy all come from it. Not feature-gated on purpose.
+ */
+orgRouter.post('/from-address', requireAuth, requireOrganizer, verifyOrgOwnership, validateCreateVenue, async (req, res, next) => {
+  try {
+    res.json(await venueService.venueForAddress(req.params.orgId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /organizations/:orgId/venues
- * List venues for an organization (organizer/admin)
+ * List venues for an organization (organizer/admin). Not feature-gated: the
+ * event wizard reads it for the event's location and time zone.
  */
 orgRouter.get('/', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
   try {
@@ -65,7 +81,7 @@ orgRouter.get('/', requireAuth, requireOrganizer, verifyOrgOwnership, async (req
  * GET /organizations/:orgId/venues/:id
  * Get venue details with the events held there (organizer/admin)
  */
-orgRouter.get('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
+orgRouter.get('/:id', requireAuth, requireFeature('venues'), verifyOrgOwnership, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueDetails(req.params.orgId, req.params.id);
     if (!venue) {
@@ -81,7 +97,7 @@ orgRouter.get('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (
  * PATCH /organizations/:orgId/venues/:id
  * Update venue details (organizer/admin)
  */
-orgRouter.patch('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, validateUpdateVenue, async (req, res, next) => {
+orgRouter.patch('/:id', requireAuth, requireFeature('venues'), verifyOrgOwnership, validateUpdateVenue, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
     if (!venue) {
@@ -98,7 +114,7 @@ orgRouter.patch('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, valid
  * DELETE /organizations/:orgId/venues/:id
  * Delete a venue (organizer/admin, FR-010: blocked if events exist)
  */
-orgRouter.post('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, uploadImage, async (req, res, next) => {
+orgRouter.post('/:id/logo', requireAuth, requireFeature('venues'), verifyOrgOwnership, uploadImage, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -124,7 +140,7 @@ orgRouter.post('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, u
   }
 });
 
-orgRouter.delete('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
+orgRouter.delete('/:id/logo', requireAuth, requireFeature('venues'), verifyOrgOwnership, async (req, res, next) => {
   try {
     const { venue } = await venueService.setVenueLogo(
       req.params.orgId,
@@ -138,7 +154,7 @@ orgRouter.delete('/:id/logo', requireAuth, requireOrganizer, verifyOrgOwnership,
   }
 });
 
-orgRouter.delete('/:id', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
+orgRouter.delete('/:id', requireAuth, requireFeature('venues'), verifyOrgOwnership, async (req, res, next) => {
   try {
     const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
     if (!venue) {

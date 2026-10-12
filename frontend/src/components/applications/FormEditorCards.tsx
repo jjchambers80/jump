@@ -14,6 +14,7 @@ import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 // The event setup wizard's floor-map and collect-more steps (spec 050-L).
 import { wizardLink } from '@/components/event-setup/applicationSteps';
+import { useCan } from '@/components/OrgContext';
 import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -114,6 +115,7 @@ export function SettingsCard({
   const show = (part: 'details' | 'payment' | 'status') => !section || section === part;
   const template = mode === 'template';
   const standing = !template && form.eventId === null;
+  const maps = useCan('maps');
   const [state, setState] = useState({
     name: form.name,
     buttonLabel: form.buttonLabel ?? '',
@@ -271,7 +273,10 @@ export function SettingsCard({
                     ['TIERS', 'Choose a tier', 'Vendors pay for one of your tiers: the one you approve them as, or their own pick. You place them on the floor later.'],
                     ['MAP', 'Choose a spot on the floor map', 'Vendors pick a spot within the category you approve them for. Spots can have their own price.'],
                   ] as const
-                ).map(([value, title, detail]) => (
+                )
+                  // Maps off or hidden: no floor-map choosing, except on a form already set to it.
+                  .filter(([value]) => value !== 'MAP' || maps || form.spaceSelection === 'MAP')
+                  .map(([value, title, detail]) => (
                   <label key={value} className="flex cursor-pointer items-start gap-2 rounded-md border border-gray-200 p-3 text-sm has-[:checked]:border-accent-500 dark:border-slate-700">
                     <input
                       type="radio"
