@@ -108,6 +108,7 @@ export default function ContactsList({
   emptyState,
   bulkActions,
   selectAllMatching = true,
+  reloadKey = 0,
 }: {
   /** Page the filters write to (`/admin/contacts` or a list's page). */
   basePath: string;
@@ -124,6 +125,8 @@ export default function ContactsList({
   bulkActions?: (selection: ContactSelection, done: (reload?: boolean) => void) => ReactNode;
   /** Offer "Select all N matching" once a whole page is picked. */
   selectAllMatching?: boolean;
+  /** Change it to reload the rows (after an edit or import) without remounting. */
+  reloadKey?: number;
 }) {
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const router = useRouter();
@@ -193,7 +196,7 @@ export default function ContactsList({
     return () => {
       cancelled = true;
     };
-  }, [orgLoading, selectedOrgId, queryString, state.scope, reload]);
+  }, [orgLoading, selectedOrgId, queryString, state.scope, reload, reloadKey]);
 
   // A new page or filter starts a new selection.
   useEffect(() => {

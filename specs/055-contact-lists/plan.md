@@ -1,6 +1,6 @@
 # Spec 055 — Contact lists (Contacts › Lists)
 
-Status: **In progress** (2026-10-12): 055-A (PR #460), 055-B (PR #461) and 055-C built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
+Status: **In progress** (2026-10-12): 055-A (PR #460), 055-B (PR #461), 055-C (PR #462) and 055-D built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
 
 ## 1. Problem
 
@@ -180,6 +180,7 @@ On phones the dialog is a full-height sheet with a sticky footer for Cancel / Co
 - **Batches of 500 in transactions.** A failed batch reports its rows and the rest continue. The request is synchronous up to the 10,000-row cap. `ponytail:` move it to a background job with progress if imports get bigger.
 - **Results:** "N added · M new contacts · K already on the list · S skipped". The skipped rows can be downloaded as a CSV with a reason column.
 - **Timeline:** one `ContactComment` per created contact, authored by the importing staff member: "Created by import into *List*". A null author would mean the buyer did it (spec 040).
+- **As built (055-D):** two calls. `POST …/import/preview` returns the header, a guessed mapping, five sample rows and the row count. `POST …/import` takes the file again plus `mapping` (column index per field). Both are multipart (`middleware/csvUpload.js`, memory only). The address check also reads `ErasureSuppression` (spec 040), so an erased person is never re-created.
 - **Safety:** there is no CSV library in the repo, and none is added. A small RFC 4180 parser goes in `backend/src/utils/csv.js` (quotes, escaped quotes, embedded newlines, CRLF, BOM) with a unit test. Cells are stored as text, never evaluated. The export (§4.7) neutralizes formula injection.
 
 ### 4.7 CSV export

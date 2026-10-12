@@ -209,7 +209,8 @@ class ContactListService {
     return { count, sample };
   }
 
-  async _manual(organizationId, listId) {
+  /** The list, if it is this organization's manual list; else 404 / 409 LIST_NOT_MANUAL. */
+  async assertManual(organizationId, listId) {
     if (builtIn(listId)) throw coded(new ConflictError('Only manual lists have members'), 'LIST_NOT_MANUAL');
     const list = await this._find(organizationId, listId);
     if (list.type !== 'MANUAL') throw coded(new ConflictError('Only manual lists have members'), 'LIST_NOT_MANUAL');
@@ -228,7 +229,7 @@ class ContactListService {
   }
 
   async addMembers(organizationId, userId, listId, contactIds, source = 'PICKED') {
-    const list = await this._manual(organizationId, listId);
+    const list = await this.assertManual(organizationId, listId);
     const ids = await this._ownedContactIds(organizationId, contactIds);
     const { count } = await prisma.contactListMember.createMany({
       data: ids.map((contactId) => ({ listId: list.id, contactId, addedById: userId ?? null, source })),
@@ -242,7 +243,7 @@ class ContactListService {
    * CustomerService.whereFor), up to MAX_MEMBERS_FROM_QUERY.
    */
   async addMembersWhere(organizationId, userId, listId, where) {
-    const list = await this._manual(organizationId, listId);
+    const list = await this.assertManual(organizationId, listId);
     const scoped = { ...where, organizationId };
     const total = await prisma.contact.count({ where: scoped });
     if (total > MAX_MEMBERS_FROM_QUERY) {
@@ -264,7 +265,7 @@ class ContactListService {
   }
 
   async removeMembers(organizationId, listId, contactIds) {
-    const list = await this._manual(organizationId, listId);
+    const list = await this.assertManual(organizationId, listId);
     const ids = await this._ownedContactIds(organizationId, contactIds);
     const { count } = await prisma.contactListMember.deleteMany({ where: { listId: list.id, contactId: { in: ids } } });
     return { removed: count };

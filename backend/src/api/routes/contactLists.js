@@ -5,6 +5,10 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireFeature, requirePermission } from '../../middleware/rbac.js';
+import { requireRecentAuth } from '../../middleware/recentAuth.js';
+import { csvUpload } from '../../middleware/csvUpload.js';
+import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
+import contactListImportService from '../../services/ContactListImportService.js';
 import { activeOrgFor } from './adminScope.js';
 import contactListService from '../../services/ContactListService.js';
 import customerService from '../../services/CustomerService.js';
@@ -21,6 +25,8 @@ router.use(requireAuth);
 router.use(requireFeature('customers'));
 
 const canEdit = requirePermission('customers.lists');
+const canImport = requirePermission('customers.import');
+const importLimiter = makeLimiter('CONTACT_IMPORT', LIMITS.CONTACT_IMPORT);
 const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 
 router.get('/', wrap(async (req, res) => {
@@ -66,6 +72,23 @@ router.post('/:listId/members', canEdit, validateAddMembers, wrap(async (req, re
 
 router.delete('/:listId/members', canEdit, validateMembers, wrap(async (req, res) => {
   res.json(await contactListService.removeMembers(await activeOrgFor(req), req.params.listId, req.body.contactIds));
+}));
+
+// CSV import (spec 055 §4.6): preview reads the columns, import adds the rows.
+router.post('/:listId/import/preview', canImport, csvUpload, wrap(async (req, res) => {
+  res.json(await contactListImportService.preview(await activeOrgFor(req), req.params.listId, req.file.buffer));
+}));
+
+router.post('/:listId/import', importLimiter, canImport, requireRecentAuth, csvUpload, wrap(async (req, res) => {
+  res.json(
+    await contactListImportService.import(
+      await activeOrgFor(req),
+      req.user.id,
+      req.params.listId,
+      req.file.buffer,
+      req.body?.mapping
+    )
+  );
 }));
 
 export default router;

@@ -157,6 +157,12 @@ export const LIMITS = Object.freeze({
     limit: 120,
     message: 'Too many OAuth token requests. Try again later.',
   },
+  // Spec 055: contact list CSV imports (staff, ADMIN + step-up; up to 10,000 rows each)
+  CONTACT_IMPORT: {
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    message: 'Too many imports. Try again later.',
+  },
   // Spec 042: storefront contact-form messages per IP
   CONTACT_SUBMIT: {
     windowMs: 60 * 60 * 1000,

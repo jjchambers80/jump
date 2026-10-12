@@ -78,3 +78,13 @@ export function cleanFilters(filters: ContactListFilters): ContactListFilters {
 }
 
 export const contactListHref = (id: string) => `/admin/contacts/lists/${encodeURIComponent(id)}`;
+
+/** One CSV cell; a leading = + - @ tab or CR gets an apostrophe so a spreadsheet never runs it. */
+export function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  let str = String(value);
+  if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+export const csvLine = (values: unknown[]) => values.map(csvCell).join(',');

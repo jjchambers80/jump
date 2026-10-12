@@ -15,6 +15,7 @@ import { lookupGeo } from '../utils/geoip.js';
 import logger from '../utils/logger.js';
 import { featureFor, entityKey } from './features.js';
 import { redactChanges } from './redact.js';
+import { csvCell } from '../utils/csv.js';
 
 const VERBS = {
   CREATE: 'created',
@@ -29,14 +30,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const retentionDays = () => Number(process.env.AUDIT_RETENTION_DAYS) || 730;
 
 const CSV_COLUMNS = ['When', 'Who', 'Actor type', 'Action', 'Feature', 'Record', 'Record id', 'Changes', 'Source', 'Location', 'Device', 'Request id'];
-
-// Quotes, and refuses to let a spreadsheet read a value as a formula.
-function csvCell(value) {
-  if (value === null || value === undefined) return '';
-  let str = String(value);
-  if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
-  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-}
 
 function whereFor(organizationId, f = {}) {
   const where = { organizationId };

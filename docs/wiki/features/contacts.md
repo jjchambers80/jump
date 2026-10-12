@@ -44,7 +44,17 @@ There are no customer segments (Prospect / New / Repeat / Lapsed were removed wi
   - Once a whole page is ticked, **Select all N matching** sends the page's filters as `{ query }` to `POST /admin/contact-lists/:id/members`. The backend resolves them with `CustomerService.whereFor` inside the active organization, up to 10,000 contacts (409 `TOO_MANY_CONTACTS`).
   - A manual list's page has **Add contacts**, a link to `/admin/contacts?addTo=<id>` that preselects the list, and a **Remove from list** bulk action (picked rows only).
   - A contact's page shows a **Lists** card (`[contactId]/ContactListsCard.tsx`) with its manual lists, remove ×, and Add to list.
-- **Still to come:** CSV import (055-D), CSV export (055-E).
+- **CSV import (055-D):** a manual list's page has **Import CSV** (`lists/ImportDialog.tsx`; catalog action `customers.import`, ADMIN by default, step-up via `withReauth`, `CONTACT_IMPORT` limiter at 10 per hour).
+  - **The file:** up to 10,000 rows and 5 MB.
+  - **Matching columns:** `POST /admin/contact-lists/:id/import/preview` returns the columns, a guessed mapping and five sample rows. The user matches Email (required), first / last or full name, phone and tags.
+  - **The import:** `POST …/import` with the file and `mapping`. The server parses and checks every row itself (`ContactListImportService`, `utils/csv.js`), in batches of 500.
+  - **Which rows go where:**
+    - An existing contact joins the list unchanged; only the file's tags are added.
+    - A new email becomes a contact who is **never subscribed to email**, with a timeline note by the importer.
+    - Invalid or duplicate emails are skipped.
+    - Erased people (`ErasureSuppression`) and people with an erasure scheduled are skipped as "asked to be deleted".
+  - **Results:** added, new, already on it and skipped counts, plus a download of the skipped rows as CSV.
+- **Still to come:** CSV export (055-E).
 
 ## API
 
