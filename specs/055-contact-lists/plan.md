@@ -1,6 +1,6 @@
 # Spec 055 — Contact lists (Contacts › Lists)
 
-Status: **Planned** (2026-10-12). Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
+Status: **In progress** (2026-10-12): 055-A built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
 
 ## 1. Problem
 
@@ -52,7 +52,7 @@ The Zeffy envelope icon on each row does not exist in v1.
 model ContactList {
   id             String          @id @default(cuid())
   organizationId String
-  name           String          // unique per org, case-insensitive (service check + index on lower(name))
+  name           String          // unique per org, case-insensitive (service check; no lower(name) index, which migration replay would read as drift)
   type           ContactListType // AUTOMATIC | MANUAL
   filters        Json?           // AUTOMATIC only; validated shape, §4.2
   createdById    String?         // User; null after the user is deleted
@@ -195,7 +195,7 @@ On phones the dialog is a full-height sheet with a sticky footer for Cancel / Co
 
 | Card | Scope | Depends on |
 |---|---|---|
-| **055-A** Model + API | Migration, `ContactListService`, filter validator, `customerWhere` extension (new keys, `list=`), built-ins, list CRUD / duplicate / preview / members routes, catalog actions `customers.lists` / `.import` / `.export`, audit mapping, export/erase coverage, contract + unit tests | — |
+| **055-A** Model + API | Migration, `ContactListService`, filter translator `services/contactListFilters.js` (shared with `customerWhere`, new keys, `list=`), built-ins, list CRUD / duplicate / preview / members routes, `GET /admin/customers/:id/lists`, catalog action `customers.lists`, audit mapping, export/erase coverage, contract + unit tests. `customers.import` / `customers.export` are added by D / E with their routes: `permissions.test.js` fails on an action no route enforces | — |
 | **055-B** Lists tab + create dialog | `ContactsHeader` third tab, Lists page, create dialog with filter builder and live count, list page using the extracted `ContactsTable`, rename / edit / duplicate / delete, Playwright + axe at 375 and 1280 | A |
 | **055-C** Picking members | Contacts select mode + bulk "Add to list", "Select all N matching", list page remove, contact detail Lists card | A, B |
 | **055-D** CSV import | Upload → map → results flow, server import, skipped-rows CSV, limiter, step-up | A, B |

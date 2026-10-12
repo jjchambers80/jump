@@ -289,6 +289,7 @@ class ContactErasureService {
 
       // Staff notes about the person go too; one audit line remains.
       await tx.contactComment.deleteMany({ where: { contactId } });
+      await tx.contactListMember.deleteMany({ where: { contactId } }); // spec 055
       await tx.buyerLoginToken.deleteMany({ where: { contactId } });
       await tx.contact.update({ where: { id: contactId }, data: anonymizedContactData(contact, now) });
       await tx.contactComment.create({

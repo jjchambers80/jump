@@ -39,7 +39,7 @@ class BuyerDataExportService {
     if (!contact) throw new NotFoundError('Customer not found');
     const scope = { contactId, organizationId };
 
-    const [orders, tickets, rsvps, applications, profiles, acceptances, comments] = await Promise.all([
+    const [orders, tickets, rsvps, applications, profiles, acceptances, comments, lists] = await Promise.all([
       prisma.order.findMany({
         where: { contactId, organizationId },
         orderBy: { createdAt: 'asc' },
@@ -107,6 +107,14 @@ class BuyerDataExportService {
             where: scope,
             orderBy: { createdAt: 'asc' },
             select: { kind: true, body: true, createdAt: true, author: { select: { name: true, email: true } } },
+          })
+        : Promise.resolve([]),
+      // Spec 055: manual lists staff put this person on (staff data, like notes)
+      includeStaffNotes
+        ? prisma.contactListMember.findMany({
+            where: { contactId, list: { organizationId } },
+            orderBy: { addedAt: 'asc' },
+            select: { addedAt: true, list: { select: { name: true } } },
           })
         : Promise.resolve([]),
     ]);
@@ -201,6 +209,7 @@ class BuyerDataExportService {
       legalAcceptances: acceptances,
       ...(includeStaffNotes && {
         staffTimeline: comments.map((c) => ({ kind: c.kind, body: c.body, createdAt: c.createdAt, author: c.author ? c.author.name || c.author.email : 'Customer' })),
+        contactLists: lists.map((m) => ({ name: m.list.name, addedAt: m.addedAt })),
       }),
     };
   }

@@ -9,6 +9,8 @@ import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import contactOptInService from './ContactOptInService.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { CONTACT_SOURCES, PAYING_WHERE, sourceWhere } from './contactListFilters.js';
+import contactListService from './ContactListService.js';
 
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);
@@ -30,7 +32,7 @@ const ORDER_SELECT = {
 
 /** By default a customer is a contact with money collected; `all` also returns prospects (spec 032 phase 3). */
 function customerPredicate(scope = 'customers') {
-  return scope === 'all' ? {} : { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } };
+  return scope === 'all' ? {} : PAYING_WHERE;
 }
 
 /**
@@ -132,55 +134,50 @@ export function customerNavigation(contacts, contactId, options = {}) {
   };
 }
 
-const CUSTOMER_SOURCES = ['tickets', 'rsvp', 'subscribed', 'form'];
-
 function normalizedSource(source) {
-  return CUSTOMER_SOURCES.find((candidate) => candidate.toLowerCase() === String(source || '').toLowerCase());
+  return CONTACT_SOURCES.find((candidate) => candidate.toLowerCase() === String(source || '').toLowerCase());
 }
 
-function customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId } = {}) {
+function customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId } = {}, listWhere = null) {
   const validatedSource = normalizedSource(source);
   // rsvp=going is kept as an alias for source=rsvp (backward compat)
   const effectiveRsvp = validatedSource === 'rsvp' ? 'going' : rsvp;
 
-  return {
-    ...(organizationId && { organizationId }),
-    ...(validatedSource === 'tickets'
-      ? { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } }
-      : validatedSource === 'rsvp'
-      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
-      : validatedSource === 'subscribed'
-      ? { emailSubscribed: true }
-      : validatedSource === 'form'
-      ? {
-          applications: {
-            some: {
-              status: { not: 'DRAFT' },
-              form: { eventId: null, ...(formId && { id: formId }) },
-            },
-          },
-        }
-      : effectiveRsvp === 'going'
-      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
-      : customerPredicate(scope)),
-    ...(tag && { tags: { has: tag } }),
-    ...(search && {
-      AND: [
+  const and = [];
+  if (search) {
+    and.push({
+      OR: [
+        { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
         {
-          OR: [
-            { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            {
-              applicantProfiles: {
-                some: { businessName: { contains: search, mode: 'insensitive' } },
-              },
-            },
-          ],
+          applicantProfiles: {
+            some: { businessName: { contains: search, mode: 'insensitive' } },
+          },
         },
       ],
-    }),
+    });
+  }
+  // Spec 055: the contacts on a list (its filters or its members)
+  if (listWhere) and.push(listWhere);
+
+  return {
+    ...(organizationId && { organizationId }),
+    ...(validatedSource && validatedSource !== 'rsvp'
+      ? sourceWhere(validatedSource, { formId })
+      : effectiveRsvp === 'going'
+      ? sourceWhere('rsvp', { eventId })
+      : customerPredicate(scope)),
+    ...(tag && { tags: { has: tag } }),
+    ...(and.length && { AND: and }),
   };
+}
+
+/** `list` (spec 055) narrows any Contacts query to one list's contacts. */
+async function listWhereFor(organizationId, list) {
+  if (!list) return null;
+  if (typeof list !== 'string' || list.length > 64 || !organizationId) throw new NotFoundError('List not found');
+  return contactListService.whereFor(organizationId, list);
 }
 
 class CustomerService {
@@ -188,19 +185,23 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search, tag, scope, rsvp, eventId, source, formId, sort, direction }
+   * @param {Object} options - { page, limit, search, tag, scope, rsvp, eventId, source, formId, list, sort, direction }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
   async getCustomersByOrganization(
     organizationId,
-    { page = 1, limit = 20, search, tag, scope, rsvp, eventId, source, formId, sort = 'createdAt', direction = 'desc' } = {}
+    { page = 1, limit = 20, search, tag, scope, rsvp, eventId, source, formId, list, sort = 'createdAt', direction = 'desc' } = {}
   ) {
     page = Math.max(1, parseInt(page) || 1);
     limit = Math.max(1, parseInt(limit) || 20);
 
     // Aggregate sorts are derived from paid orders, so filtering and
     // ordering happen before pagination. The same helper powers detail navigation.
-    const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId });
+    const where = customerWhere(
+      organizationId,
+      { search, tag, scope, rsvp, eventId, source, formId },
+      await listWhereFor(organizationId, list)
+    );
     const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
     const databaseOrder =
       sort === 'name'
@@ -422,7 +423,7 @@ class CustomerService {
       })));
 
     const navigationContacts = await prisma.contact.findMany({
-      where: customerWhere(organizationId, listOptions),
+      where: customerWhere(organizationId, listOptions, await listWhereFor(organizationId, listOptions.list)),
       include: { orders: ORDER_SELECT },
     });
     const navigation = customerNavigation(navigationContacts, contactId, listOptions);
