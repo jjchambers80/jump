@@ -2048,6 +2048,7 @@ model NotificationTemplate {
   key            String
   subject        String
   body           String // plain text with {{merge.fields}}; system blocks are added by the renderer
+  enabled        Boolean  @default(true) // false only for registry keys marked optional
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

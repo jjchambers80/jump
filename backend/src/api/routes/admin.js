@@ -16,7 +16,7 @@ import {
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
@@ -1056,7 +1056,7 @@ async function notificationDraft(req) {
 router.get('/settings/notifications', wrap(async (req, res) => {
   res.json({ groups: await notificationTemplateService.list(await activeOrgFor(req)) });
 }));
-router.put('/settings/notifications/:key', requirePermission('settings.notifications'), validateTemplateBody, wrap(async (req, res) => {
+router.put('/settings/notifications/:key', requirePermission('settings.notifications'), validateNotificationBody, wrap(async (req, res) => {
   res.json(await notificationTemplateService.update(await activeOrgFor(req), req.params.key, req.body));
 }));
 router.delete('/settings/notifications/:key', requirePermission('settings.notifications'), wrap(async (req, res) => {

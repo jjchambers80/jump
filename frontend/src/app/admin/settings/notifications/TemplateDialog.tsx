@@ -4,12 +4,13 @@ import { FormEvent, RefObject, useState } from 'react';
 import SettingsDialog from '../SettingsDialog';
 import { fieldClass, hintClass, labelClass } from '../formShared';
 
-type Draft = { subject: string; body: string };
+type Draft = { subject: string; body: string; enabled?: boolean };
 
 interface TemplateDialogProps {
   title: string;
   /** When the email goes out, shown under the title. */
   when: string;
+  /** `enabled` set = the email is optional and gets an on/off switch. */
   template: Draft & { isDefault: boolean };
   mergeFields: { key: string; description: string }[];
   /** System parts added below the message (spec 053), listed so nobody retypes them. */
@@ -49,18 +50,20 @@ export default function TemplateDialog({
 }: TemplateDialogProps) {
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
+  const [enabled, setEnabled] = useState(template.enabled);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [rendered, setRendered] = useState<{ subject: string; html: string } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [testState, setTestState] = useState<{ busy: boolean; message: string | null; failed: boolean }>({ busy: false, message: null, failed: false });
-  const dirty = subject !== template.subject || body !== template.body;
+  const dirty = subject !== template.subject || body !== template.body || enabled !== template.enabled;
+  const draft = (): Draft => ({ subject, body, ...(enabled !== undefined && { enabled }) });
   const draftValid = subject.trim() !== '' && body.trim() !== '';
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const ok = await onSave({ subject, body });
+    const ok = await onSave(draft());
     setSaving(false);
     if (ok) onClose();
   };
@@ -108,6 +111,28 @@ export default function TemplateDialog({
       onSubmit={submit}
     >
       <p className="text-sm text-gray-600 dark:text-slate-400">{when}</p>
+      {enabled !== undefined && (
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-700">
+          <span>
+            <span id="notification-enabled-label" className="block text-sm font-medium text-gray-900 dark:text-white">Send this email</span>
+            <span id="notification-enabled-hint" className="block text-sm text-gray-600 dark:text-slate-400">{enabled ? 'On' : 'Off: nobody receives it until you turn it back on.'}</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-labelledby="notification-enabled-label"
+            aria-describedby="notification-enabled-hint"
+            disabled={!canEdit}
+            onClick={() => setEnabled(!enabled)}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 disabled:opacity-50 motion-reduce:transition-none ${
+              enabled ? 'bg-accent-500' : 'bg-gray-300 dark:bg-slate-600'
+            }`}
+          >
+            <span aria-hidden="true" className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform motion-reduce:transition-none ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+      )}
       {preview && (
         <div role="tablist" aria-label="Email view" className="mt-4 flex gap-1">
           <button type="button" role="tab" aria-selected={tab === 'edit'} aria-controls="notification-edit-panel" className={tabClass(tab === 'edit')} onClick={() => setTab('edit')}>
@@ -169,7 +194,7 @@ export default function TemplateDialog({
               <p className="text-sm text-gray-600 dark:text-slate-400">
                 Subject: <span className="font-medium text-gray-900 dark:text-white" data-testid="notification-preview-subject">{rendered.subject}</span>
               </p>
-              <p className={hintClass}>Shown with sample order details.</p>
+              <p className={hintClass}>Shown with sample details.</p>
               {/* Sandboxed: no scripts, no same-origin access. */}
               <iframe title={`${title} preview`} sandbox="" srcDoc={rendered.html} className="mt-2 h-96 w-full rounded-lg border border-gray-200 bg-white dark:border-slate-700" />
             </>
