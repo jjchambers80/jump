@@ -124,7 +124,10 @@ jobs:
         run: npm run test:unit
       - name: Contract + integration tests
         working-directory: backend
-        run: npm test -- --runInBand tests/contract tests/integration
+        # One --runInBand process for the whole suite outgrew Node's default
+        # heap (OOM on main since d7fee5d). ponytail: bigger heap, split the
+        # suite into shards if it outgrows this too.
+        run: NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=6144" npx jest --runInBand tests/contract tests/integration
 
   # ── Frontend typecheck + unit tests ──────────────────────────────────
   frontend:
