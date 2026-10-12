@@ -118,7 +118,6 @@ async function mockSecurity(page: Page, initial: Partial<typeof baseOverview> = 
 async function completeReauth(page: Page) {
   const dialog = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Send code' }).click();
   await expect(dialog.getByText('We emailed a 6-digit code')).toBeVisible();
   await dialog.getByLabel('Verification code').fill('000000');
   await dialog.getByRole('button', { name: 'Verify' }).click();

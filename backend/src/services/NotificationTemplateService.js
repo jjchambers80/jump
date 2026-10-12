@@ -6,7 +6,7 @@
 
 import { prisma } from '@jump/db';
 import { NOTIFICATION_GROUPS, NOTIFICATIONS, NOTIFICATIONS_BY_KEY } from '../config/notifications.js';
-import { NotFoundError } from '../middleware/errorHandler.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { cleanTemplate } from '../utils/renderTemplate.js';
 import logger from '../utils/logger.js';
 
@@ -29,15 +29,21 @@ class NotificationTemplateService {
     return this._serialize(entry, row);
   }
 
+  /** `draft.enabled` is accepted only for optional keys (the RSVP reminder). */
   async update(organizationId, key, draft) {
     const entry = this._entry(key);
     const { subject, body } = cleanTemplate(draft);
+    if (draft.enabled !== undefined) {
+      if (!entry.optional) throw new ValidationError('This email cannot be switched off');
+      if (typeof draft.enabled !== 'boolean') throw new ValidationError('enabled must be a boolean');
+    }
+    const enabled = draft.enabled ?? undefined;
     const row = await prisma.notificationTemplate.upsert({
       where: { organizationId_key: { organizationId, key } },
-      update: { subject, body },
-      create: { organizationId, key, subject, body },
+      update: { subject, body, ...(enabled !== undefined && { enabled }) },
+      create: { organizationId, key, subject, body, ...(enabled !== undefined && { enabled }) },
     });
-    logger.info('Notification template updated', { event: 'notification_template_updated', organizationId, key });
+    logger.info('Notification template updated', { event: 'notification_template_updated', organizationId, key, enabled: row.enabled });
     return this._serialize(entry, row);
   }
 
@@ -48,17 +54,17 @@ class NotificationTemplateService {
   }
 
   /**
-   * `{ subject, body }` to send: the store's row, else the default. Never
-   * throws for a known key — a failed lookup must not stop an order email.
+   * `{ subject, body, enabled }` to send: the store's row, else the default.
+   * Never throws for a known key — a failed lookup must not stop an email.
    */
   async resolve(organizationId, key) {
     const entry = this._entry(key);
     try {
-      const { subject, body } = await this.get(organizationId, key);
-      return { subject, body };
+      const { subject, body, enabled } = await this.get(organizationId, key);
+      return { subject, body, enabled };
     } catch (error) {
       logger.warn('Notification template lookup failed; using the default', { organizationId, key, error: error.message });
-      return { ...entry.defaults };
+      return { ...entry.defaults, enabled: true };
     }
   }
 
@@ -77,6 +83,8 @@ class NotificationTemplateService {
       mergeFields: entry.mergeFields.map(([key, description]) => ({ key, description })),
       subject: row?.subject ?? entry.defaults.subject,
       body: row?.body ?? entry.defaults.body,
+      optional: entry.optional === true,
+      enabled: row?.enabled ?? true,
       isDefault: !row,
       updatedAt: row?.updatedAt ?? null,
     };

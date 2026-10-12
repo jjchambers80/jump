@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import api from '@/services/api';
-import type { AddOnLineInput, AdminApplication, AdminForm, AdminShift, ShiftInput, AdminTier, ApplicationList, Decision, FormTemplate, MessageTemplate, Question } from '@/lib/applications';
+import type { AddOnLineInput, AdminApplication, AdminForm, AdminShift, ShiftInput, AdminTier, ApplicationList, Decision, FormTemplate, Question } from '@/lib/applications';
 
 export interface DigestSettings {
   enabled: boolean;
@@ -122,21 +122,10 @@ export function useApplicationsApi(eventId: string, standingFormId?: string) {
   }, [eventId, standingFormId]);
 }
 
+/** Settings › Notifications: the daily application digest switch (spec 011 phase 3). */
 export function useTemplatesApi() {
   return useMemo(
     () => ({
-      list: (scope?: 'EVENT' | 'STANDING') => {
-        const params = scope ? `?scope=${scope}` : '';
-        return api.get<{ data: MessageTemplate[]; mergeFields: { key: string; description: string }[] }>(`/admin/settings/application-templates${params}`);
-      },
-      update: (action: string, body: { subject: string; body: string }, scope?: 'EVENT' | 'STANDING') => {
-        const params = scope ? `?scope=${scope}` : '';
-        return api.put<MessageTemplate>(`/admin/settings/application-templates/${action}${params}`, body);
-      },
-      reset: (action: string, scope?: 'EVENT' | 'STANDING') => {
-        const params = scope ? `?scope=${scope}` : '';
-        return api.delete<MessageTemplate>(`/admin/settings/application-templates/${action}${params}`);
-      },
       digest: () => api.get<DigestSettings>('/admin/settings/application-digest'),
       updateDigest: (enabled: boolean) => api.patch<DigestSettings>('/admin/settings/application-digest', { enabled }),
     }),

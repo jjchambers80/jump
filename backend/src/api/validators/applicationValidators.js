@@ -98,9 +98,10 @@ export const validateBulkBody = (req, res, next) => {
   }
 };
 
-export const validateTemplateBody = (req, res, next) => {
+/** Spec 053: a notification template, plus `enabled` for optional emails. */
+export const validateNotificationBody = (req, res, next) => {
   try {
-    onlyFields(req.body, new Set(['subject', 'body']), 'template');
+    onlyFields(req.body, new Set(['subject', 'body', 'enabled']), 'notification');
     if (typeof req.body?.subject !== 'string' || typeof req.body?.body !== 'string') throw new ValidationError('subject and body are required strings');
     next();
   } catch (error) {

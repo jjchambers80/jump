@@ -354,7 +354,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
       expect(preview.status).toBe(200);
       expect(preview.body.subject).toBe(`You are on the waitlist for ${TAG} Expo 2027`);
       // An org-specific template is honoured too.
-      const custom = await request(app).put('/admin/settings/application-templates/WAITLISTED').set(...auth(adminToken)).send({ subject: 'Custom waitlist {{event.name}}', body: 'Hi {{applicant.firstName}}' });
+      const custom = await request(app).put('/admin/settings/notifications/application.event.WAITLISTED').set(...auth(adminToken)).send({ subject: 'Custom waitlist {{event.name}}', body: 'Hi {{applicant.firstName}}' });
       expect(custom.status).toBe(200);
       const previewCustom = await request(app).post(`/admin/events/${eventId}/applications/${pressApp.id}/preview`).set(...auth(sysToken)).send({ decision: 'WAITLIST' });
       expect(previewCustom.body.subject).toBe(`Custom waitlist ${TAG} Expo 2027`);
@@ -364,7 +364,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
       expect(sentEmails).toHaveLength(1);
       expect(sentEmails[0].subject).toBe(`Custom waitlist ${TAG} Expo 2027`);
       // Put things back for the tests that follow.
-      expect((await request(app).delete('/admin/settings/application-templates/WAITLISTED').set(...auth(adminToken))).status).toBe(200);
+      expect((await request(app).delete('/admin/settings/notifications/application.event.WAITLISTED').set(...auth(adminToken))).status).toBe(200);
       await prisma.application.update({ where: { id: pressApp.id }, data: { status: 'SUBMITTED', decidedAt: null, decidedById: null } });
       await cleanupStaff([`sys@${TAG}.test`]);
     });
@@ -471,25 +471,26 @@ describe('Applications contract (spec 011 phase 1)', () => {
 
   describe('templates', () => {
     it('lists defaults with merge fields; ADMIN edits and resets; unbalanced sections rejected', async () => {
-      const list = await request(app).get('/admin/settings/application-templates').set(...auth(organizerToken));
+      const list = await request(app).get('/admin/settings/notifications').set(...auth(organizerToken));
       expect(list.status).toBe(200);
-      expect(list.body.data.map((t) => t.action)).toEqual(['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID']);
-      expect(list.body.data.every((t) => t.isDefault)).toBe(true);
-      expect(list.body.mergeFields.some((m) => m.key === 'profile.businessName')).toBe(true);
+      const event = list.body.groups.find((g) => g.key === 'applications').notifications;
+      expect(event.map((t) => t.key)).toEqual(['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'].map((a) => `application.event.${a}`));
+      expect(event.every((t) => t.isDefault)).toBe(true);
+      expect(event[0].mergeFields.some((m) => m.key === 'profile.businessName')).toBe(true);
 
-      const forbidden = await request(app).put('/admin/settings/application-templates/APPROVED').set(...auth(organizerToken)).send({ subject: 'x', body: 'y' });
+      const forbidden = await request(app).put('/admin/settings/notifications/application.event.APPROVED').set(...auth(organizerToken)).send({ subject: 'x', body: 'y' });
       expect(forbidden.status).toBe(403);
 
-      const bad = await request(app).put('/admin/settings/application-templates/APPROVED').set(...auth(adminToken)).send({ subject: 'Hi', body: '{{#tier}}oops' });
+      const bad = await request(app).put('/admin/settings/notifications/application.event.APPROVED').set(...auth(adminToken)).send({ subject: 'Hi', body: '{{#tier}}oops' });
       expect(bad.status).toBe(400);
 
-      const saved = await request(app).put('/admin/settings/application-templates/APPROVED').set(...auth(adminToken)).send({ subject: 'Approved: {{profile.businessName}}', body: 'Hi {{applicant.firstName}}, <b>welcome</b>' });
+      const saved = await request(app).put('/admin/settings/notifications/application.event.APPROVED').set(...auth(adminToken)).send({ subject: 'Approved: {{profile.businessName}}', body: 'Hi {{applicant.firstName}}, <b>welcome</b>' });
       expect(saved.status).toBe(200);
-      expect(saved.body).toMatchObject({ action: 'APPROVED', isDefault: false });
+      expect(saved.body).toMatchObject({ key: 'application.event.APPROVED', isDefault: false });
 
-      const reset = await request(app).delete('/admin/settings/application-templates/APPROVED').set(...auth(adminToken));
+      const reset = await request(app).delete('/admin/settings/notifications/application.event.APPROVED').set(...auth(adminToken));
       expect(reset.body.isDefault).toBe(true);
-      expect((await request(app).put('/admin/settings/application-templates/NOPE').set(...auth(adminToken)).send({ subject: 'x', body: 'y' })).status).toBe(404);
+      expect((await request(app).put('/admin/settings/notifications/application.event.NOPE').set(...auth(adminToken)).send({ subject: 'x', body: 'y' })).status).toBe(404);
     });
   });
 

@@ -1,75 +1,51 @@
-// Settings › Notifications (spec 011, renamed from Settings › Applications):
-// every email the system sends that the store can edit, one row each; a row
-// opens a dialog with the subject and message. ADMIN edits; others view.
+// Settings › Notifications (spec 011 + spec 053): every email the system
+// sends that the store can edit, one row each, grouped as the backend
+// registry (backend/src/config/notifications.js) lists them; a row opens a
+// dialog with the subject, message, preview and test send. ADMIN edits;
+// others view.
 'use client';
 
 import { createRef, RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import SettingsNav from '../SettingsNav';
 import SummaryRow from '../SummaryRow';
 import TemplateDialog from './TemplateDialog';
+import { useNotificationsApi, type NotificationGroup, type NotificationTemplate } from './useNotificationsApi';
 import { useTemplatesApi, describeError, type DigestSettings } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
-import type { MessageTemplate, TemplateAction } from '@/lib/applications';
 import { useCan } from '@/components/OrgContext';
 import { Mail } from 'lucide-react';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const list = 'mt-4 divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 dark:divide-slate-700 dark:border-slate-700';
 
-type Copy = { title: string; when: string };
-
-const EVENT_COPY: Record<TemplateAction, Copy> = {
-  RECEIVED: { title: 'Application received', when: 'Sent when someone submits an application.' },
-  APPROVED: { title: 'Approved', when: 'Free forms: sent on approval. Paid forms: sent once the space is paid.' },
-  CHOOSE_SPACE: { title: 'Choose your space', when: 'Paid forms: sent on approval, asking the vendor to pick a space and pay.' },
-  REJECTED: { title: 'Rejected', when: 'Sent when you reject an application.' },
-  WAITLISTED: { title: 'Waitlisted', when: 'Sent when you move an application to the waitlist.' },
-  WITHDRAWN: { title: 'Withdrawn', when: 'Sent when an application is withdrawn.' },
-  PAYMENT_DUE: { title: 'Payment due', when: 'Paid forms: sent when a balance is due.' },
-  ADD_ONS_CHANGED: { title: 'Add-ons changed', when: 'Paid forms: sent when you change the add-ons on an application.' },
-  TIER_CHANGED: { title: 'Tier changed', when: 'Paid forms: sent when you move an application to another tier.' },
-  WAIVED: { title: 'Balance waived', when: 'Paid forms: sent when you waive the balance.' },
-  OFFLINE_PAID: { title: 'Payment recorded offline', when: 'Paid forms: sent when you record a payment taken outside Eventimus.' },
-};
-
-// Spec 044: standing forms (no event) have only these four emails.
-const STANDING_COPY: Partial<Record<TemplateAction, Copy>> = {
-  RECEIVED: { title: 'Application received', when: 'Sent when someone submits a standing form.' },
-  APPROVED: { title: 'Approved', when: 'Sent when you approve a standing-form application.' },
-  WAITLISTED: { title: 'Waitlisted', when: 'Sent when you move a standing-form application to the waitlist.' },
-  REJECTED: { title: 'Rejected', when: 'Sent when you reject a standing-form application.' },
-};
-
-type Scope = 'EVENT' | 'STANDING';
-type MergeField = { key: string; description: string };
-const keyOf = (scope: Scope, action: TemplateAction) => `${scope}:${action}`;
+/** Standing forms repeat the event labels ("Approved"), so their rows say which. */
+const rowLabel = (group: NotificationGroup, n: NotificationTemplate) => `Edit ${n.label} email${group.key === 'standingForms' ? ' (standing forms)' : ''}`;
 
 export default function NotificationsPage() {
-  const api = useTemplatesApi();
-  const canEdit = useCan('settings.applications');
-  const [templates, setTemplates] = useState<Record<Scope, MessageTemplate[]>>({ EVENT: [], STANDING: [] });
-  const [mergeFields, setMergeFields] = useState<Record<Scope, MergeField[]>>({ EVENT: [], STANDING: [] });
+  const digestApi = useTemplatesApi();
+  const api = useNotificationsApi();
+  const canEdit = useCan('settings.notifications');
+  const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [digest, setDigest] = useState<DigestSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingDigest, setSavingDigest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [open, setOpen] = useState<{ scope: Scope; action: TemplateAction } | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, RefObject<HTMLButtonElement>>>({});
   const refFor = (key: string) => (rowRefs.current[key] ??= createRef<HTMLButtonElement>());
 
   const load = useCallback(async () => {
     try {
-      // Digest settings are additive (phase 3): a failure there must not hide the templates.
-      const [eventRes, standingRes, d] = await Promise.all([api.list(), api.list('STANDING'), api.digest().catch(() => null)]);
-      setTemplates({ EVENT: eventRes.data, STANDING: standingRes.data });
-      setMergeFields({ EVENT: eventRes.mergeFields, STANDING: standingRes.mergeFields });
+      // Digest settings are additive (spec 011 phase 3): a failure there must not hide the emails.
+      const [n, d] = await Promise.all([api.list(), digestApi.digest().catch(() => null)]);
+      setGroups(n.groups);
       setDigest(d);
     } catch (err) {
       setError(describeError(err, 'Could not load notifications'));
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, digestApi]);
 
   useEffect(() => {
     load();
@@ -82,7 +58,7 @@ export default function NotificationsPage() {
     setError(null);
     setNotice(null);
     try {
-      setDigest(await api.updateDigest(enabled));
+      setDigest(await digestApi.updateDigest(enabled));
       setNotice(enabled ? 'Daily digest on.' : 'Daily digest off.');
     } catch (err) {
       setDigest(previous);
@@ -92,17 +68,14 @@ export default function NotificationsPage() {
     }
   };
 
-  const copyFor = (scope: Scope, action: TemplateAction) => (scope === 'EVENT' ? EVENT_COPY : STANDING_COPY)[action] ?? { title: action, when: '' };
-  const replace = (scope: Scope, t: MessageTemplate) =>
-    setTemplates((prev) => ({ ...prev, [scope]: prev[scope].map((x) => (x.action === t.action ? t : x)) }));
-
   /** Runs a template write; true on success so the dialog can close. */
-  const write = async (scope: Scope, action: TemplateAction, run: () => Promise<MessageTemplate>, done: string) => {
+  const write = async (key: string, run: () => Promise<NotificationTemplate>, done: string) => {
     setError(null);
     setNotice(null);
     try {
-      replace(scope, await run());
-      setNotice(`${copyFor(scope, action).title} email ${done}.`);
+      const t = await run();
+      setGroups((prev) => prev.map((g) => ({ ...g, notifications: g.notifications.map((n) => (n.key === key ? t : n)) })));
+      setNotice(`${t.label} email ${done}.`);
       return true;
     } catch (err) {
       setError(describeError(err, 'Could not save the email'));
@@ -110,30 +83,8 @@ export default function NotificationsPage() {
     }
   };
 
-  const section = (scope: Scope, title: string, description: string) => (
-    <div className={card}>
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">{description}</p>
-      <div className={list}>
-        {templates[scope].map((t) => {
-          const { title: label } = copyFor(scope, t.action);
-          return (
-            <SummaryRow
-              key={t.action}
-              label={`Edit ${label} email${scope === 'STANDING' ? ' (standing forms)' : ''}`}
-              leading={<Mail className="h-5 w-5" aria-hidden="true" />}
-              primary={t.isDefault ? label : `${label} · Customized`}
-              secondary={t.subject}
-              buttonRef={refFor(keyOf(scope, t.action))}
-              onClick={() => setOpen({ scope, action: t.action })}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const openTemplate = open && templates[open.scope].find((t) => t.action === open.action);
+  const openGroup = openKey ? groups.find((g) => g.notifications.some((n) => n.key === openKey)) : undefined;
+  const open = openGroup?.notifications.find((n) => n.key === openKey);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -161,6 +112,24 @@ export default function NotificationsPage() {
             </p>
           )}
           {loading && <div className={`${card} h-40 animate-pulse`} aria-busy="true" aria-label="Loading notifications" />}
+          {groups.map((group) => (
+            <div key={group.key} className={card}>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{group.label}</h3>
+              <div className={list}>
+                {group.notifications.map((n) => (
+                  <SummaryRow
+                    key={n.key}
+                    label={rowLabel(group, n)}
+                    leading={<Mail className="h-5 w-5" aria-hidden="true" />}
+                    primary={[n.label, !n.isDefault && 'Customized', n.optional && !n.enabled && 'Off'].filter(Boolean).join(' · ')}
+                    secondary={n.subject}
+                    buttonRef={refFor(n.key)}
+                    onClick={() => setOpenKey(n.key)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
           {digest && (
             <div className={card} data-testid="application-digest">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Staff notifications</h3>
@@ -179,21 +148,23 @@ export default function NotificationsPage() {
               </div>
             </div>
           )}
-          {!loading && templates.EVENT.length > 0 && section('EVENT', 'Event applications', 'Sent to vendors, guests and volunteers who apply to an event.')}
-          {!loading && templates.STANDING.length > 0 && section('STANDING', 'Standing forms', 'Sent for forms that are not part of an event (Content › Forms).')}
         </section>
       </div>
-      {open && openTemplate && (
+      {open && openGroup && (
         <TemplateDialog
-          key={keyOf(open.scope, open.action)}
-          {...copyFor(open.scope, open.action)}
-          template={openTemplate}
-          mergeFields={mergeFields[open.scope]}
+          key={open.key}
+          title={openGroup.key === 'standingForms' ? `${open.label} (standing forms)` : open.label}
+          when={open.when}
+          template={{ ...open, enabled: open.optional ? open.enabled : undefined }}
+          mergeFields={open.mergeFields}
+          blocks={open.blocks}
           canEdit={canEdit}
-          returnFocusRef={refFor(keyOf(open.scope, open.action))}
-          onClose={() => setOpen(null)}
-          onSave={(draft) => write(open.scope, open.action, () => api.update(open.action, draft, open.scope === 'STANDING' ? 'STANDING' : undefined), 'saved')}
-          onReset={() => write(open.scope, open.action, () => api.reset(open.action, open.scope === 'STANDING' ? 'STANDING' : undefined), 'reset')}
+          returnFocusRef={refFor(open.key)}
+          onClose={() => setOpenKey(null)}
+          onSave={(draft) => write(open.key, () => api.update(open.key, draft), 'saved')}
+          onReset={() => write(open.key, () => api.reset(open.key), 'reset')}
+          preview={(draft) => api.preview(open.key, draft)}
+          sendTest={async (draft) => (await api.test(open.key, draft)).sentTo}
         />
       )}
     </div>

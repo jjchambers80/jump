@@ -13,7 +13,7 @@ Out of scope: SMS or push, per-event overrides, a visual HTML email builder, and
 | Email | Sender method | Called from | Branding | Plan |
 |---|---|---|---|---|
 | Order confirmation | `sendOrderConfirmation` | `PaymentService` (webhook), `admin.js` resend | Store | **Editable** |
-| Event cancelled (tickets / RSVP) | `sendCancellationNotification` | `EventService` cancel | Store | **Editable**, two keys |
+| Event cancelled (RSVP events only) | `sendCancellationNotification` | `EventService` cancel | Store | **Editable** (`rsvp.cancelled`). Paid-event cancellation sends no email today; the dead ticket branch was removed in 053-B |
 | RSVP confirmation | `sendRsvpConfirmation` | `RsvpService` | Store | **Editable** |
 | RSVP reminder (~24 h before) | `sendRsvpReminder` | `RsvpReminderService` sweep | Store | **Editable** |
 | Application payment receipt | `sendApplicationReceipt` | `ApplicationPaymentService` | Store | **Editable** |

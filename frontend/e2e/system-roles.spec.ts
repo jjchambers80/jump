@@ -80,7 +80,6 @@ test('shows the matrix with locked cells and saves changes behind step-up', asyn
 
   await save.click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
-  await reauth.getByRole('button', { name: 'Send code' }).click();
   await reauth.getByLabel('Verification code').fill('123456');
   await reauth.getByRole('button', { name: 'Verify' }).click();
 

@@ -6,18 +6,19 @@
 //
 // Syntax: utils/renderTemplate.js.
 
-import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
 import { DUE_ZONE, selectionDueAt } from './applicationSelection.js';
 import orderLineService from './OrderLineService.js';
-import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
+import { STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
+import { applicationKey } from '../config/notifications.js';
+import notificationTemplateService from './NotificationTemplateService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
 import boothService from './BoothService.js';
 import { buyerAccountUrl, eventUrl } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 import { statusUrlFor } from './applicationLinks.js';
-import { cleanTemplate, renderTemplate } from '../utils/renderTemplate.js';
+import { renderTemplate } from '../utils/renderTemplate.js';
 
 export { renderTemplate };
 
@@ -39,40 +40,12 @@ function formatDate(value) {
 }
 
 class ApplicationTemplateService {
-  /** All templates for an organization, defaults filled in for missing actions. */
-  async listTemplates(organizationId, scope = 'EVENT') {
-    const actions = scope === 'STANDING' ? STANDING_TEMPLATE_ACTIONS : TEMPLATE_ACTIONS;
-    const rows = await prisma.applicationMessageTemplate.findMany({ where: { organizationId, scope } });
-    const byAction = new Map(rows.map((r) => [r.action, r]));
-    return actions.map((action) => this._serialize(action, byAction.get(action), scope));
-  }
+  // Spec 053-D: stored as NotificationTemplate rows (key `application.<scope>.<ACTION>`),
+  // edited on Settings › Notifications; this service renders and sends them.
 
   async getTemplate(organizationId, action, scope = 'EVENT') {
     this._assertAction(action, scope);
-    const row = await prisma.applicationMessageTemplate.findUnique({ where: { organizationId_scope_action: { organizationId, scope, action } } });
-    return this._serialize(action, row, scope);
-  }
-
-  async updateTemplate(organizationId, action, { subject, body }, scope = 'EVENT') {
-    this._assertAction(action, scope);
-    const { subject: cleanSubject, body: cleanBody } = cleanTemplate({ subject, body });
-    const row = await prisma.applicationMessageTemplate.upsert({
-      where: { organizationId_scope_action: { organizationId, scope, action } },
-      update: { subject: cleanSubject, body: cleanBody },
-      create: { organizationId, scope, action, subject: cleanSubject, body: cleanBody },
-    });
-    logger.info('Application template updated', { event: 'application_template_updated', organizationId, action });
-    return this._serialize(action, row, scope);
-  }
-
-  async resetTemplate(organizationId, action, scope = 'EVENT') {
-    this._assertAction(action, scope);
-    await prisma.applicationMessageTemplate.deleteMany({ where: { organizationId, scope, action } });
-    return this._serialize(action, null, scope);
-  }
-
-  mergeFields() {
-    return MERGE_FIELDS.map(([key, description]) => ({ key, description }));
+    return this._fromNotification(action, scope, await notificationTemplateService.get(organizationId, applicationKey(scope, action)));
   }
 
   /**
@@ -192,7 +165,7 @@ class ApplicationTemplateService {
     const orgId = organizationId || application.organizationId || application.event?.venue?.organizationId || application.event?.venue?.organization?.id || null;
     const scope = application.eventId ? 'EVENT' : 'STANDING';
     this._assertAction(action, scope);
-    const template = orgId ? await this.getTemplate(orgId, action, scope) : this._serialize(action, null, scope);
+    const template = await this.getTemplate(orgId, action, scope);
     const context = await this.contextFor(application, options);
     return {
       subject: renderTemplate(template.subject, context),
@@ -227,16 +200,8 @@ class ApplicationTemplateService {
     if (!actions.has(action)) throw new NotFoundError('Unknown template action');
   }
 
-  _serialize(action, row, scope = 'EVENT') {
-    const def = (scope === 'STANDING' ? STANDING_DEFAULT_TEMPLATES : DEFAULT_TEMPLATES)[action];
-    return {
-      action,
-      scope,
-      subject: row?.subject ?? def.subject,
-      body: row?.body ?? def.body,
-      isDefault: !row,
-      updatedAt: row?.updatedAt ?? null,
-    };
+  _fromNotification(action, scope, t) {
+    return { action, scope, subject: t.subject, body: t.body, isDefault: t.isDefault, updatedAt: t.updatedAt };
   }
 }
 

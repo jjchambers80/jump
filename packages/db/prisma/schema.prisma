@@ -581,7 +581,6 @@ model Organization {
   applicantProfiles        ApplicantProfile[]
   applicationForms         ApplicationForm[]
   orders                   Order[]
-  applicationTemplates     ApplicationMessageTemplate[]
   notificationTemplates    NotificationTemplate[]
   applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts           OrganizationStripeAccount[]
@@ -1603,11 +1602,6 @@ enum ApplicationFormStatus {
   CLOSED
 }
 
-enum ApplicationMessageScope {
-  EVENT
-  STANDING
-}
-
 enum ChargeTiming {
   SUBMIT
   APPROVAL
@@ -2025,20 +2019,6 @@ model ApplicationFormTemplate {
   @@index([organizationId, updatedAt])
 }
 
-model ApplicationMessageTemplate {
-  id             String                  @id @default(cuid())
-  organizationId String
-  action         ApplicationAction
-  scope          ApplicationMessageScope @default(EVENT)
-  subject        String
-  body           String // plain text with {{merge.fields}}; rendered into the branded email shell
-  updatedAt      DateTime                @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, scope, action])
-}
-
 // Spec 053: store-edited wording of a system email (Settings › Notifications).
 // `key` is a registry key (backend/src/config/notifications.js), not an enum,
 // so a new email needs no migration. A row exists only once the store edits.
@@ -2048,6 +2028,7 @@ model NotificationTemplate {
   key            String
   subject        String
   body           String // plain text with {{merge.fields}}; system blocks are added by the renderer
+  enabled        Boolean  @default(true) // false only for registry keys marked optional
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

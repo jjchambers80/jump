@@ -124,10 +124,10 @@ jobs:
         run: npm run test:unit
       - name: Contract + integration tests
         working-directory: backend
-        # One --runInBand process for the whole suite outgrew Node's default
-        # heap (OOM on main since d7fee5d). ponytail: bigger heap, split the
-        # suite into shards if it outgrows this too.
-        run: NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=6144" npx jest --runInBand tests/contract tests/integration
+        # One worker, recycled past 1 GB: still serial like --runInBand, but the
+        # module registry no longer piles up across 200 files until V8 runs
+        # out of heap (exit 134 on every main run from 2026-10-12).
+        run: npm test -- --maxWorkers=1 --workerIdleMemoryLimit=1GB tests/contract tests/integration
 
   # ── Frontend typecheck + unit tests ──────────────────────────────────
   frontend:
