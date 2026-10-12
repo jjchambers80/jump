@@ -1,6 +1,6 @@
 # Spec 055 — Contact lists (Contacts › Lists)
 
-Status: **In progress** (2026-10-12): 055-A built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
+Status: **In progress** (2026-10-12): 055-A (PR #460) and 055-B built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
 
 ## 1. Problem
 

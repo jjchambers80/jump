@@ -1,8 +1,9 @@
 # Contacts (CRM hub)
 
-Admin › **Contacts** (`/admin/contacts`, formerly Customers) is the organization's one contact list: ticket buyers, RSVPs, standing-form submitters and email subscribers. It has two tabs, headed by `frontend/src/app/admin/contacts/ContactsHeader.tsx`:
+Admin › **Contacts** (`/admin/contacts`, formerly Customers) is the organization's one contact list: ticket buyers, RSVPs, standing-form submitters and email subscribers. It has three tabs, headed by `frontend/src/app/admin/contacts/ContactsHeader.tsx`:
 
-- **Contacts**: the list (`app/admin/contacts/page.tsx`) and each contact's detail page (`app/admin/contacts/[contactId]/`).
+- **Contacts**: the list (`app/admin/contacts/page.tsx` → `ContactsList.tsx`) and each contact's detail page (`app/admin/contacts/[contactId]/`).
+- **Lists**: saved groups of contacts (spec 055, §Lists below).
 - **Forms**: standing application forms (spec 044), moved here from Content (`app/admin/contacts/forms/*`).
 
 Old URLs 308 in `frontend/next.config.mjs`: `/admin/customers*` → `/admin/contacts*`, `/admin/content/forms*` → `/admin/contacts/forms*`.
@@ -17,6 +18,28 @@ Old URLs 308 in `frontend/next.config.mjs`: `/admin/customers*` → `/admin/cont
 - Note, location and the email subscription are edited on the detail page, not in the list.
 
 There are no customer segments (Prospect / New / Repeat / Lapsed were removed with this change, from the API too).
+
+## Lists (spec 055)
+
+- **Lists tab** (`app/admin/contacts/lists/page.tsx`): the three built-in lists (All contacts, Paying contacts, Email subscribers, defined in `backend/src/services/ContactListService.js`, read-only) and the store's own lists. It has search, Automatic / Manual chips and a row menu (`ActionsMenu`: Open, Edit list / Rename, Duplicate, Delete).
+- **Create a list** (`ListFormDialog.tsx`, on `SettingsDialog`):
+  - choose **Automatic** (saved filters, always current) or **Manual** (exactly the people added);
+  - then name the list;
+  - an automatic list gets the filter builder (`FilterFields.tsx`) and a live count from `POST /admin/contact-lists/preview`;
+  - the same dialog edits a list, and the type never changes.
+- **A list's page** (`lists/[listId]/page.tsx`) renders the same `ContactsList` with `listId`. Contents come from `GET /admin/customers?list=<id>`, so search, sort, paging and the detail page's Previous / Next walk the list. The detail page's back link returns to the list.
+- **Filters** (one translator, `backend/src/services/contactListFilters.js`, shared with the Contacts query; all ANDed):
+  - paying;
+  - source (and standing form);
+  - RSVP'd to an event;
+  - bought tickets to an event;
+  - tag;
+  - spent at least $N;
+  - active in the last N days.
+
+  `describeFilters` (`frontend/src/lib/contactLists.ts`) says them in plain words.
+- **Permission:** `customers.lists` (ORGANIZER by default) to create, edit, duplicate and delete. Viewing needs only the `customers` feature.
+- **Still to come:** picking members from Contacts (055-C), CSV import (055-D), CSV export (055-E).
 
 ## API
 

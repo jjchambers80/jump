@@ -14,6 +14,7 @@ import EraseCustomerDialog from './EraseCustomerDialog';
 import { ReauthProvider } from '@/app/admin/account/useReauth';
 import UpcomingTickets, { type UpcomingTicket } from './UpcomingTickets';
 import { customerApiQuery, guestAccountNote } from '@/lib/customers';
+import { contactListHref } from '@/lib/contactLists';
 import { formatEventDateTime } from '@/lib/eventTime';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -225,7 +226,11 @@ function CustomerDetailPageContent() {
   }, [fetchCustomer]);
 
   const customerHref = (id: string) => `/admin/contacts/${id}${listQuery ? `?${listQuery}` : ''}`;
-  const customersHref = `/admin/contacts${listQuery ? `?${listQuery}` : ''}`;
+  // Opened from a list (spec 055): go back to that list's page with the same filters.
+  const fromList = searchParams.get('list');
+  const backParams = new URLSearchParams(listQuery);
+  backParams.delete('list');
+  const customersHref = `${fromList ? contactListHref(fromList) : '/admin/contacts'}${backParams.size ? `?${backParams}` : ''}`;
 
   // Close actions menu on outside click
   useEffect(() => {
@@ -580,7 +585,7 @@ function CustomerDetailPageContent() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
             <Link href={customersHref} className="hover:text-accent-600 dark:hover:text-accent-400">
-              Contacts
+              {fromList ? 'List' : 'Contacts'}
             </Link>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
