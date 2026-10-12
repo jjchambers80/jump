@@ -548,7 +548,7 @@ describe('Customer detail Phase 1 contract', () => {
     });
   });
 
-  describe('GET /admin/customers/:id — segment and guest accountUrl', () => {
+  describe('GET /admin/customers — filtered navigation and guest accountUrl', () => {
     let contactWithOneOrder;
     let contactWithTwoOrders;
     let alphaNewContact;
@@ -556,10 +556,9 @@ describe('Customer detail Phase 1 contract', () => {
     let seed;
 
     beforeAll(async () => {
-      seed = await seedOrg('segment');
+      seed = await seedOrg('navigation');
       await joinOrgByToken(adminToken, seed.org.id, 'ADMIN');
 
-      // New segment: one paid order
       contactWithOneOrder = await makePaidCustomer({
         orgId: seed.org.id,
         eventId: seed.event.id,
@@ -584,7 +583,7 @@ describe('Customer detail Phase 1 contract', () => {
         overrides: { firstName: 'Zulu', lastName: 'Buyer' },
       });
 
-      // Repeat segment: two paid orders
+      // Two paid orders; not a 'Buyer', so the search below leaves it out
       contactWithTwoOrders = await makePaidCustomer({
         orgId: seed.org.id,
         eventId: seed.event.id,
@@ -609,33 +608,19 @@ describe('Customer detail Phase 1 contract', () => {
       await cleanupOrg(seed);
     });
 
-    it('returns segment New for contacts with exactly one paid order', async () => {
-      const res = await request(app).get(`/admin/customers/${contactWithOneOrder.id}`).set(...auth(adminToken));
-      expect(res.status).toBe(200);
-      expect(res.body.segment).toBe('New');
-    });
-
-    it('returns segment Repeat for contacts with two or more paid orders', async () => {
-      const res = await request(app).get(`/admin/customers/${contactWithTwoOrders.id}`).set(...auth(adminToken));
-      expect(res.status).toBe(200);
-      expect(res.body.segment).toBe('Repeat');
-    });
-
-    it('combines segment filtering and sorting before pagination', async () => {
+    it('combines filtering and sorting before pagination', async () => {
       const res = await request(app)
-        .get('/admin/customers?segment=New&sort=name&direction=asc&limit=2')
+        .get('/admin/customers?search=Buyer&sort=name&direction=asc&limit=2')
         .set(...auth(adminToken));
 
       expect(res.status).toBe(200);
-      expect(res.body.data.map((customer) => [customer.firstName, customer.segment])).toEqual([
-        ['Alpha', 'New'],
-        ['Middle', 'New'],
-      ]);
+      expect(res.body.data.map((customer) => customer.firstName)).toEqual(['Alpha', 'Middle']);
+      expect(res.body.data[0]).not.toHaveProperty('segment');
       expect(res.body.pagination).toMatchObject({ page: 1, limit: 2, total: 3, totalPages: 2 });
     });
 
     it('returns prevId and nextId at both filtered-list boundaries', async () => {
-      const query = '?segment=New&sort=name&direction=asc';
+      const query = '?search=Buyer&sort=name&direction=asc';
       const [first, middle, last] = await Promise.all([
         request(app).get(`/admin/customers/${alphaNewContact.id}${query}`).set(...auth(adminToken)),
         request(app).get(`/admin/customers/${contactWithOneOrder.id}${query}`).set(...auth(adminToken)),

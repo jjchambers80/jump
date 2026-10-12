@@ -164,7 +164,7 @@ Visible only while the vendor form has `spaceSelection: MAP`. No map: **Create a
 |---|---|---|
 | `applications.forms` | ADMIN + **ORGANIZER** | event forms, tiers, tier add-ons, questions, templates, shifts |
 | `addOns.manage` | ADMIN + **ORGANIZER** | event add-ons and saved add-ons |
-| `applications.standingForms` | ADMIN | standing forms (Content › Forms); split from `applications.forms` (`SPLIT_KEYS`: an old `applications.forms` override applies until one of its own is saved) |
+| `applications.standingForms` | ADMIN | standing forms (Contacts › Forms); split from `applications.forms` (`SPLIT_KEYS`: an old `applications.forms` override applies until one of its own is saved) |
 | `maps.forceAssign` | ADMIN | `force` on booth assign (a spot of another category), enforced on the server; `BoothPanel` shows the toggle with `useCan` |
 | `applications.money`, `orders.refund`, `settings.*` | ADMIN | refunds, waivers, offline payments, every settings write |
 

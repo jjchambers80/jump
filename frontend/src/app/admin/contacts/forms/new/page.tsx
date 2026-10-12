@@ -1,6 +1,6 @@
 'use client';
 
-// Content › Forms › New form (spec 044): a name and where to start — blank, or
+// Contacts › Forms › New form (spec 044): a name and where to start — blank, or
 // one of the organization's FREE templates (the same templates event forms use).
 // Standing forms are always FREE: no tiers, no payment.
 
@@ -48,7 +48,7 @@ export default function NewFormPage() {
     setError(null);
     try {
       const form = await api.post<AdminForm>('/admin/standing-application-forms', { name: name.trim(), ...(templateId && { templateId }) });
-      router.push(`/admin/content/forms/${form.id}?tab=fields`);
+      router.push(`/admin/contacts/forms/${form.id}?tab=fields`);
     } catch (err) {
       setError((err as Error)?.message || 'Could not create the form');
       setSaving(false);
@@ -57,7 +57,7 @@ export default function NewFormPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link href="/admin/content/forms" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
+      <Link href="/admin/contacts/forms" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← All forms
       </Link>
       <h1 className="mt-3 text-2xl font-bold text-gray-900 dark:text-white">New form</h1>
@@ -119,7 +119,7 @@ export default function NewFormPage() {
           )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Link href="/admin/content/forms" className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+            <Link href="/admin/contacts/forms" className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
               Cancel
             </Link>
             <button type="submit" disabled={saving} className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-accent-500 px-4 text-sm font-semibold text-gray-950 hover:bg-accent-hover disabled:opacity-50">

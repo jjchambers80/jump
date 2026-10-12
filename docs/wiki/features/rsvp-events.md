@@ -81,7 +81,7 @@ model EventRsvp {
 
 ## Customer list — RSVP'd filter (phase 3)
 
-The customers list gains an **RSVP** dropdown filter (next to the segment filter). `rsvp=going` shows contacts with at least one GOING RSVP, bypassing the default money-collected predicate. An optional `eventId` scopes it to one event. The admin RSVPs tab links to the filtered customer list via `View customers`.
+The Contacts list (formerly Customers) filters on RSVPs: `rsvp=going` shows contacts with at least one GOING RSVP, and an optional `eventId` scopes it to one event. The admin RSVPs tab links there (`View contacts`), where it shows as a removable "RSVP'd to this event" chip; Source › RSVP'd is the org-wide version.
 
 Backend: `CustomerService.customerWhere` replaces `customerPredicate(scope)` with `{ rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }` when `rsvp=going`.
 

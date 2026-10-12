@@ -1,6 +1,6 @@
 // Comprehensive unit tests for CustomerService (spec 032 phase 1).
 // Covers: list queries with scope/tag/search/pagination, detail with extended
-// fields and segments, partial PATCH fields and email collision.
+// fields, partial PATCH fields and email collision.
 //
 // Pattern: jest.unstable_mockModule for Prisma + opt-in service.
 // The service dynamically imports storefrontUrl.js inside getCustomerById;
@@ -255,30 +255,6 @@ describe('CustomerService', () => {
       const result = await customerService.getCustomerById('contact-1', 'org-1');
       expect(result.accountUrl).toBeNull();
       expect(mockBuyerAccountUrl).not.toHaveBeenCalled();
-    });
-
-    it('detects Prospect segment when contact has no paid orders', async () => {
-      const contact = makeContact({ orders: [] });
-      mockContactFindFirst.mockResolvedValue(contact);
-
-      const result = await customerService.getCustomerById('contact-1', 'org-1');
-      expect(result.segment).toBe('Prospect');
-    });
-
-    it('detects New segment for a single paid order', async () => {
-      const contact = makeContact({ orders: [makeOrder()] });
-      mockContactFindFirst.mockResolvedValue(contact);
-
-      const result = await customerService.getCustomerById('contact-1', 'org-1');
-      expect(result.segment).toBe('New');
-    });
-
-    it('detects Repeat segment for two or more paid orders', async () => {
-      const contact = makeContact({ orders: [makeOrder({ id: 'o-1' }), makeOrder({ id: 'o-2' })] });
-      mockContactFindFirst.mockResolvedValue(contact);
-
-      const result = await customerService.getCustomerById('contact-1', 'org-1');
-      expect(result.segment).toBe('Repeat');
     });
 
     it('throws NotFoundError when contact does not exist', async () => {

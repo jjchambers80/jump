@@ -210,7 +210,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
       ) : (
         <ApplicationsHeader eventId={params.eventId} title={name ?? 'Application'} subtitle={app ? `${app.form.name}${app.tier ? ` · ${app.tier.name}` : ''}` : undefined} />
       )}
-      <Link href={standing ? `/admin/content/forms/${standingFormId}` : `/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
+      <Link href={standing ? `/admin/contacts/forms/${standingFormId}` : `/admin/events/${params.eventId}/applications`} className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← All {standing ? 'submissions' : 'applications'}
       </Link>
 

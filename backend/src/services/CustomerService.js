@@ -15,32 +15,6 @@ const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 
 const latest = (dates) =>
   dates.filter(Boolean).reduce((max, d) => (!max || d > max ? d : max), null);
 
-export const CUSTOMER_SEGMENTS = ['Prospect', 'New', 'Repeat', 'Lapsed'];
-
-function segmentCutoff(now) {
-  const cutoff = new Date(now);
-  const day = cutoff.getUTCDate();
-  // Move to the 1st to avoid end-of-month rollover, subtract 18 months,
-  // then clamp the day to the last valid day of the target month.
-  cutoff.setUTCDate(1);
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - 18);
-  const targetMonth = cutoff.getUTCMonth();
-  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
-  cutoff.setUTCDate(Math.min(day, lastDay));
-  return cutoff;
-}
-
-/**
- * Segment precedence is Prospect, then Lapsed, then order-count buckets.
- * Orders passed here are already restricted to PAID_ORDER_STATUSES.
- */
-export function customerSegment(orders, now = new Date()) {
-  if (orders.length === 0) return 'Prospect';
-  const lastPaidAt = latest(orders.map((o) => o.paidAt || o.createdAt));
-  if (lastPaidAt && lastPaidAt < segmentCutoff(now)) return 'Lapsed';
-  return orders.length === 1 ? 'New' : 'Repeat';
-}
-
 const ORDER_SELECT = {
   where: { status: { in: PAID_ORDER_STATUSES } },
   select: {
@@ -64,7 +38,7 @@ function customerPredicate(scope = 'customers') {
  * `totalRefunded` is reported beside it so the numbers reconcile with
  * Stripe's gross and refunded totals.
  */
-function aggregates(orders, now = new Date()) {
+function aggregates(orders) {
   const tickets = orders.filter((o) => o.kind !== 'APPLICATION');
   const applications = orders.filter((o) => o.kind === 'APPLICATION');
   const totalSpent = round(sum(orders, (o) => o.totalAmount));
@@ -80,11 +54,10 @@ function aggregates(orders, now = new Date()) {
     totalRefunded,
     lastOrderDate: lastActivityAt, // alias kept for existing consumers
     lastActivityAt,
-    segment: customerSegment(orders, now),
   };
 }
 
-function customerRow(contact, now = new Date()) {
+function customerRow(contact) {
   // Source chips for the customer list (spec 044C)
   const sources = [];
   if (contact.orders?.some((o) => PAID_ORDER_STATUSES.includes(o.status))) sources.push('tickets');
@@ -105,13 +78,10 @@ function customerRow(contact, now = new Date()) {
     tags: contact.tags,
     sources,
     formSources,
-    ...aggregates(contact.orders, now),
+    ...aggregates(contact.orders),
     createdAt: contact.createdAt,
   };
 }
-
-const normalizedSegment = (segment) =>
-  CUSTOMER_SEGMENTS.find((candidate) => candidate.toLowerCase() === String(segment || '').toLowerCase());
 
 function compareNullableDates(a, b) {
   const left = a ? new Date(a).getTime() : 0;
@@ -121,10 +91,8 @@ function compareNullableDates(a, b) {
 
 /** Compute filters and aggregate-aware ordering before pagination/navigation. */
 export function filterAndSortCustomers(contacts, options = {}) {
-  const { segment, sort = 'createdAt', direction = 'desc', now = new Date() } = options;
-  const wantedSegment = normalizedSegment(segment);
-  const rows = contacts.map((contact) => customerRow(contact, now));
-  const filtered = wantedSegment ? rows.filter((row) => row.segment === wantedSegment) : rows;
+  const { sort = 'createdAt', direction = 'desc' } = options;
+  const rows = contacts.map((contact) => customerRow(contact));
   const multiplier = direction === 'asc' ? 1 : -1;
 
   const compare = (a, b) => {
@@ -151,7 +119,7 @@ export function filterAndSortCustomers(contacts, options = {}) {
     return result === 0 ? a.id.localeCompare(b.id) : result * multiplier;
   };
 
-  return filtered.sort(compare);
+  return rows.sort(compare);
 }
 
 export function customerNavigation(contacts, contactId, options = {}) {
@@ -220,17 +188,17 @@ class CustomerService {
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search, tag, scope, segment, rsvp, eventId, source, formId, sort, direction }
+   * @param {Object} options - { page, limit, search, tag, scope, rsvp, eventId, source, formId, sort, direction }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
   async getCustomersByOrganization(
     organizationId,
-    { page = 1, limit = 20, search, tag, scope, segment, rsvp, eventId, source, formId, sort = 'createdAt', direction = 'desc' } = {}
+    { page = 1, limit = 20, search, tag, scope, rsvp, eventId, source, formId, sort = 'createdAt', direction = 'desc' } = {}
   ) {
     page = Math.max(1, parseInt(page) || 1);
     limit = Math.max(1, parseInt(limit) || 20);
 
-    // Segment and aggregate sorts are derived from paid orders, so filtering and
+    // Aggregate sorts are derived from paid orders, so filtering and
     // ordering happen before pagination. The same helper powers detail navigation.
     const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId });
     const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
@@ -240,8 +208,7 @@ class CustomerService {
         : sort === 'email'
           ? [{ email: normalizedDirection }, { id: 'asc' }]
           : [{ createdAt: normalizedDirection }, { id: 'asc' }];
-    const needsDerivedRows = Boolean(normalizedSegment(segment)) ||
-      ['transactionCount', 'totalSpent', 'lastActivityAt'].includes(sort);
+    const needsDerivedRows = ['transactionCount', 'totalSpent', 'lastActivityAt'].includes(sort);
 
     if (!needsDerivedRows) {
       const [contacts, total] = await Promise.all([
@@ -288,7 +255,7 @@ class CustomerService {
         },
       },
     });
-    const ordered = filterAndSortCustomers(contacts, { segment, sort, direction });
+    const ordered = filterAndSortCustomers(contacts, { sort, direction });
     const total = ordered.length;
     const data = ordered.slice((page - 1) * limit, page * limit);
 
@@ -429,7 +396,7 @@ class CustomerService {
         event: a.event,
         // Standing forms: link to Content › Forms submission detail
         detailUrl: isStanding
-          ? `/admin/content/forms/${a.formId}/submissions/${a.id}`
+          ? `/admin/contacts/forms/${a.formId}/submissions/${a.id}`
           : `/admin/events/${a.eventId}/applications/${a.id}`,
       };
     });

@@ -214,7 +214,6 @@ describe('Application orders reporting contract (spec 024)', () => {
       `vendor@${TAG}.test`,
     ]);
     expect(all.body.data.find((c) => c.id === contacts.pending.id)).toMatchObject({
-      segment: 'Prospect',
       transactionCount: 0,
       orderCount: 0,
       ticketOrderCount: 0,
@@ -259,7 +258,6 @@ describe('Application orders reporting contract (spec 024)', () => {
     expect(pending.status).toBe(200);
     expect(pending.body).toMatchObject({
       id: contacts.pending.id,
-      segment: 'Prospect',
       transactionCount: 0,
       orderCount: 0,
       ticketOrderCount: 0,

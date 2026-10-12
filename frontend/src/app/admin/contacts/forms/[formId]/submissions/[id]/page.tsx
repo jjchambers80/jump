@@ -1,4 +1,4 @@
-// Content › Forms › Submission (spec 044): the shared application detail, on a standing form.
+// Contacts › Forms › Submission (spec 044): the shared application detail, on a standing form.
 'use client';
 
 import ApplicationDetail from '@/components/applications/ApplicationDetail';

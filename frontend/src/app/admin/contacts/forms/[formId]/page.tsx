@@ -1,6 +1,6 @@
 'use client';
 
-// Content › Forms › one standing form (spec 044): Submissions (the shared
+// Contacts › Forms › one standing form (spec 044): Submissions (the shared
 // SubmissionsTable on this form), Fields (business details + questions) and
 // Settings (name, link, status, window, button label, thank-you message). The
 // section lives in `?tab=` so a link, a reload and the back button keep it.
@@ -116,7 +116,7 @@ function StandingForm({ formId }: { formId: string }) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <Link href="/admin/content/forms" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
+      <Link href="/admin/contacts/forms" className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300">
         ← All forms
       </Link>
 

@@ -1,4 +1,4 @@
-// Content › Forms (spec 044B): create a standing form, add a field, review a
+// Contacts › Forms (spec 044B): create a standing form, add a field, review a
 // submission in the shared submissions table and decide on it. Backend mocked.
 
 import { expect, test, type Page } from '@playwright/test';
@@ -160,14 +160,14 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const calls = await mockApi(page, baseURL!);
 
-    await page.goto('/admin/content/forms');
+    await page.goto('/admin/contacts/forms');
     await expect(page.getByTestId('forms-empty-state')).toContainText('No forms yet');
     expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
     await page.getByRole('link', { name: 'Create your first form' }).click();
 
     await page.locator('#new-form-name').fill('Become a vendor');
     await page.getByRole('button', { name: 'Create form' }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/content/forms/${FORM_ID}\\?tab=fields`));
+    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}\\?tab=fields`));
     expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/standing-application-forms')?.body).toEqual({ name: 'Become a vendor' });
     await expect(page.getByTestId('form-tab-fields')).toHaveAttribute('aria-current', 'page');
 
@@ -200,7 +200,7 @@ for (const viewport of [
     expect(calls.some((c) => c.path === `${SUB}/${row.id}/decision` && (c.body as { decision: string }).decision === 'APPROVE')).toBe(true);
 
     await tableRow.getByRole('link', { name: 'Pixel Pins' }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/content/forms/${FORM_ID}/submissions/${row.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}/submissions/${row.id}$`));
     await expect(page.getByRole('heading', { level: 1, name: 'Pixel Pins' })).toBeVisible();
     await expect(page.getByLabel('Booth / placement')).toHaveCount(0);
   });

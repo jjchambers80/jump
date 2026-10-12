@@ -312,7 +312,7 @@ describe('Administration search contract', () => {
         expect.objectContaining({
           type: 'CUSTOMER',
           id: contact.id,
-          href: `/admin/customers/${contact.id}`,
+          href: `/admin/contacts/${contact.id}`,
         }),
         expect.objectContaining({
           type: 'ORDER',
