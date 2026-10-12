@@ -4,7 +4,8 @@
 // pattern from spec 019: arrows move between items, Escape closes, focus returns
 // to the trigger button. Items: Event page, Applications, Duplicate, Copy link,
 // then the lifecycle group (spec 050-D): Unpublish… and Close sales… / Reopen
-// sales on a published event, Cancel event…, Delete draft… on a draft. Each
+// sales and Cancel event… on a published event, Delete draft… on a draft and
+// Delete event… on a cancelled one (soft delete when it has orders). Each
 // lifecycle item opens EventLifecycleDialog, which calls the endpoint.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -181,19 +182,21 @@ export default function EventActionsMenu({
               Close sales…
             </button>
           )}
-          <button
-            type="button"
-            role="menuitem"
-            className={destructiveItem}
-            onClick={() => { close(false); onCancelEvent(); }}
-          >
-            <Ban className="h-4 w-4 shrink-0" aria-hidden />
-            Cancel event…
-          </button>
-          {status === 'DRAFT' && (
+          {published && (
+            <button
+              type="button"
+              role="menuitem"
+              className={destructiveItem}
+              onClick={() => { close(false); onCancelEvent(); }}
+            >
+              <Ban className="h-4 w-4 shrink-0" aria-hidden />
+              Cancel event…
+            </button>
+          )}
+          {(status === 'DRAFT' || status === 'CANCELLED') && (
             <button type="button" role="menuitem" className={destructiveItem} {...lifecycleOff} onClick={() => startLifecycle('delete')}>
               <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-              Delete draft…
+              {status === 'DRAFT' ? 'Delete draft…' : 'Delete event…'}
             </button>
           )}
         </div>
@@ -204,6 +207,7 @@ export default function EventActionsMenu({
           orgId={selectedOrgId}
           eventId={eventId}
           eventName={eventName}
+          cancelled={status === 'CANCELLED'}
           onClose={endLifecycle}
           onDone={(action) => {
             setLifecycle(null);

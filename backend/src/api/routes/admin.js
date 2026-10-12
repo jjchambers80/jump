@@ -1256,7 +1256,7 @@ router.get('/events', async (req, res, next) => {
     const venueFilter = scope.venueFilter || {};
 
     const events = await prisma.event.findMany({
-      where: venueFilter,
+      where: { ...venueFilter, deletedAt: null },
       include: {
         venue: {
           select: {

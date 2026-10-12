@@ -953,6 +953,7 @@ model Event {
   setupCompletedAt DateTime? @default(now()) // spec 050: null = wizard create still running
   setupRequestId   String?   @unique // spec 050: Idempotency-Key of the wizard create
   salesClosedAt    DateTime? // spec 050-D: set = checkout, RSVPs and new applications off
+  deletedAt        DateTime? // set = deleted by staff: hidden from admin lists, orders keep the row
   salesClosedById  String? // spec 050-D: who closed (no FK; the audit trail has the rest)
   category         String?
   status           EventStatus   @default(DRAFT)

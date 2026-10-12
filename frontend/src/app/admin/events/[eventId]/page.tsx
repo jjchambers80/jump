@@ -62,6 +62,7 @@ function EventDetailsContent() {
   const [duplicating, setDuplicating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   // Spec 050-P: the special guest lineup, for its summary card ('error' when it failed to load).
   const [guests, setGuests] = useState<AdminEventGuest[] | 'error' | null>(null);
 
@@ -132,13 +133,14 @@ function EventDetailsContent() {
   const cancelEvent = async () => {
     if (!orgId) return;
     setCancelBusy(true);
+    setCancelError(null);
     try {
       await api.post(`/organizations/${orgId}/events/${eventId}/cancel`, {});
       setCancelling(false);
       setNotice('Event cancelled.');
       await load();
     } catch (err: any) {
-      setError(err?.message || 'Failed to cancel the event');
+      setCancelError(err?.message || 'Failed to cancel the event');
     } finally {
       setCancelBusy(false);
     }
@@ -339,7 +341,13 @@ function EventDetailsContent() {
         />
       )}
       {cancelling && (
-        <CancelEventDialog eventName={event.name} busy={cancelBusy} onConfirm={cancelEvent} onClose={() => setCancelling(false)} />
+        <CancelEventDialog
+          eventName={event.name}
+          busy={cancelBusy}
+          error={cancelError}
+          onConfirm={cancelEvent}
+          onClose={() => { setCancelling(false); setCancelError(null); }}
+        />
       )}
     </PageFrame>
   );

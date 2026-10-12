@@ -25,7 +25,7 @@ class AdminSearchService {
   async search({ organizationId }, query) {
     const term = query.trim();
     const stripeId = /^(pi|re|pyr|cs)_/.test(term);
-    const eventScope = organizationId ? { venue: { organizationId } } : {};
+    const eventScope = { deletedAt: null, ...(organizationId ? { venue: { organizationId } } : {}) };
     const directScope = organizationId ? { organizationId } : {};
 
     const [events, venues, customers, orders, tickets, applications, pages, blogPosts, files] =

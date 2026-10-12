@@ -50,7 +50,7 @@ class DashboardService {
     const days = lastDays(now, zone);
     // One day of slack either side of the window so zone offsets never drop an edge order.
     const since = new Date(now.getTime() - (TREND_DAYS + 1) * 86_400_000);
-    const eventWhere = venueFilter;
+    const eventWhere = { ...venueFilter, deletedAt: null };
     // Org scope on the order itself (spec 047 D0-C): `event: {}` would drop event-less orders.
     const applicationScope = venueFilter.venue ? { organizationId: venueFilter.venue.organizationId } : {};
     const orderScope = applicationScope;

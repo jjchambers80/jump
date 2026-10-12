@@ -287,8 +287,8 @@ orgRouter.post('/:eventId/unpublish', ...staffEvent, lifecycle((orgId, eventId) 
 orgRouter.post('/:eventId/close-sales', ...staffEvent, lifecycle((orgId, eventId, req) => eventService.closeSales(orgId, eventId, req.user.id)));
 orgRouter.post('/:eventId/reopen-sales', ...staffEvent, lifecycle((orgId, eventId) => eventService.reopenSales(orgId, eventId)));
 
-/** DELETE .../events/:eventId: a DRAFT only, under the unpublish guards; 409 DELETE_BLOCKED + details.reasons */
-orgRouter.delete('/:eventId', ...staffEvent, lifecycle((orgId, eventId) => eventService.deleteDraftEvent(orgId, eventId)));
+/** DELETE .../events/:eventId: a DRAFT (unpublish guards, 409 DELETE_BLOCKED + details.reasons) or a CANCELLED event; with order history it is soft-deleted. PUBLISHED: 409 */
+orgRouter.delete('/:eventId', ...staffEvent, lifecycle((orgId, eventId) => eventService.deleteEvent(orgId, eventId)));
 
 /**
  * GET /organizations/:orgId/events/:eventId/analytics
