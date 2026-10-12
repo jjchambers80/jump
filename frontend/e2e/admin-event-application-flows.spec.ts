@@ -116,6 +116,7 @@ const heading = (page: Page, name: string) => main(page).getByRole('heading', { 
 const footer = (page: Page) => page.locator('footer');
 const next = (page: Page, name: string | RegExp = 'Next') => footer(page).getByRole('button', { name });
 const preview = (page: Page) => page.frameLocator('iframe[title="Event page preview"]');
+const formPreview = (page: Page) => page.frameLocator('iframe[title="Application form preview"]');
 const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
 const noOverflow = (page: Page) =>
@@ -149,6 +150,9 @@ test.describe('desktop', () => {
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
     await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair Vendor Application');
     await expect(main(page).getByLabel('Charge for space')).toBeChecked();
+    // Before the form exists, the preview is already the application form, not the event page.
+    await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair Vendor Application' })).toBeVisible(COLD);
+    await expect(page.getByRole('region', { name: 'Live preview of the application form' })).toBeVisible();
     // Purpose-matched templates only (the PAID vendor one).
     await expect(main(page).getByText('Makers market')).toBeVisible();
     await expect(main(page).getByText('Old free form')).toHaveCount(0);
@@ -214,6 +218,18 @@ test.describe('desktop', () => {
     // Steps that do not shape the form keep the event page.
     await page.goto(flowUrl('special-guests', 'step=lineup'));
     await expect(page.getByRole('region', { name: 'Live preview of the event page' })).toBeVisible(COLD);
+  });
+
+  test('Start previews the form being set up: the name as it is typed, no business step for volunteers', async ({ page }) => {
+    const calls = await mockApi(page);
+    await page.goto(flowUrl('volunteers'));
+    await expect(heading(page, 'Start a volunteer application')).toBeVisible(COLD);
+    await main(page).getByLabel('Name').fill('Crew sign-up');
+    await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Crew sign-up' })).toBeVisible(COLD);
+    await expect(formPreview(page).getByRole('heading', { name: /Your details/ })).toBeVisible();
+    await expect(formPreview(page).getByRole('heading', { name: /Your business/ })).toHaveCount(0);
+    await expect(formPreview(page).getByRole('button', { name: 'Submit application' })).toBeDisabled();
+    expect(calls.create).toHaveLength(0);
   });
 
   test('switching a vendor form to MAP adds the Floor map step', async ({ page }) => {
@@ -314,7 +330,7 @@ test.describe('desktop', () => {
       await page.goto(flowUrl('vendors'));
       await expect(heading(page, 'Start a vendor application')).toBeVisible(COLD);
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
-      await expect(preview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
+      await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair Vendor Application' })).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);
       await page.goto(flowUrl('vendors', 'step=payment&form=form-paid'));
       await expect(main(page).getByTestId('form-tiers')).toBeVisible(COLD);

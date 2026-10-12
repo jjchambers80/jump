@@ -20,7 +20,7 @@ import SetupProgress from './SetupProgress';
 import SetupFooter from './SetupFooter';
 import PreviewPane from './PreviewPane';
 import LoadingFields from './LoadingFields';
-import { PREVIEW_MESSAGE, previewForm } from './previewMessages';
+import { PREVIEW_MESSAGE, draftPreviewForm, previewForm, type DraftForm } from './previewMessages';
 import { APPLICATION_STEPS, PURPOSE_LABEL, formsOnStep } from './applicationSteps';
 import { FORM_FLOWS, flowSteps, formEditHref, type FormFlowKey } from './formFlows';
 import { useFormFlow } from './useFormFlow';
@@ -54,6 +54,8 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const { selectedOrg } = useOrg();
   // Unsaved name and intro from Form details: the preview shows them as they are typed.
   const [typed, setTyped] = useState<{ name?: string; intro?: string | null }>({});
+  // Start, before the form exists: what is being set up (name, purpose, paid).
+  const [draft, setDraft] = useState<DraftForm | null>(null);
 
   const loadTemplates = useCallback(() => {
     if (!canEdit) return setTemplates([]);
@@ -131,6 +133,15 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const nextLabel = step.key === 'start' && !form ? (busy ? 'Creating…' : 'Create form') : next ? (busy ? 'Saving…' : 'Next') : busy ? 'Saving…' : 'Save and finish';
   const guestSkip = flow === 'special-guests' && step.key === 'start' && !form;
 
+  // Steps that shape the form preview the form: the saved one, or Start's draft before it exists.
+  const previewing = !step.formAnchor
+    ? null
+    : form
+      ? previewForm(form, typed, selectedOrg?.name)
+      : step.key === 'start' && draft && canEdit
+        ? draftPreviewForm(draft, selectedOrg?.name)
+        : null;
+
   let body: React.ReactNode;
   if (loadError)
     body = (
@@ -179,6 +190,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               config={config}
               existing={formsOnStep(flow, f.forms.forms).map((x) => ({ id: x.id, name: x.name, status: x.status, href: formEditHref(eventId, x, f.orgId) }))}
               onBusyChange={setBusy}
+              onDraftChange={setDraft}
               eventName={event.name}
               templates={templates}
               canManage={canEdit}
@@ -314,10 +326,10 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               eventId,
               overlay: {},
               revision: f.revision,
-              anchor: (form && step.formAnchor) || step.anchor,
-              form: form && step.formAnchor ? previewForm(form, typed, selectedOrg?.name) : null,
+              anchor: (previewing && step.formAnchor) || step.anchor,
+              form: previewing,
             }}
-            subject={form && step.formAnchor ? 'form' : 'event'}
+            subject={previewing ? 'form' : 'event'}
             isDesktop={isDesktop}
             open={previewOpen}
             onClose={() => setPreviewOpen(false)}
