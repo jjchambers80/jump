@@ -9,7 +9,7 @@
 import { moneyOf } from './applicationMoney.js';
 import { DUE_ZONE, selectionDueAt } from './applicationSelection.js';
 import orderLineService from './OrderLineService.js';
-import { MERGE_FIELDS, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
+import { STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
 import { applicationKey } from '../config/notifications.js';
 import notificationTemplateService from './NotificationTemplateService.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
@@ -40,35 +40,12 @@ function formatDate(value) {
 }
 
 class ApplicationTemplateService {
-  // Spec 053-D: storage is NotificationTemplate (key `application.<scope>.<ACTION>`);
-  // this service keeps the action/scope shape the decision flow and the
-  // /admin/settings/application-templates wrappers use.
-
-  /** All templates for an organization, defaults filled in for missing actions. */
-  async listTemplates(organizationId, scope = 'EVENT') {
-    const actions = scope === 'STANDING' ? STANDING_TEMPLATE_ACTIONS : TEMPLATE_ACTIONS;
-    return Promise.all(actions.map((action) => this.getTemplate(organizationId, action, scope)));
-  }
+  // Spec 053-D: stored as NotificationTemplate rows (key `application.<scope>.<ACTION>`),
+  // edited on Settings › Notifications; this service renders and sends them.
 
   async getTemplate(organizationId, action, scope = 'EVENT') {
     this._assertAction(action, scope);
     return this._fromNotification(action, scope, await notificationTemplateService.get(organizationId, applicationKey(scope, action)));
-  }
-
-  async updateTemplate(organizationId, action, { subject, body }, scope = 'EVENT') {
-    this._assertAction(action, scope);
-    const saved = await notificationTemplateService.update(organizationId, applicationKey(scope, action), { subject, body });
-    logger.info('Application template updated', { event: 'application_template_updated', organizationId, action });
-    return this._fromNotification(action, scope, saved);
-  }
-
-  async resetTemplate(organizationId, action, scope = 'EVENT') {
-    this._assertAction(action, scope);
-    return this._fromNotification(action, scope, await notificationTemplateService.reset(organizationId, applicationKey(scope, action)));
-  }
-
-  mergeFields() {
-    return MERGE_FIELDS.map(([key, description]) => ({ key, description }));
   }
 
   /**

@@ -16,7 +16,7 @@ import {
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateTemplateBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
@@ -1022,21 +1022,6 @@ router.post('/events/:eventId/check-in/:applicationId', validateCheckInBody, wra
 router.delete('/events/:eventId/check-in/:applicationId', wrap(async (req, res) => {
   const { eventId, applicationId } = req.params;
   res.json(await vendorCheckInService.undoCheckIn(eventId, applicationId, await scopedOrgFor(req)));
-}));
-
-// Application email templates (Settings › Notifications › Event applications)
-router.get('/settings/application-templates', wrap(async (req, res) => {
-  const organizationId = await activeOrgFor(req);
-  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
-  res.json({ data: await applicationTemplateService.listTemplates(organizationId, scope), mergeFields: applicationTemplateService.mergeFields() });
-}));
-router.put('/settings/application-templates/:action', requirePermission('settings.notifications'), validateTemplateBody, wrap(async (req, res) => {
-  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
-  res.json(await applicationTemplateService.updateTemplate(await activeOrgFor(req), req.params.action, req.body, scope));
-}));
-router.delete('/settings/application-templates/:action', requirePermission('settings.notifications'), wrap(async (req, res) => {
-  const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
-  res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action, scope));
 }));
 
 // Settings › Notifications (spec 053): store wording of system emails.
