@@ -49,6 +49,7 @@ import qrService from '../../services/QRService.js';
 import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
+import notificationTemplateService from '../../services/NotificationTemplateService.js';
 import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import volunteerShiftService from '../../services/VolunteerShiftService.js';
 import eventGuestService from '../../services/EventGuestService.js';
@@ -65,6 +66,7 @@ import adminSearchService from '../../services/AdminSearchService.js';
 import customerTimelineService from '../../services/CustomerTimelineService.js';
 import buyerAuthService from '../../services/BuyerAuthService.js';
 import { LIMITS, makeLimiter } from '../../middleware/rateLimit.js';
+import { cleanTemplate } from '../../utils/renderTemplate.js';
 import { buyerVerifyUrl } from '../../utils/storefrontUrl.js';
 import mapService from '../../services/MapService.js';
 import { PAID_ORDER_STATUSES } from '../../services/paidStatuses.js';
@@ -1022,7 +1024,7 @@ router.delete('/events/:eventId/check-in/:applicationId', wrap(async (req, res) 
   res.json(await vendorCheckInService.undoCheckIn(eventId, applicationId, await scopedOrgFor(req)));
 }));
 
-// Templates (Settings › Applications)
+// Application email templates (Settings › Notifications › Event applications)
 router.get('/settings/application-templates', wrap(async (req, res) => {
   const organizationId = await activeOrgFor(req);
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
@@ -1035,6 +1037,40 @@ router.put('/settings/application-templates/:action', requirePermission('setting
 router.delete('/settings/application-templates/:action', requirePermission('settings.applications'), wrap(async (req, res) => {
   const scope = req.query.scope === 'STANDING' ? 'STANDING' : 'EVENT';
   res.json(await applicationTemplateService.resetTemplate(await activeOrgFor(req), req.params.action, scope));
+}));
+
+// Settings › Notifications (spec 053): store wording of system emails.
+const notificationTestLimiter = makeLimiter('NOTIFICATION_TEST', LIMITS.NOTIFICATION_TEST);
+const notificationOrg = (organizationId) =>
+  prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true, name: true, logoUrl: true, brandColor: true } });
+/** The draft from the body when the dialog sends one, else the saved wording. */
+async function notificationDraft(req) {
+  const organizationId = await activeOrgFor(req);
+  const saved = await notificationTemplateService.get(organizationId, req.params.key);
+  const hasDraft = typeof req.body?.subject === 'string' || typeof req.body?.body === 'string';
+  const template = hasDraft ? cleanTemplate({ subject: req.body.subject, body: req.body.body }) : { subject: saved.subject, body: saved.body };
+  const organization = await notificationOrg(organizationId);
+  if (!organization) throw new NotFoundError('Organization not found');
+  return { organization, template };
+}
+router.get('/settings/notifications', wrap(async (req, res) => {
+  res.json({ groups: await notificationTemplateService.list(await activeOrgFor(req)) });
+}));
+router.put('/settings/notifications/:key', requirePermission('settings.notifications'), validateTemplateBody, wrap(async (req, res) => {
+  res.json(await notificationTemplateService.update(await activeOrgFor(req), req.params.key, req.body));
+}));
+router.delete('/settings/notifications/:key', requirePermission('settings.notifications'), wrap(async (req, res) => {
+  res.json(await notificationTemplateService.reset(await activeOrgFor(req), req.params.key));
+}));
+router.post('/settings/notifications/:key/preview', wrap(async (req, res) => {
+  const { organization, template } = await notificationDraft(req);
+  const { subject, html } = await emailService.previewNotification(req.params.key, organization, template);
+  res.json({ subject, html });
+}));
+router.post('/settings/notifications/:key/test', requirePermission('settings.notifications'), notificationTestLimiter, wrap(async (req, res) => {
+  const { organization, template } = await notificationDraft(req);
+  await emailService.sendNotificationTest(req.params.key, organization, template, req.user.email);
+  res.json({ sentTo: req.user.email });
 }));
 
 // Daily digest of new submissions (spec 011 phase 3)

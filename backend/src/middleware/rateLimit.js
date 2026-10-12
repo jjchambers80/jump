@@ -129,6 +129,12 @@ export const LIMITS = Object.freeze({
     limit: 30,
     message: 'Too many applications from this address. Try again later.',
   },
+  // Spec 053: Settings › Notifications "Send me a test" (staff only, still mail out)
+  NOTIFICATION_TEST: {
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    message: 'Too many test emails. Try again later.',
+  },
   // Spec 043: CLI login code exchanges per IP (codes are single use and expire in 5 min)
   DEVELOPER_TOKEN: {
     windowMs: 15 * 60 * 1000,

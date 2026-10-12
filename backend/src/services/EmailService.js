@@ -8,6 +8,8 @@ import { orderUrl } from '../utils/storefrontUrl.js';
 import { formatEventDateTime } from '../utils/eventTime.js';
 import { absoluteAssetUrl } from '../utils/publicUrl.js';
 import { emailBrand } from '../utils/emailBrand.js';
+import { renderTemplate } from '../utils/renderTemplate.js';
+import notificationTemplateService from './NotificationTemplateService.js';
 
 function escapeHtml(value) {
   return String(value)
@@ -98,6 +100,60 @@ function eventimusButton(href, label) {
             </table>`;
 }
 
+/**
+ * Plain-text template output to HTML paragraphs (spec 011, spec 053): blank
+ * lines split paragraphs, a paragraph that is only a URL becomes a button,
+ * other URLs become links. Every character of the text is escaped.
+ */
+function textToHtml(body, b) {
+  return String(body || '')
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      if (/^https?:\/\/\S+$/.test(p)) {
+        return `<div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(p)}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Open</a></div>`;
+      }
+      const lines = p.split('\n').map((line) => {
+        const escaped = escapeHtml(line);
+        return escaped.replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" style="color: ${b.link};">$1</a>`);
+      });
+      return `<p style="margin: 0 0 14px; line-height: 1.5;">${lines.join('<br />')}</p>`;
+    })
+    .join('');
+}
+
+/** Merge context for the order confirmation (spec 053 `order.confirmation`). */
+function orderContext(order) {
+  const org = order.organization || {};
+  return {
+    buyer: { firstName: order.contact?.firstName || 'there', lastName: order.contact?.lastName || '' },
+    event: {
+      name: order.event?.name || 'Your Event',
+      date: order.event?.date ? formatEventDateTime(order.event.date, order.event.venue?.timezone) || '' : '',
+    },
+    order: { ref: order.orderRef || '', total: `$${Number(order.totalAmount || 0).toFixed(2)}` },
+    organization: { name: org.name || '' },
+  };
+}
+
+// Spec 053: a sample for the Settings › Notifications preview and test send.
+// Never a real buyer: the preview must not leak anyone's order to staff.
+const SAMPLES = {
+  'order.confirmation': (organization) => ({
+    order: {
+      id: 'sample',
+      orderRef: 'ORD-SAMPLE',
+      totalAmount: 52.5,
+      contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' },
+      event: { name: 'Sample event', date: new Date(Date.now() + 14 * 86400000).toISOString(), venue: { timezone: 'America/New_York' } },
+      organization,
+      addOns: [{ quantity: 1, name: 'Parking pass' }],
+    },
+    tickets: [{ priceTier: { name: 'General admission' } }, { priceTier: { name: 'General admission' } }],
+  }),
+};
+
 function icsText(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
@@ -108,19 +164,12 @@ function icsDate(value) {
 
 class EmailService {
   /**
-   * Send order confirmation email with View Tickets link (FR-036)
-   * Fire-and-forget with async retry — does not block order completion.
-   * @param {Object} order - Order object with contact, event, tickets
-   * @param {Array} tickets - Ticket objects with barcode, pricePaid
-   * @param {Object} [options]
-   * @param {string|null} [options.manageTicketsUrl] - Buyer account magic link (spec 007);
-   *   present only when the buyer opted into an account at checkout
+   * The order confirmation message (FR-036, spec 053 `order.confirmation`):
+   * the store's wording, then the order card, View Tickets button and the
+   * account box as fixed system blocks.
+   * @param {{ subject: string, body: string }} template - unrendered template
    */
-  async sendOrderConfirmation(order, tickets, { manageTicketsUrl = null } = {}) {
-    const maxRetries = 3;
-    let attempt = 0;
-    let lastError;
-
+  async buildOrderConfirmation(order, tickets, { manageTicketsUrl = null, template } = {}) {
     // Spec 047 D0-C: org identity comes from the order, which may have no event.
     const org = order.organization || {};
     const viewTicketsUrl = await orderUrl(order.id, org.id);
@@ -151,45 +200,86 @@ class EmailService {
       .map((line) => `${line.quantity}x ${escapeHtml(line.name || 'Add-on')}`)
       .join(', ');
 
+    const context = orderContext(order);
+    const textBody = renderTemplate(template.body, context);
+
+    const msg = {
+      to: [order.contact?.email || order.contactEmail],
+      from: fromAs(org.name),
+      subject: renderTemplate(template.subject, context),
+      text: textBody,
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              ${orgLogoHtml(org.logoUrl, org.name)}
+              <h1 style="color: #333;">🎟️ Order Confirmed!</h1>
+            </div>
+            <div style="padding: 20px;">
+              ${textToHtml(textBody, b)}
+
+              <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <h3 style="margin: 0 0 12px;">${escapeHtml(order.event?.name || 'Event')}</h3>
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Tickets:</strong> ${tierSummary}</p>
+                ${addOnSummary ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Add-ons:</strong> ${addOnSummary}</p>` : ''}
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)}</p>
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Order Ref:</strong> ${order.orderRef}</p>
+              </div>
+
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${viewTicketsUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
+              </div>
+
+              <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
+${manageTicketsHtml}
+              <p style="color: #666; font-size: 12px; margin-top: 16px;">Order reference: ${order.orderRef}</p>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+    return msg;
+  }
+
+  /**
+   * Spec 053: a notification rendered against sample data for the Settings ›
+   * Notifications preview (and the test send). `template` is the unsaved
+   * draft or the stored wording.
+   * @returns {Promise<{ subject: string, html: string, text: string }>}
+   */
+  async previewNotification(key, organization, template) {
+    const sample = SAMPLES[key]?.(organization);
+    if (!sample) throw new Error(`No preview for notification ${key}`);
+    const msg = await this.buildOrderConfirmation(sample.order, sample.tickets, { manageTicketsUrl: null, template });
+    return { subject: msg.subject, html: msg.html, text: msg.text };
+  }
+
+  /** Spec 053: the preview, sent once to the staff member asking (single attempt). */
+  async sendNotificationTest(key, organization, template, to) {
+    const preview = await this.previewNotification(key, organization, template);
+    await deliver({ to: [to], from: fromAs(organization.name), subject: `[Test] ${preview.subject}`, html: preview.html, text: preview.text });
+  }
+
+  /**
+   * Send order confirmation email with View Tickets link (FR-036)
+   * Fire-and-forget with async retry — does not block order completion.
+   * @param {Object} order - Order object with contact, event, tickets
+   * @param {Array} tickets - Ticket objects with barcode, pricePaid
+   * @param {Object} [options]
+   * @param {string|null} [options.manageTicketsUrl] - Buyer account magic link (spec 007);
+   *   present only when the buyer opted into an account at checkout
+   */
+  async sendOrderConfirmation(order, tickets, { manageTicketsUrl = null } = {}) {
+    const maxRetries = 3;
+    let attempt = 0;
+    let lastError;
+
+    const template = await notificationTemplateService.resolve(order.organization?.id || null, 'order.confirmation');
+    const msg = await this.buildOrderConfirmation(order, tickets, { manageTicketsUrl, template });
+
     while (attempt < maxRetries) {
       try {
         attempt++;
-
-        const msg = {
-          to: [order.contact?.email || order.contactEmail],
-          from: fromAs(org.name),
-          subject: `Order Confirmed — ${order.event?.name || 'Your Event'} (${order.orderRef})`,
-          html: `
-            <html>
-              <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
-                  ${orgLogoHtml(org.logoUrl, org.name)}
-                  <h1 style="color: #333;">🎟️ Order Confirmed!</h1>
-                </div>
-                <div style="padding: 20px;">
-                  <p>Hi ${order.contact?.firstName || 'there'},</p>
-                  <p>Your order <strong>${order.orderRef}</strong> has been confirmed.</p>
-
-                  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
-                    <h3 style="margin: 0 0 12px;">${order.event?.name || 'Event'}</h3>
-                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Tickets:</strong> ${tierSummary}</p>
-                    ${addOnSummary ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Add-ons:</strong> ${addOnSummary}</p>` : ''}
-                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Total:</strong> $${Number(order.totalAmount).toFixed(2)}</p>
-                    <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Order Ref:</strong> ${order.orderRef}</p>
-                  </div>
-
-                  <div style="text-align: center; margin: 32px 0;">
-                    <a href="${viewTicketsUrl}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 16px; font-weight: bold; padding: 14px 32px; border-radius: 8px; text-decoration: none;">View Tickets</a>
-                  </div>
-
-                  <p style="color: #666; font-size: 14px;">Your QR codes for event entry are available on the tickets page. Present them at the venue entrance — each ticket is valid for one entry.</p>
-${manageTicketsHtml}
-                  <p style="color: #666; font-size: 12px; margin-top: 16px;">Order reference: ${order.orderRef}</p>
-                </div>
-              </body>
-            </html>
-          `,
-        };
 
         await deliver(msg);
 
@@ -589,21 +679,7 @@ ${manageTicketsHtml}
   async sendApplicationMessage({ to, subject, body, organization = {}, staff = false }) {
     const b = emailBrand(staff ? null : organization.brandColor);
     const orgName = organization.name || 'the organizer';
-    const paragraphs = String(body || '')
-      .split(/\n\s*\n/)
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((p) => {
-        if (/^https?:\/\/\S+$/.test(p)) {
-          return `<div style="text-align: center; margin: 24px 0;"><a href="${escapeHtml(p)}" style="display: inline-block; background-color: ${b.brand}; color: ${b.onBrand}; font-size: 15px; font-weight: bold; padding: 12px 28px; border-radius: 8px; text-decoration: none;">Open</a></div>`;
-        }
-        const lines = p.split('\n').map((line) => {
-          const escaped = escapeHtml(line);
-          return escaped.replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" style="color: ${b.link};">$1</a>`);
-        });
-        return `<p style="margin: 0 0 14px; line-height: 1.5;">${lines.join('<br />')}</p>`;
-      })
-      .join('');
+    const paragraphs = textToHtml(body, b);
 
     const msg = {
       to: [to],
