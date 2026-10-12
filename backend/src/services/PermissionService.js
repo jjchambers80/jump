@@ -121,8 +121,8 @@ class PermissionService {
 
 // Keys split out of an older key: an override saved before the split applies
 // to the new key too, until one is saved for it (050-E: standing forms left
-// applications.forms).
-const SPLIT_KEYS = { 'applications.standingForms': 'applications.forms' };
+// applications.forms; spec 053: notification emails left settings.applications).
+const SPLIT_KEYS = { 'applications.standingForms': 'applications.forms', 'settings.notifications': 'settings.applications' };
 
 function roleOverrides(raw) {
   const overrides = raw && typeof raw === 'object' ? { ...raw } : {};

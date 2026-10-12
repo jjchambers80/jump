@@ -1,42 +1,27 @@
 // Application Template Service (spec 011)
 // Per-organization decision emails: defaults seeded lazily, edited on
-// Settings › Applications, rendered with a whitelisted merge context, sent
+// Settings › Notifications, rendered with a whitelisted merge context, sent
 // through EmailService. Templates are plain text; every merged value is
 // escaped, so organizers cannot inject HTML into applicant emails.
 //
-// Syntax: {{path.to.value}} and {{#path}}…{{/path}} (section shown when the
-// value is truthy). Unknown paths render empty.
+// Syntax: utils/renderTemplate.js.
 
 import { prisma } from '@jump/db';
 import { moneyOf } from './applicationMoney.js';
 import { DUE_ZONE, selectionDueAt } from './applicationSelection.js';
 import orderLineService from './OrderLineService.js';
 import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from '../config/applications.js';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import emailService from './EmailService.js';
 import boothService from './BoothService.js';
 import { buyerAccountUrl, eventUrl } from '../utils/storefrontUrl.js';
 import logger from '../utils/logger.js';
 import { statusUrlFor } from './applicationLinks.js';
+import { cleanTemplate, renderTemplate } from '../utils/renderTemplate.js';
+
+export { renderTemplate };
 
 const ACTIONS = new Set(TEMPLATE_ACTIONS);
-
-function lookup(context, path) {
-  return path.split('.').reduce((v, k) => (v && typeof v === 'object' ? v[k] : undefined), context);
-}
-
-/** Render a template string against a context. Sections first, then fields. */
-export function renderTemplate(text, context) {
-  const withSections = String(text ?? '').replace(/\{\{#([\w.]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_m, path, inner) =>
-    lookup(context, path) ? inner : ''
-  );
-  return withSections.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, path) => {
-    const value = lookup(context, path);
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'object') return '';
-    return String(value);
-  });
-}
 
 /** A due date, read on the organization's calendar like the deadline itself. */
 function formatDueDate(value) {
@@ -70,12 +55,7 @@ class ApplicationTemplateService {
 
   async updateTemplate(organizationId, action, { subject, body }, scope = 'EVENT') {
     this._assertAction(action, scope);
-    const cleanSubject = String(subject ?? '').trim();
-    const cleanBody = String(body ?? '').trim();
-    if (cleanSubject.length < 1 || cleanSubject.length > 200) throw new ValidationError('subject must be 1-200 characters');
-    if (cleanBody.length < 1 || cleanBody.length > 10000) throw new ValidationError('body must be 1-10000 characters');
-    this._assertBalancedSections(cleanBody);
-    this._assertBalancedSections(cleanSubject);
+    const { subject: cleanSubject, body: cleanBody } = cleanTemplate({ subject, body });
     const row = await prisma.applicationMessageTemplate.upsert({
       where: { organizationId_scope_action: { organizationId, scope, action } },
       update: { subject: cleanSubject, body: cleanBody },
@@ -245,14 +225,6 @@ class ApplicationTemplateService {
   _assertAction(action, scope = 'EVENT') {
     const actions = scope === 'STANDING' ? new Set(STANDING_TEMPLATE_ACTIONS) : ACTIONS;
     if (!actions.has(action)) throw new NotFoundError('Unknown template action');
-  }
-
-  _assertBalancedSections(text) {
-    const opens = [...text.matchAll(/\{\{#([\w.]+)\}\}/g)].map((m) => m[1]);
-    const closes = [...text.matchAll(/\{\{\/([\w.]+)\}\}/g)].map((m) => m[1]);
-    if (opens.length !== closes.length || opens.some((o) => !closes.includes(o))) {
-      throw new ValidationError('Every {{#section}} needs a matching {{/section}}');
-    }
   }
 
   _serialize(action, row, scope = 'EVENT') {

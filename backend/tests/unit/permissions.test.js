@@ -64,6 +64,13 @@ describe('overrides', () => {
     expect(admin.has('applications.standingForms')).toBe(false);
   });
 
+  test('a settings.applications override carries to settings.notifications (spec 053)', async () => {
+    stored({ ADMIN: { 'settings.applications': false } });
+    expect((await permissionService.effective('ADMIN')).granted.has('settings.notifications')).toBe(false);
+    stored({ ADMIN: { 'settings.applications': false, 'settings.notifications': true } });
+    expect((await permissionService.effective('ADMIN')).granted.has('settings.notifications')).toBe(true);
+  });
+
   test('a saved applications.standingForms value wins over the carried one', async () => {
     stored({ ORGANIZER: { 'applications.forms': true, 'applications.standingForms': false } });
     const organizer = (await permissionService.effective('ORGANIZER')).granted;
