@@ -169,7 +169,7 @@ test.describe('desktop', () => {
     const state = await mockApi(page);
     await page.goto(STEP_URL);
     await expect(heading(page)).toBeVisible(COLD);
-    await expect(page.getByText(/Step 7 of 8 — Collect more/)).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 8');
     await expect.poll(() => state.previews).toBeGreaterThan(0);
     // Nothing yet: the step offers Skip, the preview holds the #add-ons slot.
     await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible();
@@ -285,7 +285,7 @@ test.describe('desktop', () => {
     await mockApi(page, adminEvent({ admissionMode: 'RSVP', priceTiers: [], setupStep: 'tickets' }));
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=tickets`);
     await expect(main(page).getByRole('heading', { level: 1, name: 'Tickets or RSVP' })).toBeVisible(COLD);
-    await expect(page.getByText('Step 6 of 8 — Tickets or RSVP')).toBeVisible();
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 8');
     await page.goto(STEP_URL);
     await expect(heading(page)).toBeVisible(COLD);
     await expect(main(page).getByRole('heading', { level: 2, name: 'Add-ons' })).toBeVisible();

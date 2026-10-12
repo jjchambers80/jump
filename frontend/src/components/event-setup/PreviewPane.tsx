@@ -71,16 +71,21 @@ export default function PreviewPane({
       className={
         sheet
           ? `${open ? 'fixed' : 'hidden'} inset-0 z-50 flex flex-col bg-gray-50 dark:bg-slate-900 motion-safe:animate-fade-in`
-          : 'flex min-h-0 flex-1 flex-col border-l border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-900'
+          : 'relative flex min-h-0 flex-1 flex-col border-l border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-900'
       }
     >
-      <div className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-medium text-gray-700 dark:text-slate-300">Preview</h2>
-        {/* Native radios: arrow keys move the choice, one Tab stop (§8.3: a radio group, not a switch). */}
-        <fieldset className="inline-flex rounded-md border border-gray-300 p-0.5 dark:border-slate-600">
+      {/* Dotted stage under everything, a layer of its own so nothing inherits its colour. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 text-gray-300 dark:text-slate-700"
+        style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1.5px)', backgroundSize: '20px 20px' }}
+      />
+      <div className="relative flex shrink-0 items-center justify-center px-4 pt-4">
+        {/* Native radios: arrow keys move the choice, one Tab stop (§8.3: a radio group, not a switch). Icons, named by sr-only text. */}
+        <fieldset className="inline-flex rounded-full border border-gray-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <legend className="sr-only">Preview size</legend>
           {(['phone', 'desktop'] as Device[]).map((value) => (
-            <label key={value} className="relative">
+            <label key={value} className="relative" title={value === 'phone' ? 'Phone' : 'Desktop'}>
               <input
                 type="radio"
                 name="setup-preview-size"
@@ -89,9 +94,9 @@ export default function PreviewPane({
                 onChange={() => setDevice(value)}
                 className="peer sr-only"
               />
-              <span className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 peer-checked:bg-gray-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800 dark:peer-checked:bg-slate-100 dark:peer-checked:text-slate-900 sm:min-h-9">
-                {value === 'phone' ? <Smartphone className="h-4 w-4" aria-hidden /> : <Monitor className="h-4 w-4" aria-hidden />}
-                {value === 'phone' ? 'Phone' : 'Desktop'}
+              <span className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-gray-900 peer-checked:bg-gray-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white dark:peer-checked:bg-slate-100 dark:peer-checked:text-slate-900 dark:peer-focus-visible:ring-offset-slate-900">
+                {value === 'phone' ? <Smartphone className="h-5 w-5" aria-hidden /> : <Monitor className="h-5 w-5" aria-hidden />}
+                <span className="sr-only">{value === 'phone' ? 'Phone' : 'Desktop'}</span>
               </span>
             </label>
           ))}
@@ -101,19 +106,13 @@ export default function PreviewPane({
             type="button"
             onClick={onClose}
             aria-label="Close preview"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
         )}
       </div>
       <div ref={stageRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-        {/* Dotted stage, as a layer of its own so nothing inherits its colour. */}
-        <div
-          aria-hidden
-          className="absolute inset-0 text-gray-300 dark:text-slate-700"
-          style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1.5px)', backgroundSize: '20px 20px' }}
-        />
         <PreviewDevice
           ref={frameRef}
           device={device}

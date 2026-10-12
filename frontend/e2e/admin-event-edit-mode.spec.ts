@@ -303,12 +303,12 @@ test.describe('edit mode', () => {
     await expect(dialog.getByRole('radio', { name: /Crew sign-up/ })).toHaveCount(0);
   });
 
-  test('the progress says "Editing <step>" over the bar, with no step menu', async ({ page }) => {
+  test('the progress is the bar alone: no step line, no saved line, no step menu', async ({ page }) => {
     await mockApi(page);
     await page.goto(setupUrl('step=description'));
     await expect(heading(page, 'Describe it')).toBeVisible(COLD);
     await expect(page.getByText(/Step \d+ of \d+ —/)).toHaveCount(0);
-    await expect(page.getByText('Editing Describe it')).toBeVisible();
+    await expect(page.getByText('Editing Describe it')).toHaveCount(0);
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Jump to edit' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
@@ -343,7 +343,8 @@ test.describe('edit mode', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect.poll(() => calls.patch.length).toBe(1);
     expect(calls.patch[0].postDataJSON()).toEqual({ name: 'Live Rename' });
-    await expect(page.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
+    // "Unsaved changes" clears; there is no "Saved" line (spec 051).
+    await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toHaveCount(0);
   });
 
   test('the unsaved-changes guard asks before browser Back leaves a published edit', async ({ page }) => {

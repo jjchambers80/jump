@@ -13,7 +13,9 @@ Event setup and application setup are separate tasks. The event wizard covers th
 
 **Device frames (both wizards).** `PreviewDevice` puts the page in a phone (390 × 844, status bar and island) or a laptop (1280 × 800, browser bar and base) on a dotted stage, scaled as one to fit. Both frames share one element tree, so switching never reloads the iframe.
 
-**No step menu (both wizards).** The header has no menu button and the progress area no step labels: a `role="progressbar"` fill and one line, "Step n of N — Title" ("Editing Title" on a set-up event). Back and Next move between steps; the edit-mode rail and the step sheet were removed.
+**No step menu (both wizards).** The header has no menu button, and the progress area is the `role="progressbar"` fill alone (`aria-valuetext` "Step n of N"): no step labels, no "Step n of N — Title" / "Editing Title" line, no routine "Saving… / Saved". Back and Next move between steps; the edit-mode rail and the step sheet were removed. Save *problems* still show, in the footer beside Back (`SetupFooter` `status`): "Couldn't save — Retry", "Not saved: fix N fields", and "Unsaved changes" on a live event.
+
+**Preview chrome (both wizards).** No "Preview" header bar: the Phone / Desktop choice is an icon radio pair centred above the device on the dotted stage (names in sr-only text, `title` tooltips); on phones the preview sheet keeps a Close button at its top right.
 
 Organizers start a flow from **Add to this event** on the event's Overview, from **What's next** on the wizard's Done screen, or from **Add a form** on the event's Applications tab. Editing an existing form opens its flow at Form details.
 

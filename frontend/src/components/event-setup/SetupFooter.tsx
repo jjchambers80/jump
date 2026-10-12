@@ -19,6 +19,7 @@ export default function SetupFooter({
   nextForm,
   skipLabel = 'Skip for now',
   busy,
+  status,
 }: {
   onBack?: () => void;
   onSkip?: () => void;
@@ -33,9 +34,11 @@ export default function SetupFooter({
   busy: boolean;
   /** Why Back waits (a publish in flight); Back stays focusable with aria-disabled. */
   locked?: string;
+  /** A save problem worth seeing (couldn't save, invalid fields, unsaved live edits). */
+  status?: React.ReactNode;
 }) {
   return (
-    <footer className="flex shrink-0 items-center gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900">
+    <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900">
       {onBack && (
         <button
           type="button"
@@ -53,6 +56,7 @@ export default function SetupFooter({
           {locked}
         </p>
       )}
+      {status && <div className="min-w-0">{status}</div>}
       <div className="ml-auto flex items-center gap-2">
         {onSkip && (
           <button type="button" onClick={onSkip} className={textButton}>
