@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ban, EyeOff, Lock, LockOpen, Trash2 } from 'lucide-react';
 import EventLifecycleDialog, { type LifecycleAction } from './EventLifecycleDialog';
+import { useCan } from '@/components/OrgContext';
 
 interface EventActionsMenuProps {
   eventId: string;
@@ -45,6 +46,8 @@ export default function EventActionsMenu({
   onLifecycleDone,
 }: EventActionsMenuProps) {
   const router = useRouter();
+  // Spec 054: ADMIN by default (System › Roles); the backend enforces it too.
+  const canCancel = useCan('events.cancel');
   const [open, setOpen] = useState(false);
   const [lifecycle, setLifecycle] = useState<LifecycleAction | null>(null);
   const published = status === 'PUBLISHED';
@@ -182,7 +185,7 @@ export default function EventActionsMenu({
               Close sales…
             </button>
           )}
-          {published && (
+          {published && canCancel && (
             <button
               type="button"
               role="menuitem"

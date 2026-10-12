@@ -25,6 +25,7 @@ import EventRsvp from './EventRsvp';
 import EventCart from './EventCart';
 import EventMobileBar from './EventMobileBar';
 import EventGuests from './EventGuests';
+import EventCancelledNotice from './EventCancelledNotice';
 import { EMPTY_CART, type EventCart as Cart } from './useEventCart';
 import { eventPageState, type EventPageEvent, type EventPageOrg, type PriceTier } from './eventPage';
 
@@ -73,6 +74,7 @@ export default function EventPageView({
   ...on
 }: EventPageViewProps) {
   const state = eventPageState(event);
+  const cancelled = event.cancelled === true;
   const { isRsvp, isPastEvent, isSoldOut, salesClosed } = state;
   const zone = event.venue?.timezone;
   const formattedDate = event.date ? formatEventDate(event.date, zone, { weekday: 'long', month: 'long' }) : '';
@@ -100,7 +102,9 @@ export default function EventPageView({
                 : `px-4 pb-6 sm:p-10 ${event.logoUrl ? 'pt-[4.5rem]' : 'pt-6'}`
             }
           >
-            {isRsvp ? (
+            {cancelled ? (
+              <EventCancelledNotice event={event} org={org} />
+            ) : isRsvp ? (
               <EventRsvp
                 event={event}
                 isPastEvent={isPastEvent}
@@ -130,12 +134,12 @@ export default function EventPageView({
           </div>
         </div>
 
-        {!isRsvp && !isPastEvent && !isSoldOut && !salesClosed && (
+        {!cancelled && !isRsvp && !isPastEvent && !isSoldOut && !salesClosed && (
           <EventCart cart={cart} preview={preview} onCheckout={on.onCheckout} onToggleLine={on.onToggleLine} onToggleAllLines={on.onToggleAllLines} />
         )}
       </div>
 
-      <EventMobileBar state={state} cart={cart} preview={preview} rsvpSubmitted={rsvpSubmitted} onOpenCart={on.onOpenCart} onCheckout={on.onCheckout} />
+      {!cancelled && <EventMobileBar state={state} cart={cart} preview={preview} rsvpSubmitted={rsvpSubmitted} onOpenCart={on.onOpenCart} onCheckout={on.onCheckout} />}
 
       {!preview && children}
       {chrome && org.id && org.name && <StorefrontFooter organization={{ id: org.id, name: org.name }} />}

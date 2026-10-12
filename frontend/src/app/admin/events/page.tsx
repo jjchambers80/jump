@@ -11,6 +11,7 @@ import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
 import EventsPageHeader from '@/components/events/EventsPageHeader';
 import EventListCard, { type AdminEvent } from '@/components/events/EventListCard';
 import EventsPagination from '@/components/events/EventsPagination';
@@ -48,6 +49,7 @@ function EventsListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedOrgId } = useOrg();
+  const { withReauth } = useReauth();
   const { status: statusFilter, q: searchQ, category, sort, page } = readUrlParams(searchParams);
 
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -198,13 +200,13 @@ function EventsListContent() {
     try {
       setCancelBusy(true);
       setCancelError(null);
-      await api.post(`/organizations/${selectedOrgId}/events/${cancelling.id}/cancel`, {});
+      await withReauth(() => api.post(`/organizations/${selectedOrgId}/events/${cancelling.id}/cancel`, {}));
       setCancelling(null);
       setCancelBusy(false);
       await fetchEvents();
       await fetchSummary();
     } catch (err: any) {
-      setCancelError(err.message || 'Failed to cancel event');
+      if (!isReauthCancelled(err)) setCancelError(err.message || 'Failed to cancel event');
       setCancelBusy(false);
     }
   };
@@ -402,23 +404,25 @@ function EventsListContent() {
 
 export default function DashboardEventsPage() {
   return (
-    <Suspense fallback={
-      <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 py-6 sm:py-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-10 w-48 bg-gray-200 dark:bg-slate-700 rounded" />
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-gray-200 dark:bg-slate-700 rounded-lg" />
+    <ReauthProvider>
+      <Suspense fallback={
+        <div className="mx-auto w-full max-w-screen-2xl px-4 sm:px-6 py-6 sm:py-8">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 w-48 bg-gray-200 dark:bg-slate-700 rounded" />
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-24 bg-gray-200 dark:bg-slate-700 rounded-lg" />
+              ))}
+            </div>
+            <div className="h-10 w-full bg-gray-200 dark:bg-slate-700 rounded" />
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 dark:bg-slate-700 rounded-lg" />
             ))}
           </div>
-          <div className="h-10 w-full bg-gray-200 dark:bg-slate-700 rounded" />
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 bg-gray-200 dark:bg-slate-700 rounded-lg" />
-          ))}
         </div>
-      </div>
-    }>
-      <EventsListContent />
-    </Suspense>
+      }>
+        <EventsListContent />
+      </Suspense>
+    </ReauthProvider>
   );
 }

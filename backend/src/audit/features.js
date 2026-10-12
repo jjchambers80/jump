@@ -61,6 +61,8 @@ export const MODEL_FEATURES = {
   ApplicationQuestion: { feature: 'Applications', label: 'label', org: 'form', event: 'form' },
   ApplicationFormTemplate: { feature: 'Applications', label: 'name' },
   NotificationTemplate: { feature: 'Settings › Notifications', label: 'key' },
+  EventCancellation: { feature: 'Events', org: 'event.venue' }, // spec 054
+  EventCancellationItem: { feature: 'Events', org: 'order', event: 'order' },
   Application: { feature: 'Applications' },
   ApplicationAnswer: { feature: 'Applications', org: 'application', event: 'application' },
   ApplicationDecision: { feature: 'Applications', org: 'application', event: 'application' },

@@ -15,11 +15,12 @@ import eventService from '../../services/EventService.js';
 import eventReadinessService from '../../services/EventReadinessService.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireOrganizer, requireFeature } from '../../middleware/rbac.js';
+import { requireOrganizer, requireFeature, requirePermission } from '../../middleware/rbac.js';
+import { requireRecentAuth } from '../../middleware/recentAuth.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
-import { validateCreateEvent, validateUpdateEvent } from '../validators/eventValidators.js';
+import { validateCreateEvent, validateUpdateEvent, validateCancelEvent } from '../validators/eventValidators.js';
 import { gateByEventParam } from '../../middleware/storefrontGate.js';
 import mapService from '../../services/MapService.js';
 import eventPreviewService from '../../services/EventPreviewService.js';
@@ -260,10 +261,12 @@ orgRouter.get('/:eventId/readiness', requireAuth, requireOrganizer, requireOrgMe
  * POST /organizations/:orgId/events/:eventId/cancel
  * Cancel an event (PUBLISHED → CANCELLED)
  */
-orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
+// Spec 054: ADMIN by default (events.cancel) and a step-up, since it stops
+// sales, ends checkouts and (054-B) refunds every order.
+orgRouter.post('/:eventId/cancel', requireAuth, requireOrganizer, requireOrgMembership(), requirePermission('events.cancel'), requireRecentAuth, validateCancelEvent, async (req, res, next) => {
   try {
     const { orgId, eventId } = req.params;
-    const result = await eventService.cancelEvent(orgId, eventId);
+    const result = await eventService.cancelEvent(orgId, eventId, { mode: req.body?.mode, message: req.body?.message, actorId: req.user.id });
     res.json(result);
   } catch (error) {
     next(error);
