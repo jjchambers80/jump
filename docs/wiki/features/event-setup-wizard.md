@@ -60,7 +60,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
  Review: Publish ──▶ PUBLISHED, setupCompletedAt = now, ticked DRAFT forms OPEN ──▶ Done
          Save as draft ──▶ PATCH {setupCompleted:true} (stays DRAFT) ──▶ Done
  PUBLISHED ── Unpublish (no live order / GOING RSVP / submitted application) ──▶ DRAFT
- PUBLISHED ── Close sales ⇄ Reopen sales (stays PUBLISHED)      DRAFT ── Delete draft (same guards + no order history)
+ PUBLISHED ── Close sales ⇄ Reopen sales (stays PUBLISHED)      DRAFT / CANCELLED ── Delete (soft when there is order history)
 ```
 
 - **Steps 1–2 are client-only.** Name, slug, venue, dates and the current step live in React state mirrored to `sessionStorage` `jump:event-setup:<orgId>` (`sessionDraft.ts`, try/catch, renders without it). Header shows **Exit** (not Save & exit) until the row exists.
@@ -153,7 +153,8 @@ Visible only while the vendor form has `spaceSelection: MAP`. No map: **Create a
 
 - **Close sales…** (directly above Cancel) / **Reopen sales**: PUBLISHED only, idempotent; sets `salesClosedAt` / `salesClosedById`. `assertSalesOpen` (409 `SALES_CLOSED`) refuses new ticket checkouts, RSVPs and application submissions; approved vendors still select and pay, scanning and check-in are untouched, an in-flight checkout still completes via the webhook. Public payload `salesClosed`; event page shows "Sales are closed", apply pages "Applications are closed" (`acceptance.reason: 'sales_closed'`), `GetInvolved` hidden. "Sales closed" pill on the Details hero and list card. Cancel still works from a sales-closed event.
 - **Unpublish…**: PUBLISHED → DRAFT, clears the sales close; 409 `UNPUBLISH_BLOCKED` + `details.reasons` while there is an order not FAILED / CANCELLED, a GOING RSVP or a non-DRAFT application. Runs under the Event row lock (see Gotchas).
-- **Delete draft…**: `DELETE …/:eventId`, DRAFT only, same guards **plus any order history at all** (409 `DELETE_BLOCKED`); removes draft applications, RSVPs and tiers, cascades forms / maps / add-ons; a restricting FK (`P2003`) is reported as "order history".
+- **Delete draft… / Delete event…**: `DELETE …/:eventId` (`EventService.deleteEvent`). PUBLISHED is refused (409, cancel first). A DRAFT keeps the unpublish guards (409 `DELETE_BLOCKED`). A DRAFT with no order history is removed for good (draft applications, RSVPs and tiers deleted; forms / maps / add-ons cascade). A CANCELLED event, a DRAFT with past checkouts, or one a restricting FK (`P2003`) protects is **soft-deleted**: `Event.deletedAt` is set, the event leaves the admin list, summary counts, dashboard, admin search, menu targets and the setup guide, and admin URLs 404, while its orders, payments, refunds and tax rows keep pointing at it. Money rows are never cascaded. There is no restore UI.
+- **Cancel event…** shows only on a PUBLISHED event; a refused cancel shows its message inside the dialog (`CancelEventDialog` `error`).
 
 ### Permissions (050-E)
 

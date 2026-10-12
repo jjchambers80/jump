@@ -324,7 +324,6 @@ describe('Unpublish, close sales and delete draft (spec 050-D)', () => {
       ['a live order', (e) => mkOrder(e, 'PENDING'), /1 order/],
       ['a GOING RSVP', async (e) => prisma.eventRsvp.create({ data: { eventId: e.id, contactId: (await mkContact('rsvp-d')).id } }), /1 RSVP/],
       ['a submitted application', (e) => mkApplication(e, 'SUBMITTED'), /1 submitted application/],
-      ['a failed checkout (money rows are never cascaded)', (e) => mkOrder(e, 'FAILED'), /1 past checkout/],
     ])('is refused with reasons for %s', async (_label, seed, reason) => {
       const event = await mkEvent({ status: 'DRAFT' });
       await seed(event);
@@ -333,6 +332,33 @@ describe('Unpublish, close sales and delete draft (spec 050-D)', () => {
       expect(res.body.code).toBe('DELETE_BLOCKED');
       expect(res.body.details.reasons).toEqual([expect.stringMatching(reason)]);
       expect(await prisma.event.findUnique({ where: { id: event.id } })).not.toBeNull();
+    });
+
+    // Money rows are never cascaded: an event with order history is hidden, not erased.
+    const expectSoftDeleted = async (event, orderId) => {
+      const row = await prisma.event.findUnique({ where: { id: event.id } });
+      expect(row.deletedAt).not.toBeNull();
+      expect(await prisma.order.findUnique({ where: { id: orderId } })).not.toBeNull();
+      const list = await request(app).get(`/organizations/${org.id}/events?limit=100`).set(...auth());
+      expect(list.body.events.map((e) => e.id)).not.toContain(event.id);
+      expect((await request(app).get(`${base(event.id)}/overview`).set(...auth())).status).toBe(404);
+      expect((await del(event.id)).status).toBe(404);
+    };
+
+    it('soft-deletes a draft whose only history is a failed checkout', async () => {
+      const event = await mkEvent({ status: 'DRAFT' });
+      const order = await mkOrder(event, 'FAILED');
+      const res = await del(event.id);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ deleted: true, id: event.id });
+      await expectSoftDeleted(event, order.id);
+    });
+
+    it('soft-deletes a cancelled event with paid orders and keeps the orders', async () => {
+      const event = await mkEvent({ status: 'CANCELLED' });
+      const order = await mkOrder(event, 'COMPLETED');
+      expect((await del(event.id)).status).toBe(200);
+      await expectSoftDeleted(event, order.id);
     });
   });
 });

@@ -30,7 +30,7 @@ class SetupGuideService {
     if (!org) throw new NotFoundError('Organization not found');
 
     const [eventCount, activeDomainCount, formCount, redeemedCount, connect, policyCount] = await Promise.all([
-      prisma.event.count({ where: { venue: { organizationId } } }),
+      prisma.event.count({ where: { deletedAt: null, venue: { organizationId } } }),
       prisma.organizationDomain.count({ where: { organizationId, status: 'ACTIVE' } }),
       prisma.applicationForm.count({ where: { event: { venue: { organizationId } } } }),
       prisma.ticket.count({ where: { status: 'REDEEMED', event: { venue: { organizationId } } } }),

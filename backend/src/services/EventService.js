@@ -245,7 +245,7 @@ class EventService {
    */
   async duplicateEvent(orgId, eventId, { name, date, setup } = {}) {
     const source = await prisma.event.findFirst({
-      where: { id: eventId, venue: { organizationId: orgId } },
+      where: { id: eventId, deletedAt: null, venue: { organizationId: orgId } },
       include: { priceTiers: { orderBy: { displayOrder: 'asc' } } },
     });
     if (!source) throw new NotFoundError('Event not found');
@@ -328,7 +328,7 @@ class EventService {
     const existing = await prisma.event.findFirst({
       where: {
         id: eventId,
-        venue: { organizationId: orgId },
+        deletedAt: null, venue: { organizationId: orgId },
       },
       include: {
         priceTiers: true,
@@ -505,7 +505,7 @@ class EventService {
     const existing = await prisma.event.findFirst({
       where: {
         id: eventId,
-        venue: { organizationId: orgId },
+        deletedAt: null, venue: { organizationId: orgId },
       },
     });
 
@@ -610,7 +610,7 @@ class EventService {
   }
 
   async _orgEvent(orgId, eventId) {
-    const event = await prisma.event.findFirst({ where: { id: eventId, venue: { organizationId: orgId } } });
+    const event = await prisma.event.findFirst({ where: { id: eventId, deletedAt: null, venue: { organizationId: orgId } } });
     if (!event) throw new NotFoundError('Event not found');
     return event;
   }
@@ -680,37 +680,42 @@ class EventService {
   }
 
   /**
-   * Delete a DRAFT (spec 050 §14 #1) under the unpublish guards. Money rows
-   * are never cascaded: an event with any order history (even failed or
-   * cancelled checkouts) is refused, so the ledger keeps its rows.
+   * Delete an event. A DRAFT with no order history is removed for good
+   * (spec 050 §14 #1); a CANCELLED event, or a DRAFT whose only blocker is
+   * past checkouts, is soft-deleted (`deletedAt`): it leaves admin lists and
+   * search, while its orders, payments and refunds keep the row. Money rows
+   * are never cascaded. A PUBLISHED event must be cancelled first.
    */
-  async deleteDraftEvent(orgId, eventId) {
+  async deleteEvent(orgId, eventId) {
     const existing = await this._orgEvent(orgId, eventId);
-    if (existing.status !== 'DRAFT') {
-      throw new ConflictError(`Cannot delete event with status ${existing.status}. Only DRAFT events can be deleted.`);
+    if (existing.status === 'PUBLISHED') {
+      throw new ConflictError('Cancel the event before deleting it.');
     }
-    const reasons = await this._liveActivityReasons(eventId);
-    if (!reasons.length) {
-      const history = await prisma.order.count({ where: { eventId } });
-      if (history) reasons.push(`${history} past checkout${history === 1 ? '' : 's'}`);
+    if (existing.status === 'DRAFT') {
+      const reasons = await this._liveActivityReasons(eventId);
+      if (reasons.length) throw this._blocked('DELETE_BLOCKED', 'delete', reasons);
     }
-    if (reasons.length) throw this._blocked('DELETE_BLOCKED', 'delete', reasons);
+    const history = existing.status === 'CANCELLED' || (await prisma.order.count({ where: { eventId } })) > 0;
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        // Only rows nobody paid for: abandoned application drafts, non-GOING RSVPs, tiers.
-        // Forms, maps and add-ons cascade from the event.
-        await tx.application.deleteMany({ where: { eventId, status: 'DRAFT' } });
-        await tx.eventRsvp.deleteMany({ where: { eventId } });
-        await tx.priceTier.deleteMany({ where: { eventId } });
-        await tx.event.delete({ where: { id: eventId } });
-      });
-    } catch (error) {
-      // A restricting FK (tickets, an order line) means money history the guards did not count.
-      if (error?.code === 'P2003') throw this._blocked('DELETE_BLOCKED', 'delete', ['order history']);
-      throw error;
+    if (!history) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Only rows nobody paid for: abandoned application drafts, non-GOING RSVPs, tiers.
+          // Forms, maps and add-ons cascade from the event.
+          await tx.application.deleteMany({ where: { eventId, status: 'DRAFT' } });
+          await tx.eventRsvp.deleteMany({ where: { eventId } });
+          await tx.priceTier.deleteMany({ where: { eventId } });
+          await tx.event.delete({ where: { id: eventId } });
+        });
+      } catch (error) {
+        // A restricting FK (tickets, an order line) means money history the guards did not count.
+        if (error?.code !== 'P2003') throw error;
+        await prisma.event.update({ where: { id: eventId }, data: { deletedAt: new Date() } });
+      }
+    } else {
+      await prisma.event.update({ where: { id: eventId }, data: { deletedAt: new Date() } });
     }
-    logger.info('Draft event deleted', { event: 'event_draft_deleted', orgId, eventId, eventName: existing.name });
+    logger.info('Event deleted', { event: 'event_deleted', orgId, eventId, eventName: existing.name, soft: history });
     return { deleted: true, id: eventId };
   }
 
@@ -724,7 +729,7 @@ class EventService {
     const existing = await prisma.event.findFirst({
       where: {
         id: eventId,
-        venue: { organizationId: orgId },
+        deletedAt: null, venue: { organizationId: orgId },
       },
     });
 
@@ -896,7 +901,7 @@ class EventService {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 25));
     const skip = (pageNum - 1) * limitNum;
 
-    const where = { venue: { organizationId: orgId } };
+    const where = { deletedAt: null, venue: { organizationId: orgId } };
     if (status) where.status = status;
     if (category) where.category = category;
     if (q) {
@@ -1015,7 +1020,7 @@ class EventService {
    * @returns {Promise<Object>} Summary object
    */
   async getOrgEventsSummary(orgId, { q, category } = {}) {
-    const baseWhere = { venue: { organizationId: orgId } };
+    const baseWhere = { deletedAt: null, venue: { organizationId: orgId } };
     if (category) baseWhere.category = category;
     if (q) {
       baseWhere.OR = [
@@ -1093,7 +1098,7 @@ class EventService {
 
     // Distinct categories
     const categoryRows = await prisma.event.findMany({
-      where: { venue: { organizationId: orgId } },
+      where: { deletedAt: null, venue: { organizationId: orgId } },
       select: { category: true },
       distinct: ['category'],
     });
@@ -1152,7 +1157,7 @@ class EventService {
     const event = await prisma.event.findFirst({
       where: {
         id: eventId,
-        venue: { organizationId: orgId },
+        deletedAt: null, venue: { organizationId: orgId },
       },
       include: {
         venue: { select: { id: true, name: true, timezone: true } },
@@ -1277,7 +1282,7 @@ class EventService {
    */
   async getEventWorkspace(orgId, eventId) {
     const event = await prisma.event.findFirst({
-      where: { id: eventId, venue: { organizationId: orgId } },
+      where: { id: eventId, deletedAt: null, venue: { organizationId: orgId } },
       select: {
         id: true,
         name: true,
@@ -1314,7 +1319,7 @@ class EventService {
    */
   async getEventOverview(orgId, eventId) {
     const event = await prisma.event.findFirst({
-      where: { id: eventId, venue: { organizationId: orgId } },
+      where: { id: eventId, deletedAt: null, venue: { organizationId: orgId } },
       include: {
         venue: {
           include: {
@@ -1546,7 +1551,7 @@ class EventService {
     }
     const resolvedSort = sort || 'upcoming';
 
-    const where = { venue: { organizationId: orgId } };
+    const where = { deletedAt: null, venue: { organizationId: orgId } };
     if (status) where.status = status;
     if (category) where.category = category;
     if (q) {

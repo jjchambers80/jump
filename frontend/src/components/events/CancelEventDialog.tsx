@@ -1,18 +1,20 @@
 'use client';
 
 // Cancel event confirm dialog — replaces window.confirm (spec 035 D3).
-// Calls onConfirm; onClose is how the caller dismisses.
+// Calls onConfirm; onClose is how the caller dismisses. A failed cancel shows
+// its message here, not behind the modal.
 
 import { useRef, useEffect } from 'react';
 
 interface CancelEventDialogProps {
   eventName: string;
   busy: boolean;
+  error?: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export default function CancelEventDialog({ eventName, busy, onConfirm, onClose }: CancelEventDialogProps) {
+export default function CancelEventDialog({ eventName, busy, error, onConfirm, onClose }: CancelEventDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -40,6 +42,11 @@ export default function CancelEventDialog({ eventName, busy, onConfirm, onClose 
           Are you sure you want to cancel <strong>{eventName}</strong>?{' '}
           This will email all ticket holders and release their reservations.
         </p>
+        {error && (
+          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+            {error}
+          </p>
+        )}
         <div className="mt-5 flex justify-end gap-2">
           <button
             ref={cancelRef}

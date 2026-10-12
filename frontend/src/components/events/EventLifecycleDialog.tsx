@@ -46,17 +46,26 @@ const COPY: Record<LifecycleAction, { title: string; body: string; confirm: stri
   },
 };
 
+const DELETE_CANCELLED = {
+  ...COPY.delete,
+  title: 'Delete event',
+  body: 'The event is removed from Events, search and the dashboard. Its orders, payments, refunds and tax records stay under Orders and reports. This cannot be undone.',
+  confirm: 'Delete event',
+};
+
 interface Props {
   action: LifecycleAction;
   orgId: string;
   eventId: string;
   eventName: string;
+  /** Delete on a CANCELLED event: hidden, its orders and payments kept. */
+  cancelled?: boolean;
   onClose: () => void;
   onDone: (action: LifecycleAction) => void;
 }
 
-export default function EventLifecycleDialog({ action, orgId, eventId, eventName, onClose, onDone }: Props) {
-  const copy = COPY[action];
+export default function EventLifecycleDialog({ action, orgId, eventId, eventName, cancelled = false, onClose, onDone }: Props) {
+  const copy = action === 'delete' && cancelled ? DELETE_CANCELLED : COPY[action];
   const Icon = copy.icon;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; reasons: string[] } | null>(null);

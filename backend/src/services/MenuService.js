@@ -446,7 +446,7 @@ class MenuService {
     const [events, venues, pages, blogs, blogPosts] = await Promise.all([
       ids('EVENT').length
         ? prisma.event.findMany({
-            where: { id: { in: ids('EVENT') }, venue: { organizationId } },
+            where: { id: { in: ids('EVENT') }, deletedAt: null, venue: { organizationId } },
             select: { id: true, slug: true, name: true, status: true },
           })
         : [],

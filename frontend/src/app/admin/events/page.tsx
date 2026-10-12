@@ -62,6 +62,7 @@ function EventsListContent() {
   const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
   const [cancelling, setCancelling] = useState<{ id: string; name: string } | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Build the URL-preserving params for API calls and router updates.
@@ -196,14 +197,14 @@ function EventsListContent() {
     if (!selectedOrgId || !cancelling) return;
     try {
       setCancelBusy(true);
-      setError(null);
+      setCancelError(null);
       await api.post(`/organizations/${selectedOrgId}/events/${cancelling.id}/cancel`, {});
       setCancelling(null);
       setCancelBusy(false);
       await fetchEvents();
       await fetchSummary();
     } catch (err: any) {
-      setError(err.message || 'Failed to cancel event');
+      setCancelError(err.message || 'Failed to cancel event');
       setCancelBusy(false);
     }
   };
@@ -299,8 +300,9 @@ function EventsListContent() {
         <CancelEventDialog
           eventName={cancelling.name}
           busy={cancelBusy}
+          error={cancelError}
           onConfirm={handleCancelConfirm}
-          onClose={() => setCancelling(null)}
+          onClose={() => { setCancelling(null); setCancelError(null); }}
         />
       )}
 

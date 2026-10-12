@@ -23,7 +23,7 @@ Events have a lifecycle: DRAFT -> PUBLISHED -> CANCELLED (terminal). Since spec 
 3. **Publish** (`POST .../events/:eventId/publish`): Only DRAFT -> PUBLISHED allowed. Runs `EventReadinessService` first (422 `EVENT_NOT_READY` with blockers; `GET …/readiness` answers the same), opens the listed DRAFT forms (`openFormIds`, per-form `formResults`), sets `setupCompletedAt` if null. Tax rate refreshed on publish to ensure accuracy.
    - **Unpublish** (`POST …/unpublish`): PUBLISHED → DRAFT; 409 `UNPUBLISH_BLOCKED` with `details.reasons` while there is a live order, a GOING RSVP or a submitted application. Clears a sales close.
    - **Close / reopen sales** (`POST …/close-sales`, `…/reopen-sales`): PUBLISHED only, idempotent; `salesClosedAt` makes `assertSalesOpen` refuse new checkouts, RSVPs and application submissions (409 `SALES_CLOSED`). Public payload `salesClosed`.
-   - **Delete draft** (`DELETE …/:eventId`): DRAFT only, same guards plus any order history (409 `DELETE_BLOCKED`).
+   - **Delete** (`DELETE …/:eventId`): DRAFT (same guards, 409 `DELETE_BLOCKED`) or CANCELLED; PUBLISHED must be cancelled first. With order history the event is soft-deleted (`Event.deletedAt`): hidden from admin lists and search, its orders and payments kept.
 4. **Cancel** (`POST .../events/:eventId/cancel`): Only PUBLISHED -> CANCELLED allowed. Ticket holder notification is a TODO (T076).
 5. **Public listing** (`GET /events`): Returns only PUBLISHED events with pagination, category filter, and date range filter. Includes venue summary and active tier availability.
 6. **Public detail** (`GET /events/:eventId`): Returns single event only if status is PUBLISHED, or a DRAFT with a verified `X-Event-Preview` token for that event (spec 050-F, `preview: true`, noindex).
