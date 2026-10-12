@@ -1,6 +1,6 @@
 # Spec 055 — Contact lists (Contacts › Lists)
 
-Status: **In progress** (2026-10-12): 055-A (PR #460), 055-B (PR #461), 055-C (PR #462) and 055-D built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
+Status: **Complete** (2026-10-12): 055-A (PR #460), 055-B (PR #461), 055-C (PR #462), 055-D (PR #463) and 055-E built. Follows PR #452, which made Contacts the CRM hub (Contacts | Forms tabs). Reference: Zeffy's Contacts › Lists tab and its "Create a list" dialog.
 
 ## 1. Problem
 
@@ -191,6 +191,7 @@ On phones the dialog is a full-height sheet with a sticky footer for Cancel / Co
 - **Audit:** an audit log entry `CONTACT_LIST_EXPORTED` (list id, row count, user).
 - **Permissions:** `customers.export` (ADMIN) plus step-up.
 - **The Contacts tab gets the same export** for its current filters (`GET /admin/customers/export.csv?...`), so a list is never needed just to export.
+- **As built (055-E):** one endpoint serves both. A list's export is `GET /admin/customers/export.csv?list=<id>`, named `<list>-contacts-YYYY-MM-DD.csv`; there is no separate `/contact-lists/:id/export.csv`. The audit middleware already logs every staff file download (`data.exported` with the filename and query), so no extra audit event is written. `csvCell` leaves plain numbers such as `-10.00` alone, so `OrderService`'s refund amounts stay numeric now that it shares the cell writer.
 
 ## 5. Phases / cards
 

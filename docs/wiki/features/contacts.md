@@ -54,7 +54,11 @@ There are no customer segments (Prospect / New / Repeat / Lapsed were removed wi
     - Invalid or duplicate emails are skipped.
     - Erased people (`ErasureSuppression`) and people with an erasure scheduled are skipped as "asked to be deleted".
   - **Results:** added, new, already on it and skipped counts, plus a download of the skipped rows as CSV.
-- **Still to come:** CSV export (055-E).
+- **CSV export (055-E):** **Export CSV** on the Contacts toolbar and on every list page exports what the page shows (its filters, or the list). The Lists row menu also exports a list.
+  - **Endpoint:** `GET /admin/customers/export.csv?…&list=` (`CustomerService.exportCsv`, pages of 1,000).
+  - **Permission:** catalog action `customers.export`, ADMIN by default, with step-up and the `CONTACT_EXPORT` limiter (20 per hour).
+  - **Columns:** first and last name, email, phone, tags, subscribed, sources, total spent, last activity, created.
+  - **Safety:** cells go through the formula-safe `csvCell` in `utils/csv.js`, and the activity log records the download.
 
 ## API
 

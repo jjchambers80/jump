@@ -79,11 +79,14 @@ export function cleanFilters(filters: ContactListFilters): ContactListFilters {
 
 export const contactListHref = (id: string) => `/admin/contacts/lists/${encodeURIComponent(id)}`;
 
-/** One CSV cell; a leading = + - @ tab or CR gets an apostrophe so a spreadsheet never runs it. */
+/**
+ * One CSV cell; a leading = + - @ tab or CR gets an apostrophe so a spreadsheet
+ * never runs it (a plain number such as -10.00 is left alone). Mirrors backend utils/csv.js.
+ */
 export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
   let str = String(value);
-  if (/^[=+\-@\t\r]/.test(str)) str = `'${str}`;
+  if (/^[=+\-@\t\r]/.test(str) && !/^[-+]?\d+(\.\d+)?$/.test(str)) str = `'${str}`;
   return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 

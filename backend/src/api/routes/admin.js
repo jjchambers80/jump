@@ -1839,6 +1839,39 @@ router.get('/customers', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /admin/customers/export.csv — the Contacts list (or a list, with ?list=)
+ * for the same filters as the page, every row (spec 055-E). ADMIN by default
+ * (customers.export), step-up, rate limited; the audit trail logs the download.
+ */
+const contactExportLimiter = makeLimiter('CONTACT_EXPORT', LIMITS.CONTACT_EXPORT);
+router.get('/customers/export.csv', contactExportLimiter, requirePermission('customers.export'), requireRecentAuth, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const { search, tag, rsvp, eventId, scope = 'customers', source, formId, list } = req.query;
+    if (!['customers', 'all'].includes(scope)) throw new ValidationError('scope must be customers or all');
+    let base = 'contacts';
+    if (list) {
+      const { name } = await contactListService.get(organizationId, String(list));
+      base = `${name}-contacts`;
+    }
+    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '').slice(0, 60) || 'contacts';
+    const options = { search, tag, rsvp, eventId, scope: source === 'form' ? 'all' : scope, source, formId, list };
+    // Resolve the filters before any byte goes out, so a bad list is still a clean 404.
+    await customerService.whereFor(organizationId, options);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    await customerService.exportCsv(organizationId, options, (chunk) => res.write(chunk));
+    res.end();
+  } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    next(error);
+  }
+});
+
 /** GET /admin/customers/:contactId — single customer detail with order history */
 router.get('/customers/:contactId', async (req, res, next) => {
   try {
