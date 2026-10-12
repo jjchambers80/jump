@@ -30,12 +30,12 @@ Cancelling a paid event is one deliberate action that:
 
 Out of scope: **postponing / rescheduling** (tickets carry over to a new date; a separate spec), partial cancellation (one day of a multi-day event), store credit (spec 031 deferred it), and wallet passes (spec 006 is tabled).
 
-## 3. Decisions to confirm (defaults in bold)
+## 3. Decisions (owner, 2026-10-12)
 
-1. **Refund mode.** The dialog offers **"Refund every order now" (default, recommended)** or "I'll handle refunds myself". The second still emails buyers, with wording that says the store will be in touch. Rationale: buyers expect a refund for a cancelled event, and refunding in bulk stops chargebacks before they start. Several US states require refunds for cancelled events. The owner has no counsel yet, so the safe default is to refund everything.
-2. **Who absorbs fees.** Jump's platform fee is returned with each refund (`refund_application_fee`, pro rata, already how `RefundService` works). Stripe does not return its processing fee, so the organization absorbs it. **The default is to keep both behaviours as they are**, and the dialog states the organization's cost before confirming. The alternative, Jump keeping its fee on cancellations, is a pricing decision for the owner.
+1. **Refund mode — both kept.** The dialog offers **"Refund every order now" (default, recommended)** or "I'll handle refunds myself" (manual mode stays, owner decision). The second still emails buyers, with wording that says the store will be in touch. Rationale: buyers expect a refund for a cancelled event, and refunding in bulk stops chargebacks before they start. Several US states require refunds for cancelled events. The owner has no counsel yet, so the safe default is to refund everything.
+2. **Fees — Jump returns its platform fee** (owner decision) with each refund (`refund_application_fee`, pro rata, already how `RefundService` works). Stripe does not return its processing fee, so the organization absorbs that; the dialog states the cost before confirming.
 3. **Self-serve refund fee** (spec 031 `feeAmount`): **never retained on a cancellation**. Buyers get the full amount paid back, including any fee kept on an earlier partial refund.
-4. **Permission.** Cancelling stays `events` (staff), but **"Refund every order now" needs `orders.refund`** and a step-up (`requireRecentAuth` / `withReauth`), like other money moves. A role without `orders.refund` sees only "I'll handle refunds myself".
+4. **Permission — ADMIN-only** (owner decision). New catalog action **`events.cancel`** (ADMIN by default, editable in System › Roles), guarding `POST …/cancel` and the cancellation panel's Retry / Mark handled; the frontend hides Cancel event with `useCan('events.cancel')`. **"Refund every order now" also needs `orders.refund`**, and every cancel needs a step-up (`requireRecentAuth` / `withReauth`). A role with `events.cancel` but not `orders.refund` sees only "I'll handle refunds myself". Today's route (`requireOrganizer`) changes in 054-A.
 5. **Irreversible.** A cancelled event cannot be un-cancelled (refunds are final). The dialog says so and asks for the event name to be typed.
 
 ## 4. Design
@@ -137,7 +137,7 @@ Inside the cancel transaction or right after it:
 
 | Card | Scope | Depends on |
 |---|---|---|
-| **054-A** | Stop the money: models + migration, cancel transaction, expire open sessions, late-payment refund, scan / check-in refusal, `orders.refund` + step-up on refund mode, cancelled public page | — |
+| **054-A** | Stop the money: models + migration, cancel transaction, expire open sessions, late-payment refund, scan / check-in refusal, `events.cancel` action + `orders.refund` + step-up on refund mode, cancelled public page | — |
 | **054-B** | Refund sweep, `order.event_cancelled` notification (registry, builder, sample), staff summary email | A |
 | **054-C** | Admin cancel dialog with preview counts and email preview; cancellation panel with progress, retry and mark handled; list badge; buyer account labels | A, B |
 | **054-D** | Vendor applications: holds released, withdrawals, application refunds, `EVENT_CANCELLED` email | A, B |
@@ -145,7 +145,7 @@ Inside the cancel transaction or right after it:
 
 ## 6. Tests
 
-- contract: cancel creates items for paid orders only, skips free and refunded orders and open disputes, and refuses a non-`PUBLISHED` event. Refund mode without `orders.refund` → 403, without step-up → 401. The sweep refunds each order once across two concurrent runs (claim). A crash mid-refund then re-run means no double refund (idempotency key). Each buyer is emailed once. A failure is retried, then left `FAILED`; retry and mark handled work. Manual mode refunds nothing and emails everyone. A late `checkout.session.completed` for a cancelled event is refunded and no tickets are issued. Scan and check-in return `EVENT_CANCELLED`. The public payload is `cancelled: true`. Vendor holds are released and paid vendors refunded. Tests namespace Stripe event ids per run (gotcha 29).
+- contract: cancel creates items for paid orders only, skips free and refunded orders and open disputes, and refuses a non-`PUBLISHED` event. Cancel without `events.cancel` (ORGANIZER by default) → 403; refund mode without `orders.refund` → 403; without step-up → 401. The sweep refunds each order once across two concurrent runs (claim). A crash mid-refund then re-run means no double refund (idempotency key). Each buyer is emailed once. A failure is retried, then left `FAILED`; retry and mark handled work. Manual mode refunds nothing and emails everyone. A late `checkout.session.completed` for a cancelled event is refunded and no tickets are issued. Scan and check-in return `EVENT_CANCELLED`. The public payload is `cancelled: true`. Vendor holds are released and paid vendors refunded. Tests namespace Stripe event ids per run (gotcha 29).
 - unit: item state machine, registry entry for `order.event_cancelled` (default renders in both modes).
 - e2e (mocked): the dialog flow (counts, mode, preview, name confirm, reauth), the panel showing progress, retry and mark handled, and the cancelled event page with axe.
 - `npm run verify:stripe` (outside `npm test`): one real test-mode refund on a connected account.
@@ -157,8 +157,6 @@ Inside the cancel transaction or right after it:
 - **Partial refunds already made** (self-serve, staff): `refundOrder` refunds the remainder. The refunded line shows the remainder, not the order total.
 - **No undo.** Refunds cannot be reversed. The dialog states it, requires the typed name and asks for step-up.
 
-## 8. Open questions for the owner
+## 8. Resolved questions
 
-1. Should Jump keep its platform fee on cancelled events, or return it as today?
-2. Should "I'll handle refunds myself" exist at all? Removing it removes a whole branch: the email wording, the mark-handled flow and the `MANUAL` mode.
-3. Should cancellation be ADMIN-only rather than any staff member (`events` feature) when the refund-all option is off?
+Answered 2026-10-12: return the platform fee, keep manual mode, cancel is ADMIN-only (`events.cancel`). See §3.
