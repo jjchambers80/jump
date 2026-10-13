@@ -818,7 +818,7 @@ export interface RedemptionResult {
 }
 
 export interface RedemptionRejection {
-  status: 'ALREADY_REDEEMED' | 'EXPIRED' | 'VOIDED' | 'WRONG_EVENT';
+  status: 'ALREADY_REDEEMED' | 'EXPIRED' | 'VOIDED' | 'WRONG_EVENT' | 'EVENT_CANCELLED';
   ticketId: string;
   message: string;
   originalRedemptionTime?: string;

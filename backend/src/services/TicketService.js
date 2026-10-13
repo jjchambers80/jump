@@ -373,8 +373,10 @@ class TicketService {
    * @returns {Promise<boolean>} true when this caller is the one that redeemed it
    */
   async _claimForRedemption(ticketId, at) {
+    // Spec 054: a cancelled event's tickets never get in. Checked in the same
+    // write so a cancel landing mid-scan cannot slip one through.
     const { count } = await prisma.ticket.updateMany({
-      where: { id: ticketId, status: 'VALID' },
+      where: { id: ticketId, status: 'VALID', event: { status: { not: 'CANCELLED' } } },
       data: { status: 'REDEEMED', redeemedAt: at },
     });
     return count === 1;
@@ -391,7 +393,7 @@ class TicketService {
   async _redemptionRaceError(ticketId) {
     const fresh = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { status: true, redeemedAt: true },
+      select: { status: true, redeemedAt: true, event: { select: { status: true } } },
     });
 
     if (!fresh) {
@@ -399,6 +401,13 @@ class TicketService {
       error.redemptionStatus = 'INVALID';
       error.ticketId = ticketId;
       error.statusCode = 400;
+      return error;
+    }
+
+    if (fresh.status === 'VALID' && fresh.event?.status === 'CANCELLED') {
+      const error = new ConflictError('This event was cancelled');
+      error.redemptionStatus = 'EVENT_CANCELLED';
+      error.ticketId = ticketId;
       return error;
     }
 
@@ -817,7 +826,8 @@ class TicketService {
     // Conditional write: two staff tapping the same row at once must not both
     // report a clean check-in (see _claimForRedemption).
     if (!(await this._claimForRedemption(ticketId, now))) {
-      throw new ConflictError('Ticket already checked in');
+      const error = await this._redemptionRaceError(ticketId);
+      throw error.redemptionStatus === 'ALREADY_REDEEMED' ? new ConflictError('Ticket already checked in') : error;
     }
 
     logger.info('Admin check-in', { ticketId });

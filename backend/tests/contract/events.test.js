@@ -9,7 +9,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
-import { staffToken, joinOrgByToken } from '../helpers/staff.js';
+import { staffToken, joinOrgByToken, reauthHeader } from '../helpers/staff.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 
@@ -455,9 +455,20 @@ describe('Events API Contract Tests', () => {
         .post(`/organizations/${testOrgId}/events/${eventId}/publish`)
         .set('Authorization', `Bearer ${organizerToken}`);
 
-      const res = await request(app)
+      // Spec 054: ADMIN by default (events.cancel) and a step-up.
+      const organizer = await request(app)
         .post(`/organizations/${testOrgId}/events/${eventId}/cancel`)
         .set('Authorization', `Bearer ${organizerToken}`);
+      expect(organizer.status).toBe(403);
+      const noProof = await request(app)
+        .post(`/organizations/${testOrgId}/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(noProof.status).toBe(401);
+
+      const res = await request(app)
+        .post(`/organizations/${testOrgId}/events/${eventId}/cancel`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set(...(await reauthHeader(adminToken)));
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('CANCELLED');
@@ -479,7 +490,8 @@ describe('Events API Contract Tests', () => {
 
       const res = await request(app)
         .post(`/organizations/${testOrgId}/events/${eventId}/cancel`)
-        .set('Authorization', `Bearer ${organizerToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set(...(await reauthHeader(adminToken)));
 
       expect(res.status).toBe(409);
     });
@@ -793,7 +805,8 @@ describe('Events API Contract Tests', () => {
         .set('Authorization', `Bearer ${organizerToken}`);
       await request(app)
         .post(`/organizations/${summaryOrgId}/events/${canc.body.id}/cancel`)
-        .set('Authorization', `Bearer ${organizerToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set(...(await reauthHeader(adminToken)));
     });
 
     afterAll(async () => {

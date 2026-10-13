@@ -80,7 +80,7 @@ describe('concurrent ticket redemption', () => {
       await service.redeemByBarcode('JUMP-RACE00000001');
 
       expect(mockPrisma.ticket.updateMany).toHaveBeenCalledWith({
-        where: { id: 't_1', status: 'VALID' },
+        where: { id: 't_1', status: 'VALID', event: { status: { not: 'CANCELLED' } } },
         data: { status: 'REDEEMED', redeemedAt: expect.any(Date) },
       });
       // The unguarded write is what let both scans through

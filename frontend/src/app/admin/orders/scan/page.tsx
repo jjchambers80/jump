@@ -192,6 +192,7 @@ export default function ScanPage() {
     EXPIRED: 'Ticket Expired',
     VOIDED: 'Ticket Voided',
     WRONG_EVENT: 'Wrong Event',
+    EVENT_CANCELLED: 'Event Cancelled',
     INVALID: 'Invalid QR Code',
     ERROR: 'Error',
   };

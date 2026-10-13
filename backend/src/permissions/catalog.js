@@ -28,6 +28,7 @@ export const FEATURES = [
     locked: true,
     adminPaths: ['/admin/events', '/admin/create-event'],
     actions: [
+      { key: 'events.cancel', label: 'Cancel a published event (and refund its orders)' },
       { key: 'applications.forms', label: 'Build event application forms, categories and questions', organizer: true },
       { key: 'applications.money', label: 'Refund, waive or record an offline payment on an application' },
       { key: 'addOns.manage', label: 'Create and edit add-ons and saved add-ons', organizer: true },

@@ -46,6 +46,8 @@ export interface EventPageEvent {
   capacity: number | null;
   category?: string | null;
   status: string;
+  /** Spec 054: the event was cancelled; the page is a notice, nothing can be bought or applied for. */
+  cancelled?: boolean;
   /** Spec 050-D: published, but checkout, RSVPs and new applications are off. */
   salesClosed?: boolean;
   admissionMode?: 'TICKETED' | 'RSVP';

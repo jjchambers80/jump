@@ -8,7 +8,7 @@ jest.unstable_mockModule('../../src/config/resend.js', () => ({
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
-const { staffToken, joinOrgByToken } = await import('../helpers/staff.js');
+const { staffToken, joinOrgByToken, reauthHeader } = await import('../helpers/staff.js');
 const { cancelToken } = await import('../../src/services/rsvpLinks.js');
 const { LEGAL_VERSIONS } = await import('../../src/config/legal.js');
 
@@ -243,7 +243,7 @@ describe('RSVP events contract', () => {
 
   it('emails going guests and cancels their RSVPs when the event is cancelled', async () => {
     sentEmails.length = 0;
-    await request(app).post(`/organizations/${org.id}/events/${rsvpEvent.id}/cancel`).set('Authorization', `Bearer ${token}`).expect(200);
+    await request(app).post(`/organizations/${org.id}/events/${rsvpEvent.id}/cancel`).set('Authorization', `Bearer ${token}`).set(...(await reauthHeader(token))).expect(200);
     expect(await prisma.eventRsvp.count({ where: { eventId: rsvpEvent.id, status: 'GOING' } })).toBe(0);
     expect(sentEmails.length).toBeGreaterThan(0);
     expect(sentEmails[0].html).toContain('Your RSVP has been cancelled');

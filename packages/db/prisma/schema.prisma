@@ -980,6 +980,8 @@ model Event {
   rsvps            EventRsvp[]
   guests           EventGuest[] // spec 050 §6.3: special guest lineup
 
+  cancellation EventCancellation?
+
   @@index([venueId])
   @@index([status])
   @@index([date])
@@ -1136,6 +1138,8 @@ model Order {
   payment      PaymentTransaction?
   refunds      Refund[]
   disputes     Dispute[]
+
+  cancellationItem EventCancellationItem?
 
   @@index([eventId])
   @@index([contactId])
@@ -1997,6 +2001,53 @@ model ApplicationDecision {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+}
+
+// Spec 054: one cancellation per cancelled event, and one item per paid order
+// on it: the refund sweep's work queue, its idempotency record (an item is
+// refunded and emailed once) and the progress the event page shows.
+model EventCancellation {
+  id            String                @id @default(cuid())
+  eventId       String                @unique
+  mode          EventCancellationMode
+  message       String? // the store's note, appended to the buyer email
+  initiatedById String?
+  createdAt     DateTime              @default(now())
+  completedAt   DateTime? // every item settled
+
+  event Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items EventCancellationItem[]
+}
+
+model EventCancellationItem {
+  id             String                      @id @default(cuid())
+  cancellationId String
+  orderId        String                      @unique
+  status         EventCancellationItemStatus @default(PENDING)
+  skippedReason  String? // FREE_ORDER, ALREADY_REFUNDED, OPEN_DISPUTE, MANUAL_MODE, HANDLED_BY_STAFF
+  refundedAmount Decimal?                    @db.Decimal(10, 2)
+  error          String?
+  attempts       Int                         @default(0)
+  notifiedAt     DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  cancellation EventCancellation @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([cancellationId, status])
+}
+
+enum EventCancellationMode {
+  REFUND_ALL
+  MANUAL
+}
+
+enum EventCancellationItemStatus {
+  PENDING
+  REFUNDED
+  SKIPPED
+  FAILED
 }
 
 // Spec 053: store-edited wording of a system email (Settings › Notifications).

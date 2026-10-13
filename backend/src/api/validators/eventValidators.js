@@ -117,3 +117,15 @@ export const validateUpdateEvent = (req, res, next) => {
   if (!normalizeSlug(req, next)) return;
   next();
 };
+
+/** Spec 054: POST …/events/:eventId/cancel `{ mode?, message? }`. */
+export const validateCancelEvent = (req, res, next) => {
+  const body = req.body ?? {};
+  const unknown = Object.keys(body).filter((k) => !['mode', 'message'].includes(k));
+  if (unknown.length) return next(new ValidationError(`Unknown field: ${unknown[0]}`));
+  if (body.mode !== undefined && !['MANUAL', 'REFUND_ALL'].includes(body.mode)) return next(new ValidationError('mode must be MANUAL or REFUND_ALL'));
+  if (body.message !== undefined && body.message !== null && (typeof body.message !== 'string' || body.message.length > 2000)) {
+    return next(new ValidationError('message must be text of at most 2,000 characters'));
+  }
+  next();
+};

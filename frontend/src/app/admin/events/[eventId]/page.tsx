@@ -12,6 +12,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, ExternalLink, Lock, MapPin, Pencil, CalendarDays } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
+import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
 import { imageVariantUrl } from '@/lib/assets';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
 import { EventStatusPill, Perforation } from '@/components/events/EventEditSummary';
@@ -48,6 +49,7 @@ function EventDetailsContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { withReauth } = useReauth();
   const eventId = params.eventId as string;
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const orgId = selectedOrgId || searchParams.get('orgId');
@@ -135,12 +137,12 @@ function EventDetailsContent() {
     setCancelBusy(true);
     setCancelError(null);
     try {
-      await api.post(`/organizations/${orgId}/events/${eventId}/cancel`, {});
+      await withReauth(() => api.post(`/organizations/${orgId}/events/${eventId}/cancel`, {}));
       setCancelling(false);
       setNotice('Event cancelled.');
       await load();
     } catch (err: any) {
-      setCancelError(err?.message || 'Failed to cancel the event');
+      if (!isReauthCancelled(err)) setCancelError(err?.message || 'Failed to cancel the event');
     } finally {
       setCancelBusy(false);
     }
@@ -574,8 +576,10 @@ function DetailsSkeleton() {
 // useSearchParams() needs a Suspense boundary (Next 14 App Router).
 export default function EventDetailsPage() {
   return (
-    <Suspense fallback={<DetailsSkeleton />}>
-      <EventDetailsContent />
-    </Suspense>
+    <ReauthProvider>
+      <Suspense fallback={<DetailsSkeleton />}>
+        <EventDetailsContent />
+      </Suspense>
+    </ReauthProvider>
   );
 }

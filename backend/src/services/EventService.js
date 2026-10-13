@@ -6,6 +6,8 @@ import { prisma } from '@jump/db';
 import { storefrontLogoFor } from './storefrontLogo.js';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
+import stripe from '../config/stripe.js';
+import { onAccount } from './stripeAccount.js';
 import { formatEventSummary } from '../utils/eventSummary.js';
 import taxService from './TaxService.js';
 import applicationFormService, { paymentsEnabled as applicationPaymentsEnabled } from './ApplicationFormService.js';
@@ -720,35 +722,39 @@ class EventService {
   }
 
   /**
-   * Cancel an event (PUBLISHED → CANCELLED)
-   * @param {string} orgId - Organization ID
-   * @param {string} eventId - Event ID
-   * @returns {Promise<Object>} Cancelled event
+   * Cancel a published event (spec 054). In one transaction: lock the event,
+   * mark it CANCELLED, cancel RSVPs (RSVP events) or record an
+   * EventCancellation with one item per paid ticket order (ticketed events).
+   * After the commit, open Checkout sessions are expired so nobody can pay
+   * for the cancelled event; a session paid before its expiry lands is
+   * refunded by PaymentService.handleCheckoutCompleted.
+   *
+   * 054-A takes MANUAL only (staff refund in Orders); REFUND_ALL arrives with
+   * the refund sweep in 054-B.
+   *
+   * @param {string} orgId
+   * @param {string} eventId
+   * @param {{ mode?: 'MANUAL'|'REFUND_ALL', message?: string|null, actorId?: string|null }} [options]
    */
-  async cancelEvent(orgId, eventId) {
-    const existing = await prisma.event.findFirst({
-      where: {
-        id: eventId,
-        deletedAt: null, venue: { organizationId: orgId },
-      },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Event not found');
+  async cancelEvent(orgId, eventId, { mode = 'MANUAL', message = null, actorId = null } = {}) {
+    if (mode !== 'MANUAL') {
+      throw new ValidationError('Refunding every order automatically is not available yet; cancel with mode MANUAL');
     }
 
-    if (existing.status !== 'PUBLISHED') {
-      throw new ConflictError(
-        `Cannot cancel event with status ${existing.status}. Only PUBLISHED events can be cancelled.`
-      );
-    }
+    const { event, rsvps, openOrders } = await prisma.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw`
+        SELECT e."id", e."status", e."admissionMode"
+        FROM "Event" e JOIN "Venue" v ON v."id" = e."venueId"
+        WHERE e."id" = ${eventId} AND e."deletedAt" IS NULL AND v."organizationId" = ${orgId}
+        FOR UPDATE OF e
+      `;
+      if (!locked) throw new NotFoundError('Event not found');
+      if (locked.status !== 'PUBLISHED') {
+        throw new ConflictError(`Cannot cancel event with status ${locked.status}. Only PUBLISHED events can be cancelled.`);
+      }
 
-    const { event, rsvps } = await prisma.$transaction(async (tx) => {
-      const rsvps = existing.admissionMode === 'RSVP'
-        ? await tx.eventRsvp.findMany({
-            where: { eventId, status: 'GOING' },
-            include: { contact: true },
-          })
+      const rsvps = locked.admissionMode === 'RSVP'
+        ? await tx.eventRsvp.findMany({ where: { eventId, status: 'GOING' }, include: { contact: true } })
         : [];
       const event = await tx.event.update({
         where: { id: eventId },
@@ -764,7 +770,37 @@ class EventService {
           data: { status: 'CANCELLED', cancelledAt: new Date() },
         });
       }
-      return { event, rsvps };
+
+      let openOrders = [];
+      if (locked.admissionMode !== 'RSVP') {
+        const paid = await tx.order.findMany({
+          where: { eventId, kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
+          select: { id: true, totalAmount: true },
+        });
+        // Nothing is left to do in 054-A, so the cancellation is complete at
+        // once; 054-B leaves REFUND_ALL ones open for the refund sweep.
+        await tx.eventCancellation.create({
+          data: {
+            eventId,
+            mode,
+            message: message?.trim() || null,
+            initiatedById: actorId,
+            completedAt: new Date(),
+            items: {
+              create: paid.map((o) => ({
+                orderId: o.id,
+                status: 'SKIPPED',
+                skippedReason: Number(o.totalAmount) > 0 ? 'MANUAL_MODE' : 'FREE_ORDER',
+              })),
+            },
+          },
+        });
+        openOrders = await tx.order.findMany({
+          where: { eventId, kind: 'TICKET', status: 'PENDING', stripeSessionId: { not: null } },
+          select: { id: true, stripeSessionId: true, payment: { select: { stripeAccountId: true } } },
+        });
+      }
+      return { event, rsvps, openOrders };
     });
 
     logger.info('Event cancelled', {
@@ -772,11 +808,34 @@ class EventService {
       orgId,
       eventId: event.id,
       eventName: event.name,
+      mode: event.admissionMode === 'RSVP' ? 'RSVP' : mode,
+      openCheckouts: openOrders.length,
     });
 
     if (rsvps.length) await emailService.sendCancellationNotification(event, rsvps);
+    await this._expireOpenCheckouts(event.id, openOrders);
 
     return this._formatEventDetail(event);
+  }
+
+  /**
+   * Expire every open Checkout session of a cancelled event and release its
+   * hold. A session Stripe will not expire (already paid) is left to the
+   * webhook, which refunds it; other failures are logged and the abandoned-
+   * checkout sweep settles the order later.
+   */
+  async _expireOpenCheckouts(eventId, orders) {
+    if (!orders.length) return;
+    const PaymentService = (await import('./PaymentService.js')).default;
+    for (const order of orders) {
+      const account = order.payment?.stripeAccountId ?? null;
+      try {
+        await stripe.checkout.sessions.expire(order.stripeSessionId, ...onAccount(account));
+        await PaymentService.handleCheckoutFailed(order.stripeSessionId, 'Event cancelled', account);
+      } catch (error) {
+        logger.warn('Could not expire a checkout of a cancelled event', { eventId, orderId: order.id, error: error.message });
+      }
+    }
   }
 
   /**
@@ -836,17 +895,21 @@ class EventService {
   }
 
   /**
-   * Get single event by ID (public, published only). `preview` (a verified
+   * Get single event by ID (public: published, or cancelled with `cancelled: true`). `preview` (a verified
    * X-Event-Preview for this event, spec 050 F) also serves a DRAFT and marks
    * the answer `preview: true` so the page disables checkout, RSVP and apply.
    */
   async getEventById(identifier, { preview = false } = {}) {
     const event = await findByPublicIdentifier(prisma.event, identifier, { include: PUBLIC_EVENT_INCLUDE });
-    if (!event || (event.status !== 'PUBLISHED' && !(preview && event.status === 'DRAFT'))) {
+    const servable = event && (event.status === 'PUBLISHED' || event.status === 'CANCELLED' || (preview && event.status === 'DRAFT'));
+    if (!servable) {
       throw new NotFoundError('Event not found');
     }
     const detail = await this._publicDetail(event);
     if (preview) detail.preview = true;
+    // Spec 054: a cancelled event keeps its page (old links and emails land
+    // on a notice, not a 404); the page offers no tickets, RSVP or apply.
+    if (event.status === 'CANCELLED') detail.cancelled = true;
     return detail;
   }
 

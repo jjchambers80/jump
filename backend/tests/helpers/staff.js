@@ -45,3 +45,10 @@ export async function joinOrgByToken(token, organizationId, role = 'ORGANIZER') 
 export async function cleanupStaff(emails) {
   await prisma.user.deleteMany({ where: { email: { in: emails } } }).catch(() => {});
 }
+
+/** `X-Jump-Reauth` header pair (spec 030 B step-up) for the user behind a staff token. */
+export async function reauthHeader(token) {
+  const { issueReauthProof } = await import('../../src/middleware/recentAuth.js');
+  const { sub } = jwt.decode(token);
+  return ['X-Jump-Reauth', issueReauthProof(sub).reauthToken];
+}
