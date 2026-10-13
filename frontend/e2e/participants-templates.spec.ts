@@ -231,7 +231,7 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   await expect(page.getByTestId('form-tiers')).toContainText('10x10');
   await expect(page.getByTestId('form-tiers')).not.toContainText('Applicant pays');
 
-  await page.getByLabel('Name').fill('Exhibitor booths v2');
+  await page.getByLabel('Name', { exact: true }).fill('Exhibitor booths v2');
   await page.getByLabel('Intro shown to applicants').fill('Sell all the wares.');
   await page.getByLabel('Fees').selectOption('PASS');
   await expect(page.getByTestId('template-save')).toBeEnabled();
@@ -239,10 +239,10 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   const add = page.getByTestId('question-add');
   await add.getByLabel('Question').fill('Years exhibiting');
   await add.getByLabel('Type').selectOption('NUMBER');
-  await add.getByRole('button', { name: 'Add question' }).click();
+  await add.getByRole('button', { name: 'Add field' }).click();
   await expect(page.getByTestId('form-questions')).toContainText('Years exhibiting');
   await page.getByRole('button', { name: 'Move up' }).nth(2).click();
-  await expect(page.getByTestId('form-questions').locator('li').nth(1)).toContainText('Years exhibiting');
+  await expect(page.getByTestId('form-questions').locator('[data-testid^="question-row-"]').nth(1)).toContainText('Years exhibiting');
 
   const tierAdd = page.getByTestId('tier-add');
   await tierAdd.getByLabel('New option').fill('Premium');
@@ -266,7 +266,7 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   expect(state.templates.find((t) => t.id === 'tpl-booths')?.name).toBe('Exhibitor booths v2');
 
   // Unsaved guard: a dirty page asks before unloading.
-  await page.getByLabel('Name').fill('Dirty again');
+  await page.getByLabel('Name', { exact: true }).fill('Dirty again');
   await expect(page.getByTestId('template-save')).toBeEnabled();
   page.once('dialog', (d) => d.dismiss());
   await page.evaluate(() => {
@@ -284,7 +284,7 @@ test('template editor: edit settings, add a question, reorder, save; unsaved gua
   await mockAdmin(page, baseURL!, 'ORGANIZER');
   await page.goto('/admin/events/templates/tpl-booths');
   await expect(page.getByTestId('template-save')).toBeVisible();
-  await expect(page.getByLabel('Name')).toBeEnabled();
+  await expect(page.getByLabel('Name', { exact: true })).toBeEnabled();
   await expect(page.getByTestId('question-add')).toBeVisible();
 });
 

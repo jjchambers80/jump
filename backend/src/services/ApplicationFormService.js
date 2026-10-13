@@ -232,17 +232,21 @@ class ApplicationFormService {
       if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
     }
     const { templateId: _templateId, setup, ...fields } = body;
-    // No template and no questions (the wizard's blank form): it asks only name
-    // and email. Business details are off unless the form charges (a PAID form
-    // must collect them). A caller sending its own questions keeps the default.
+    // No template and no questions: the setup flows' blank form (`setup: true`)
+    // asks for an email only, and the organizer adds name and business details
+    // as fields. Other callers without questions keep the older blank form
+    // (name and email, business details when it charges); callers sending
+    // their own questions keep the column defaults.
     const base = template
       ? this._templateSettings(template.definition, body.kind)
-      : body.questions === undefined
-        ? { collectBusiness: body.kind === 'PAID' }
-        : {};
+      : body.questions !== undefined
+        ? {}
+        : setup
+          ? { collectBusiness: false, collectName: false }
+          : { collectBusiness: body.kind === 'PAID' };
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
-    this._assertEventFormRules(data.purpose ?? 'OTHER', body.kind, data.collectBusiness ?? true);
+    this._assertPurposeKind(data.purpose ?? 'OTHER', body.kind);
     // The setup flows (`setup: true`) keep one live form per purpose on an event.
     if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
@@ -390,6 +394,7 @@ class ApplicationFormService {
           spaceSelection: f.spaceSelection,
           purpose: f.purpose,
           collectBusiness: f.collectBusiness,
+          collectName: f.collectName,
           displayOrder: f.displayOrder,
           createdFromTemplateId: f.createdFromTemplateId,
         },
@@ -412,7 +417,7 @@ class ApplicationFormService {
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
     const data = this._validateFormFields(body, existing.kind, existing);
-    this._assertEventFormRules(data.purpose ?? existing.purpose, existing.kind, data.collectBusiness ?? existing.collectBusiness);
+    this._assertPurposeKind(data.purpose ?? existing.purpose, existing.kind);
     if (data.purpose !== undefined && data.purpose !== existing.purpose) {
       const submitted = await prisma.application.count({ where: { formId, status: { not: 'DRAFT' } } });
       if (submitted > 0) throw coded(new ConflictError('Purpose cannot change once the form has submissions'), 'PURPOSE_LOCKED');
@@ -774,6 +779,10 @@ class ApplicationFormService {
       if (!Number.isInteger(body.displayOrder) || body.displayOrder < 0) throw new ValidationError('displayOrder must be a non-negative integer');
       data.displayOrder = body.displayOrder;
     }
+    if (body.collectName !== undefined) {
+      if (typeof body.collectName !== 'boolean') throw new ValidationError('collectName must be a boolean');
+      data.collectName = body.collectName;
+    }
     if (body.collectBusiness !== undefined) {
       if (typeof body.collectBusiness !== 'boolean') throw new ValidationError('collectBusiness must be a boolean');
       data.collectBusiness = body.collectBusiness;
@@ -834,11 +843,6 @@ class ApplicationFormService {
    * Spec 050 §3: special guests and volunteers are never charged, and a PAID
    * form keeps the business profile approval, booth assignment and check-in read.
    */
-  _assertEventFormRules(purpose, kind, collectBusiness) {
-    this._assertPurposeKind(purpose, kind);
-    if (kind === 'PAID' && collectBusiness === false) throw new ValidationError('PAID application forms must collect business details');
-  }
-
   /** One live (not CLOSED) form per purpose per event: the setup flows edit that one. */
   async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
     const other = await prisma.applicationForm.findFirst({
@@ -983,6 +987,7 @@ class ApplicationFormService {
       slug: form.slug,
       intro: form.intro,
       collectBusiness: form.collectBusiness,
+      collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       status: form.status,
@@ -1021,6 +1026,7 @@ class ApplicationFormService {
       slug: form.slug,
       intro: form.intro,
       collectBusiness: form.collectBusiness,
+      collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       // Spec 050-D: an event-level sales close shuts every form without touching its status.

@@ -129,6 +129,8 @@ export interface AdminForm {
   eventId: string | null;
   /** Spec 044 standing forms: ask for the business profile, the storefront button label, the thank-you text. */
   collectBusiness?: boolean;
+  /** Spec 056: false = the form asks for an email only. */
+  collectName?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: FormKind;
@@ -195,6 +197,8 @@ export interface PublicForm {
   questions: Question[];
   /** Spec 044 / 050: standing forms and FREE event forms may skip the business step. */
   collectBusiness?: boolean;
+  /** Spec 056: false = the form asks for an email only. */
+  collectName?: boolean;
   /** Spec 044: standing forms' own button label and thank-you line. */
   buttonLabel?: string | null;
   successMessage?: string | null;
@@ -425,6 +429,7 @@ export interface TemplateQuestion {
 export interface TemplateDefinition {
   /** Null on older templates: the form's default (ask) applies. */
   collectBusiness?: boolean | null;
+  collectName?: boolean | null;
   intro: string | null;
   chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
   feeMode: 'PASS' | 'ABSORB' | null;
@@ -751,7 +756,10 @@ export function acceptanceLine(a: Acceptance): string | null {
   return 'Not available';
 }
 
-/** Who applied: the business, or the person when a standing form asked for no business (spec 044). */
-export function applicantName(a: { businessName?: string | null; profile?: { businessName: string } | null; contact: { firstName: string; lastName: string } }): string {
-  return a.businessName ?? a.profile?.businessName ?? `${a.contact.firstName} ${a.contact.lastName}`.trim();
+/** The person's name; empty when the form asked for an email only (`collectName: false`, spec 056). */
+export const personName = (c: { firstName: string; lastName: string }) => `${c.firstName} ${c.lastName}`.trim();
+
+/** Who applied: the business, else the person, else their email (a form that asked for neither). */
+export function applicantName(a: { businessName?: string | null; profile?: { businessName: string } | null; contact: { firstName: string; lastName: string; email?: string } }): string {
+  return a.businessName ?? a.profile?.businessName ?? (personName(a.contact) || a.contact.email || '');
 }

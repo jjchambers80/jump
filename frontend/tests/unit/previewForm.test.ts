@@ -34,7 +34,7 @@ describe('previewForm (spec 051)', () => {
 describe('draftPreviewForm (spec 051 Start step)', () => {
   it('previews the form being set up: typed name, kind, purpose, no questions yet', () => {
     expect(draftPreviewForm({ name: '  Makers  ', kind: 'PAID', purpose: 'VENDOR' }, 'Retro Org')).toMatchObject({
-      name: 'Makers', kind: 'PAID', purpose: 'VENDOR', questions: [], tiers: [], collectBusiness: true, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
+      name: 'Makers', kind: 'PAID', purpose: 'VENDOR', questions: [], tiers: [], collectBusiness: false, collectName: false, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
     });
     expect(draftPreviewForm({ name: '', kind: 'FREE', purpose: 'VOLUNTEER' })).toMatchObject({ name: 'Untitled application', collectBusiness: false });
   });

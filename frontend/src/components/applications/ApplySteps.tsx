@@ -231,6 +231,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
       )}
 
       <Step n={next()} title="Your details" hint="Where the organizer sends their decision.">
+        {form.collectName !== false && (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor={id('firstName')} className={label}>First name</label>
@@ -241,6 +242,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
             <input id={id('lastName')} required autoComplete="family-name" className={input} value={contact.lastName} onChange={(e) => update({ contact: { ...contact, lastName: e.target.value } })} />
           </div>
         </div>
+        )}
         <div>
           <label htmlFor={id('email')} className={label}>Email</label>
           <input id={id('email')} type="email" required autoComplete="email" className={input} value={contact.email} onChange={(e) => update({ contact: { ...contact, email: e.target.value } })} />

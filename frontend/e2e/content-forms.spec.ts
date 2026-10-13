@@ -174,7 +174,7 @@ for (const viewport of [
     await expect(page.getByTestId('form-tab-fields')).toHaveAttribute('aria-current', 'page');
 
     await page.getByLabel('Question', { exact: true }).fill('What do you sell?');
-    await page.getByRole('button', { name: 'Add question' }).click();
+    await page.getByRole('button', { name: 'Add field' }).click();
     await expect(page.getByText('Question added.')).toBeVisible();
     await expect(page.getByTestId('question-row-q-1')).toContainText('What do you sell?');
 

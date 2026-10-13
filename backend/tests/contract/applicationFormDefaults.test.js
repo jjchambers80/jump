@@ -1,7 +1,6 @@
 // Contract test for what a new event form starts with, created by an
-// ORGANIZER (050-E opened form configuration to them): no questions (every
-// apply form asks first name, last name and email), and business details only
-// when the form charges.
+// ORGANIZER (050-E opened form configuration to them): no questions; from the
+// setup flows (`setup: true`, spec 056) an email only, paid or free.
 
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
@@ -50,8 +49,18 @@ describe('createForm starts blank', () => {
   it.each(cases)('$purpose ($kind) starts with no questions', async ({ purpose, kind, collectBusiness }) => {
     const res = await create({ kind, purpose, name: `${purpose} ${kind}` });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness, purposeLocked: false });
+    expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness, collectName: true, purposeLocked: false });
     expect(res.body.questions).toEqual([]);
+  });
+
+  it('the setup flows start every form with an email only, paid or free', async () => {
+    const venueId = (await prisma.venue.findFirst({ where: { organizationId: org.id }, select: { id: true } })).id;
+    const fresh = await prisma.event.create({ data: { venueId, name: `${TAG} Market`, date: new Date('2027-11-18T15:00:00Z'), status: 'DRAFT', capacity: 100 } });
+    for (const kind of ['PAID', 'FREE']) {
+      const res = await request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send({ kind, purpose: kind === 'PAID' ? 'VENDOR' : 'PRESS', name: kind, setup: true });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ collectName: false, collectBusiness: false, questions: [] });
+    }
   });
 
   it('an explicit collectBusiness on a FREE form wins', async () => {

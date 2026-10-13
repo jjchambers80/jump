@@ -85,8 +85,10 @@ describe('Application form purpose (spec 050 §6.2)', () => {
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('PURPOSE_KIND_MISMATCH');
     }
+    // Spec 056: a paid vendor form may skip business details.
     const noBiz = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VENDOR', name: 'Vendors', collectBusiness: false });
-    expect(noBiz.status).toBe(400);
+    expect(noBiz.status).toBe(201);
+    expect(noBiz.body.collectBusiness).toBe(false);
     const bad = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'ROADIE', name: 'Roadies' });
     expect(bad.status).toBe(400);
 
@@ -112,6 +114,23 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     expect(res.status).toBe(201);
     const row = await prisma.application.findUnique({ where: { id: res.body.applicationId }, include: { profile: true } });
     expect(row).toMatchObject({ status: 'SUBMITTED', profile: null });
+  });
+
+  it('a blank form asks for an email only: no name is needed, and a name form still requires one (spec 056)', async () => {
+    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'PRESS', name: 'Press list', setup: true });
+    expect(blank.body).toMatchObject({ collectName: false, collectBusiness: false });
+    expect((await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ status: 'OPEN' })).status).toBe(200);
+    const submit = (contact) =>
+      request(app).post(`/events/${eventId}/applications`).send({ formSlug: blank.body.slug, contact, acceptances: allAcceptances(), answers: {} });
+    const res = await submit({ email: `press@${TAG}.test` });
+    expect(res.status).toBe(201);
+    const row = await prisma.application.findUnique({ where: { id: res.body.applicationId }, include: { contact: true } });
+    expect(row.contact).toMatchObject({ email: `press@${TAG}.test`, firstName: '', lastName: '' });
+    // Adding the Name field makes it required again.
+    expect((await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ collectName: true })).body.collectName).toBe(true);
+    expect((await submit({ email: `press2@${TAG}.test` })).status).toBe(400);
+    // Back to a draft so the public-list test below sees only its own form.
+    await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ status: 'DRAFT' });
   });
 
   it('purpose is fixed once the form has submissions (409); other fields still save', async () => {
@@ -163,7 +182,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
       .post('/admin/application-templates')
       .set(...auth())
       .send({ name: 'Paid no business', kind: 'PAID', definition: { collectBusiness: false } });
-    expect(paidNoBiz.status).toBe(400);
+    expect(paidNoBiz.status).toBe(201);
     // An old snapshot without the key keeps asking for the business profile.
     const legacy = await request(app).post('/admin/application-templates').set(...auth()).send({ name: 'Legacy', kind: 'FREE', definition: { intro: 'Hi' } });
     expect(legacy.body.definition.collectBusiness).toBeNull();

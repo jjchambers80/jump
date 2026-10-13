@@ -5,7 +5,7 @@
 // (phase 3) Checked in / out ticks on APPROVED rows.
 
 import Link from 'next/link';
-import { applicantName, shortId, type ApplicationRow } from '@/lib/applications';
+import { applicantName, personName, shortId, type ApplicationRow } from '@/lib/applications';
 
 interface BusinessCellProps {
   row: ApplicationRow;
@@ -35,7 +35,7 @@ export default function BusinessCell({ row, href, onCheck, checkBusy = false }: 
           {name}
         </Link>
         <div className="text-xs text-gray-600 dark:text-slate-400">
-          {row.contact.firstName} {row.contact.lastName} · {row.contact.email}
+          {[personName(row.contact), row.contact.email].filter(Boolean).join(' · ')}
         </div>
         <div className="text-xs text-gray-500 dark:text-slate-500">ID: {row.shortId ?? shortId(row.id)}</div>
         {showChecks && (
