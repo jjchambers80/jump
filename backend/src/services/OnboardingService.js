@@ -9,7 +9,6 @@ import { prisma } from '@jump/db';
 import logger from '../utils/logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import organizationService from './OrganizationService.js';
-import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import { resolveUniqueSlug } from '../utils/slug.js';
 import {
   ONBOARDING_VERSION,
@@ -18,8 +17,6 @@ import {
   SINGLE_SELECT_KEYS,
   MAX_PENDING_ORGANIZATIONS,
   SIGNUP_SOURCES,
-  APPLICATION_GOALS,
-  SEED_TEMPLATES,
   ABANDON_AFTER_MS,
 } from '../config/onboarding.js';
 
@@ -241,32 +238,9 @@ class OnboardingService {
         goals: onboarding.goals ?? [],
       });
 
-      await this.seedTemplates(existing.id, userId, onboarding.goals ?? []);
     }
 
     return organizationService.getOrganizationById(existing.id);
-  }
-
-  /**
-   * Phase 3 tailoring: organizations that said they run applications get the
-   * starter form templates. Names are unique per organization, so re-running
-   * is a no-op; a seed failure never fails the signup.
-   */
-  async seedTemplates(organizationId, userId, goals) {
-    if (!goals.some((goal) => APPLICATION_GOALS.includes(goal))) return [];
-    const seeded = [];
-    for (const template of SEED_TEMPLATES) {
-      try {
-        const created = await applicationFormTemplateService.create(organizationId, template, { byUserId: userId });
-        seeded.push(created.id);
-      } catch (error) {
-        if (error.statusCode !== 409) {
-          logger.error('Onboarding template seed failed', { organizationId, template: template.name, error: error.message });
-        }
-      }
-    }
-    logger.info('Onboarding templates seeded', { event: 'organization_onboarding_templates_seeded', organizationId, count: seeded.length });
-    return seeded;
   }
 
   /**

@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import api from '@/services/api';
-import type { AddOnLineInput, AdminApplication, AdminForm, AdminTier, ApplicationList, Decision, FormTemplate, Question } from '@/lib/applications';
+import type { AddOnLineInput, AdminApplication, AdminForm, AdminTier, ApplicationList, Decision, Question } from '@/lib/applications';
 
 export interface DigestSettings {
   enabled: boolean;
@@ -97,9 +97,7 @@ export function useApplicationsApi(eventId: string, standingFormId?: string) {
       forms: () =>
         standingFormId ? api.get<AdminForm>(`${forms}/${standingFormId}`).then((form) => ({ data: [form] })) : api.get<{ data: AdminForm[] }>(forms),
       form: (formId: string) => api.get<AdminForm>(`${forms}/${formId}`),
-      createForm: (body: Partial<AdminForm> & { kind: 'PAID' | 'FREE'; name: string; templateId?: string; setup?: boolean }) => api.post<AdminForm>(`${forms}`, body),
-      // Spec 019 phase 2: snapshot a form as a template (new name) or replace an existing one.
-      saveAsTemplate: (formId: string, body: { name?: string; replaceTemplateId?: string }) => api.post<FormTemplate>(`${forms}/${formId}/save-as-template`, body),
+      createForm: (body: Partial<AdminForm> & { kind: 'PAID' | 'FREE'; name: string; setup?: boolean }) => api.post<AdminForm>(`${forms}`, body),
       updateForm: (formId: string, body: Record<string, unknown>) => api.patch<AdminForm>(`${forms}/${formId}`, body),
       deleteForm: (formId: string) => api.delete(`${forms}/${formId}`),
       addTier: (formId: string, body: Record<string, unknown>) => api.post(`${forms}/${formId}/tiers`, body),

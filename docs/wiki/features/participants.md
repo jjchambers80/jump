@@ -3,6 +3,8 @@
 **Status**: Implemented — all three phases 2026-09-18 (organization-wide submissions list and shared table; Applications tab with forms across events and form templates; tags and on-site check-in). Spec: `specs/019-participants/`.
 **Last Updated**: 2026-10-11
 
+> **Spec 056 (2026-10-13) removed form templates entirely** (UI, routes, `ApplicationFormTemplate`, `createdFromTemplateId`). Everything below about templates is history.
+
 > **Spec 037 (2026-09-26) changed this.** There is no Participants page any more: `/admin/participants*` 308 to `/admin/events`, and each event's **Applications** tab (inside the event workspace) is the only review list. An applicant's history across events lives on their Customer detail page. Templates are picked, edited and deleted from a form's **New form › Start from** picker; the template editor moved to `/admin/events/templates/:templateId`. The org-wide API routes (`/admin/applications*`, `/admin/application-forms`, `/admin/application-templates*`) stay — admin search and the template picker use them. The rest of this page describes the shared table and templates as built in spec 019; read "`/admin/participants`" below as history.
 
 ## Overview

@@ -1,40 +1,24 @@
 'use client';
 
-// Contacts › Forms › New form (spec 044): a name and where to start — blank, or
-// one of the organization's FREE templates (the same templates event forms use).
-// Standing forms are always FREE: no tiers, no payment.
+// Contacts › Forms › New form (spec 044): a name; the form starts blank and
+// questions are added next. Standing forms are always FREE: no tiers, no payment.
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import api from '@/services/api';
-import { useOrg, useCan } from '@/components/OrgContext';
-import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
-import type { AdminForm, FormTemplateSummary } from '@/lib/applications';
+import { useCan } from '@/components/OrgContext';
+import type { AdminForm } from '@/lib/applications';
 
 const field = 'mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
-const choice =
-  'flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3.5 text-sm has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 dark:border-slate-700 dark:has-[:checked]:bg-accent-900/20';
 
 export default function NewFormPage() {
   const router = useRouter();
-  const { selectedOrgId } = useOrg();
   const canEdit = useCan('applications.standingForms');
-  const participants = useParticipantsApi();
   const [name, setName] = useState('');
-  const [templateId, setTemplateId] = useState('');
-  const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!selectedOrgId) return;
-    participants
-      .templates()
-      .then((r) => setTemplates(r.data.filter((t) => t.kind === 'FREE')))
-      .catch(() => setTemplates([]));
-  }, [participants, selectedOrgId]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,7 +31,7 @@ export default function NewFormPage() {
     setSaving(true);
     setError(null);
     try {
-      const form = await api.post<AdminForm>('/admin/standing-application-forms', { name: name.trim(), ...(templateId && { templateId }) });
+      const form = await api.post<AdminForm>('/admin/standing-application-forms', { name: name.trim() });
       router.push(`/admin/contacts/forms/${form.id}?tab=fields`);
     } catch (err) {
       setError((err as Error)?.message || 'Could not create the form');
@@ -89,34 +73,6 @@ export default function NewFormPage() {
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Applicants see this name. The link is made from it; you can change it in Settings.</p>
           </div>
-
-          {/* Only a choice once the org has a template (spec 051): otherwise every form starts blank. */}
-          {templates.length > 0 && (
-          <fieldset aria-describedby="start-with-hint" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
-            <legend className="text-sm font-medium text-gray-700 dark:text-slate-300">Start with</legend>
-            <p id="start-with-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">A template copies a form you saved before: its intro and questions.</p>
-            <div className="mt-2 space-y-2">
-              <label className={choice} data-testid="start-from-blank">
-                <input type="radio" name="start-from" checked={!templateId} onChange={() => setTemplateId('')} className="mt-0.5" />
-                <span>
-                  <span className="block font-medium text-gray-900 dark:text-white">Blank form</span>
-                  <span className="block text-gray-600 dark:text-slate-400">Name, email and business details, plus any questions you add.</span>
-                </span>
-              </label>
-              {templates.map((t) => (
-                <label key={t.id} className={choice} data-testid={`start-from-${t.id}`}>
-                  <input type="radio" name="start-from" checked={templateId === t.id} onChange={() => setTemplateId(t.id)} className="mt-0.5" />
-                  <span>
-                    <span className="block font-medium text-gray-900 dark:text-white">{t.name}</span>
-                    <span className="block text-gray-600 dark:text-slate-400">
-                      Your template · {t.questionCount} {t.questionCount === 1 ? 'question' : 'questions'}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Link href="/admin/contacts/forms" className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">

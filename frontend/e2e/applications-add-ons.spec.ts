@@ -199,7 +199,6 @@ async function mockWizard(page: Page) {
     tax: { rate: 0.1, source: 'MANUAL', region: 'NC' }, taxInclusivePricing: false,
   };
   await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([event.venue])));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
     route.fulfill(json({ event: adminEvent, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))

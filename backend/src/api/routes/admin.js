@@ -16,7 +16,7 @@ import {
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
@@ -51,7 +51,6 @@ import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import notificationTemplateService from '../../services/NotificationTemplateService.js';
-import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
 import eventGuestService from '../../services/EventGuestService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import vendorCheckInService from '../../services/VendorCheckInService.js';
@@ -751,16 +750,6 @@ router.delete('/standing-application-forms/:formId', requirePermission('applicat
   await applicationFormService.deleteStandingForm(await activeOrgFor(req), req.params.formId);
   res.status(204).end();
 }));
-router.post('/standing-application-forms/:formId/save-as-template', requirePermission('applications.standingForms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
-  const organizationId = await activeOrgFor(req);
-  await applicationFormService.getStandingForm(organizationId, req.params.formId);
-  const form = await prisma.applicationForm.findUnique({
-    where: { id: req.params.formId },
-    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
-  });
-  const status = req.body.replaceTemplateId ? 200 : 201;
-  res.status(status).json(await applicationFormTemplateService.saveFrom(form, organizationId, req.body, { byUserId: req.user.id }));
-}));
 router.post('/standing-application-forms/:formId/questions', requirePermission('applications.standingForms'), validateQuestionBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addStandingQuestion(await activeOrgFor(req), req.params.formId, req.body));
 }));
@@ -822,33 +811,6 @@ router.post('/standing-application-forms/:formId/submissions/:applicationId/deci
   ));
 }));
 
-// Form templates (spec 019 phase 2). Reads follow the Participants scope;
-// writes need one organization — a member's own, SYSTEM_ADMIN's active one.
-router.get('/application-templates', wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) return res.json({ data: [] });
-  res.json({ data: await applicationFormTemplateService.list(scope.organizationId) });
-}));
-router.post('/application-templates', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
-  res.status(201).json(await applicationFormTemplateService.create(await activeOrgFor(req), req.body, { byUserId: req.user.id }));
-}));
-router.get('/application-templates/:templateId', wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  res.json(await applicationFormTemplateService.get(req.params.templateId, scope.organizationId));
-}));
-router.put('/application-templates/:templateId', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  res.json(await applicationFormTemplateService.update(req.params.templateId, scope.organizationId, req.body));
-}));
-router.delete('/application-templates/:templateId', requirePermission('applications.forms'), wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  await applicationFormTemplateService.remove(req.params.templateId, scope.organizationId);
-  res.status(204).end();
-}));
-
 // Map deep-link for event Map button (spec 014)
 router.get('/events/:eventId/map', wrap(async (req, res) => {
   const orgId = await activeOrgFor(req);
@@ -873,18 +835,6 @@ router.patch('/events/:eventId/application-forms/:formId', requirePermission('ap
 router.delete('/events/:eventId/application-forms/:formId', requirePermission('applications.forms'), wrap(async (req, res) => {
   await applicationFormService.deleteForm(req.params.eventId, req.params.formId, await scopedOrgFor(req));
   res.status(204).end();
-}));
-
-router.post('/events/:eventId/application-forms/:formId/save-as-template', requirePermission('applications.forms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
-  const { eventId, formId } = req.params;
-  const event = await applicationFormService.requireEvent(eventId, await scopedOrgFor(req));
-  const form = await prisma.applicationForm.findFirst({
-    where: { id: formId, eventId },
-    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
-  });
-  if (!form) throw new NotFoundError('Application form not found');
-  const status = req.body.replaceTemplateId ? 200 : 201;
-  res.status(status).json(await applicationFormTemplateService.saveFrom(form, event.venue.organizationId, req.body, { byUserId: req.user.id }));
 }));
 
 // Tiers

@@ -7,15 +7,13 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { useOrg, useCan } from '@/components/OrgContext';
 import SubmissionsTable from '@/components/applications/SubmissionsTable';
 import { QuestionsCard, SettingsCard } from '@/components/applications/FormEditorCards';
-import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
-import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import { describeError, useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
-import type { AdminForm, FormTemplateSummary } from '@/lib/applications';
+import type { AdminForm } from '@/lib/applications';
 import { FormStatusBadge } from '../FormStatusBadge';
 
 type Tab = 'submissions' | 'fields' | 'settings';
@@ -42,14 +40,10 @@ function StandingForm({ formId }: { formId: string }) {
   const { selectedOrg, loading: orgLoading } = useOrg();
   const canEdit = useCan('applications.standingForms');
   const api = useApplicationsApi('', formId);
-  const participants = useParticipantsApi();
   const [form, setForm] = useState<AdminForm | null>(null);
-  const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [savingAs, setSavingAs] = useState(false);
-  const saveAsRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -62,14 +56,6 @@ function StandingForm({ formId }: { formId: string }) {
   useEffect(() => {
     if (!orgLoading) load();
   }, [orgLoading, load]);
-
-  useEffect(() => {
-    if (!canEdit) return;
-    participants
-      .templates()
-      .then((r) => setTemplates(r.data))
-      .catch(() => setTemplates([]));
-  }, [participants, canEdit]);
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setError(null);
@@ -138,11 +124,6 @@ function StandingForm({ formId }: { formId: string }) {
                 </a>
               </>
             )}
-            {canEdit && (
-              <button ref={saveAsRef} type="button" className={btn} onClick={() => setSavingAs(true)} data-testid="form-save-as-template">
-                Save as template
-              </button>
-            )}
           </div>
         )}
       </header>
@@ -206,20 +187,6 @@ function StandingForm({ formId }: { formId: string }) {
         )}
       </div>
 
-      {savingAs && form && (
-        <SaveAsTemplateDialog
-          form={form}
-          templates={templates}
-          onSave={(body) => api.saveAsTemplate(form.id, body)}
-          onSaved={async (t, replaced) => {
-            setSavingAs(false);
-            setNotice(replaced ? `Template "${t.name}" replaced.` : `Saved as the "${t.name}" template.`);
-            setTemplates((await participants.templates()).data);
-          }}
-          returnFocusRef={saveAsRef}
-          onClose={() => setSavingAs(false)}
-        />
-      )}
     </div>
   );
 }

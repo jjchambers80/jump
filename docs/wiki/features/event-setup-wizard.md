@@ -120,7 +120,7 @@ Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard
 | Floor map | the vendor flow's `step=floor-map&form=<id>` while a VENDOR MAP form exists, else the Map tab |
 | Special guests (lineup card: count, first four names, hidden ones marked) | `setup/special-guests?step=lineup` |
 
-The four Details flyouts were deleted in 050-P. **Redirects** (kept for bookmarks and email links) (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → the vendor flow; `applications/forms/<id>` → the form's flow at Form details. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move; the tab's header has **Add a form** (a disclosure listing the four flows), and its empty state links to the Overview. The template editor `/admin/events/templates/<id>` stays, reached from Start from.
+The four Details flyouts were deleted in 050-P. **Redirects** (kept for bookmarks and email links) (`WizardRedirect`, carries `?orgId=` / `?org=` as `org=`): `/edit` by hash and `/edit/details`, `/edit/sales` via `legacyEditStep` (every old `event-*` id mapped, `event-rsvp-*` by prefix, fallback `name` / `tickets`); `applications/forms` → the vendor flow; `applications/forms/<id>` → the form's flow at Form details. Submission review (Applications tab, `SubmissionsTable`, detail pages) does not move; the tab's header has **Add a form** (a disclosure listing the four flows), and its empty state links to the Overview. There are no form templates since spec 056; `/admin/events/templates/*` 308s to Contacts › Forms.
 
 Edit-mode extras: **View event** in the header (public page, or a signed preview for a draft), read-only tax summary on Tickets, live-URL warning on Name.
 
@@ -131,8 +131,8 @@ The rules below still hold; the editing UI moved to the [application setup flows
 - `ApplicationForm.purpose` (enum `VENDOR SPONSOR PRESS PANEL SPECIAL_GUEST VOLUNTEER OTHER`, default OTHER) places a form in a step: `vendors` (VENDOR), `special-guests` (SPECIAL_GUEST), `volunteers` (VOLUNTEER), `other-applications` (SPONSOR / PRESS / PANEL / OTHER; null → OTHER). `GetInvolved` labels come from `PURPOSE_CTA` (`lib/applications.ts`), not the form name.
 - *(spec 050, replaced by spec 051)* One `ApplicationsStep` container rendered all four. **Several forms per step**: list (`FormRow`: name, purpose chip, status, kind, counts), add dialog (`AddFormDialog`: name prefilled `<Event> Vendor Application`, **Start from** Blank or the org's templates for that purpose + kind, falling back to same-kind templates without a purpose, "Show templates for all purposes", template **Edit** / **Delete**, "Charge for space" on vendors, purpose picker on Other applications), inline editor (`InlineFormEditor` over the unforked `FormEditorCards` `SettingsCard` / `TiersCard` / `QuestionsCard`, plus Created from, View applications, Save as template, View public form). `&form=<id>` expands a form (and moves to the right step). Delete only with no applications, else Close with the reason in text.
 - Vendors choose **How vendors pick a space** (TIERS / MAP, spec 039) in `SettingsCard`; MAP adds the Floor map step at once.
-- Rules (backend): SPECIAL_GUEST and VOLUNTEER are FREE only (400 `PURPOSE_KIND_MISMATCH`); purpose is fixed once a non-DRAFT application exists (409 `PURPOSE_LOCKED`); `collectBusiness: false` allowed on FREE event forms only (PAID → 400). `createForm` with no template starts blank: no questions, business details only on PAID forms (the per-purpose default questions were removed in October 2026). Templates snapshot `purpose` and `collectBusiness`.
-- Form open / close times are edited on the **venue's** clock with the zone shown (`FormEditorCards`, also on the old pages); standing forms and templates have no venue and keep the browser clock.
+- Rules (backend): SPECIAL_GUEST and VOLUNTEER are FREE only (400 `PURPOSE_KIND_MISMATCH`); purpose is fixed once a non-DRAFT application exists (409 `PURPOSE_LOCKED`); `collectBusiness: false` allowed on FREE event forms only (PAID → 400). `createForm` with no questions starts blank; from the setup flows (`setup: true`, spec 056) it asks for an email only. `collectBusiness: false` is allowed on any form since spec 056.
+- Form open / close times are edited on the **venue's** clock with the zone shown (`FormEditorCards`, also on the old pages); standing forms have no venue and keep the browser clock.
 - Preview: `preview-payload` returns DRAFT forms too, so new forms show in the pane's Get involved strip.
 
 ### Floor map step (050-M, a vendor flow step since spec 051)
@@ -162,7 +162,7 @@ Volunteer shifts (050-R, 050-S) were removed in October 2026 because there is no
 
 | Key | Default | Covers |
 |---|---|---|
-| `applications.forms` | ADMIN + **ORGANIZER** | event forms, tiers, tier add-ons, questions, templates |
+| `applications.forms` | ADMIN + **ORGANIZER** | event forms, tiers, tier add-ons, questions |
 | `addOns.manage` | ADMIN + **ORGANIZER** | event add-ons and saved add-ons |
 | `applications.standingForms` | ADMIN | standing forms (Contacts › Forms); split from `applications.forms` (`SPLIT_KEYS`: an old `applications.forms` override applies until one of its own is saved) |
 | `maps.forceAssign` | ADMIN | `force` on booth assign (a spot of another category), enforced on the server; `BoothPanel` shows the toggle with `useCan` |
@@ -207,7 +207,7 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 | File | Purpose |
 |------|---------|
 | `frontend/src/components/event-setup/steps.ts` | Step registry, visibility, completion, resume, `StepKey` |
-| `frontend/src/components/event-setup/contentSteps.ts`, `applicationSteps.ts` | Steps 4–6; application types by purpose, `formsOnStep`, `stepForPurpose`, `templatesFor` (flows: [application setup flows](application-setup-flows.md)) |
+| `frontend/src/components/event-setup/contentSteps.ts`, `applicationSteps.ts` | Steps 4–6; application types by purpose, `formsOnStep`, `stepForPurpose` (flows: [application setup flows](application-setup-flows.md)) |
 | `frontend/src/components/event-setup/EventSetupPage.tsx`, `useSetupFlow.ts`, `useSetupData.ts`, `useSetupForms.ts`, `useSetupActions.ts` | Container: load, step state, create, Save & exit, publish hand-off |
 | `frontend/src/components/event-setup/stepSaver.ts`, `useStepSave.ts`, `SaveIndicator.tsx`, `useHistoryGuard.ts` | Autosave / explicit save, indicator, history + link guards |
 | `frontend/src/components/event-setup/SetupShell.tsx`, `SetupHeader.tsx`, `SetupProgress.tsx`, `PreviewDevice.tsx`, `SetupFooter.tsx`, `StepContent.tsx`, `ErrorSummary.tsx`, `stepFocus.ts` | Shell and a11y plumbing |
@@ -251,7 +251,7 @@ Migrations (all additive): `20261101100000_event_setup_wizard` (`capacity` nulla
 - [Event Editor](event-editor.md) — retired in 050-P; what the old routes redirect to
 - [Event Management](event-management.md) — lifecycle and API
 - [Application setup flows](application-setup-flows.md) — spec 051: vendors, special guests, volunteers and other applications, one form per run
-- [Applications](applications.md), [Participants](participants.md) — forms, templates, review
+- [Applications](applications.md), [Participants](participants.md) — forms, review
 - [Add-ons](add-ons.md), [Price Tiers](price-tiers.md), [RSVP Events](rsvp-events.md)
 - [Floor Map Builder](map-builder.md), [Vendor Space Selection](vendor-space-selection.md)
 - [Roles & permissions](rbac.md), [Venue Time Zones](venue-time-zones.md), [Content › Blog posts](blog-posts.md) (`RichTextEditorField`, sanitise on write)

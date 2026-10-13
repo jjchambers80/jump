@@ -1,11 +1,6 @@
-// Spec 050-L: which forms an application step lists, and which templates "Start from" offers.
+// Spec 050-L: which forms an application step lists.
 import { describe, expect, test } from 'vitest';
-import { formsOnStep, stepForPurpose, templatesFor } from '@/components/event-setup/applicationSteps';
-import type { FormTemplateSummary } from '@/lib/applications';
-
-const tpl = (id: string, kind: 'PAID' | 'FREE', purpose: FormTemplateSummary['purpose']): FormTemplateSummary => ({
-  id, name: id, kind, purpose, tierCount: 0, questionCount: 0, sourceFormId: null, createdAt: '', updatedAt: '',
-});
+import { formsOnStep, stepForPurpose } from '@/components/event-setup/applicationSteps';
 
 describe('formsOnStep', () => {
   const forms = [
@@ -32,21 +27,4 @@ describe('formsOnStep', () => {
     expect(stepForPurpose('VOLUNTEER')).toBe('volunteers');
     expect(stepForPurpose(null)).toBe('other-applications');
   });
-});
-
-describe('templatesFor', () => {
-  const all = [tpl('paid-vendor', 'PAID', 'VENDOR'), tpl('free-vendor', 'FREE', 'VENDOR'), tpl('old-paid', 'PAID', null), tpl('old-free', 'FREE', null), tpl('press', 'FREE', 'PRESS')];
-  const ids = (purpose: Parameters<typeof templatesFor>[1], kind: 'PAID' | 'FREE') => templatesFor(all, purpose, kind).map((t) => t.id);
-
-  test('templates of the same purpose and kind win', () => {
-    expect(ids('VENDOR', 'PAID')).toEqual(['paid-vendor']);
-    expect(ids('VENDOR', 'FREE')).toEqual(['free-vendor']);
-  });
-
-  test('else same-kind templates saved before purposes existed, never another purpose', () => {
-    expect(ids('SPONSOR', 'PAID')).toEqual(['old-paid']);
-    expect(ids('VOLUNTEER', 'FREE')).toEqual(['old-free']);
-  });
-
-  test('nothing saved: blank only', () => expect(templatesFor([], 'VENDOR', 'PAID')).toEqual([]));
 });

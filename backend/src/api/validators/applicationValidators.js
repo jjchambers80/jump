@@ -4,7 +4,7 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import permissionService from '../../services/PermissionService.js';
 
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'purpose', 'collectBusiness', 'collectName', 'buttonLabel', 'successMessage', 'setup']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'purpose', 'collectBusiness', 'collectName', 'buttonLabel', 'successMessage', 'setup']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);
@@ -27,8 +27,6 @@ export const validateFormBody = async (req, res, next) => {
     for (const t of body.tiers || []) onlyFields(t, TIER_FIELDS, 'tier');
     for (const q of body.questions || []) onlyFields(q, QUESTION_FIELDS, 'question');
     if (req.method === 'PATCH' && Object.keys(body).length === 0) throw new ValidationError('Nothing to update');
-    if (body.templateId !== undefined && (typeof body.templateId !== 'string' || !body.templateId)) throw new ValidationError('templateId must be an id');
-    if (req.method === 'PATCH' && body.templateId !== undefined) throw new ValidationError('templateId applies when creating a form');
     if (body.setup !== undefined && (req.method !== 'POST' || typeof body.setup !== 'boolean')) throw new ValidationError('setup is a boolean, on create only');
     next();
   } catch (error) {
@@ -142,34 +140,6 @@ export const validateScanBody = (req, res, next) => {
     onlyFields(body, new Set(['payload']), 'scan');
     if (typeof body.payload !== 'string' || !body.payload.trim()) throw new ValidationError('payload is required');
     if (body.payload.length > 2048) throw new ValidationError('payload is too long to be a vendor pass');
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
-
-/** Spec 019: form templates. POST { name, kind, definition? }; PUT { name?, definition? }. Values are validated in the service. */
-export const validateFormTemplateBody = (req, res, next) => {
-  try {
-    const body = req.body || {};
-    onlyFields(body, new Set(['name', 'kind', 'definition']), 'template');
-    if (req.method === 'POST' && !body.kind) throw new ValidationError('kind is required');
-    if (req.method === 'PUT' && body.kind !== undefined) throw new ValidationError('kind cannot change');
-    if (body.definition !== undefined && (typeof body.definition !== 'object' || body.definition === null || Array.isArray(body.definition))) throw new ValidationError('definition must be an object');
-    if (req.method === 'PUT' && body.name === undefined && body.definition === undefined) throw new ValidationError('Nothing to update');
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
-
-/** Spec 019: { name } for a new template, or { replaceTemplateId, name? } to overwrite one. */
-export const validateSaveAsTemplateBody = (req, res, next) => {
-  try {
-    const body = req.body || {};
-    onlyFields(body, new Set(['name', 'replaceTemplateId']), 'save-as-template');
-    if (body.replaceTemplateId !== undefined && (typeof body.replaceTemplateId !== 'string' || !body.replaceTemplateId)) throw new ValidationError('replaceTemplateId must be an id');
-    if (!body.replaceTemplateId && typeof body.name !== 'string') throw new ValidationError('name is required for a new template');
     next();
   } catch (error) {
     next(error);
