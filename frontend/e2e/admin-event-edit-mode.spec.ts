@@ -46,7 +46,7 @@ const adminForm = (f: ReturnType<typeof overviewForm>) => ({
   ...f, eventId: EVENT_ID, intro: null, chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7,
   overduePolicy: 'WITHDRAW', reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null,
   acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.purpose !== 'VOLUNTEER',
-  addOns: [], questions: [], shifts: [], timezone: VENUE.timezone,
+  addOns: [], questions: [], timezone: VENUE.timezone,
   ...(f.id === 'f-volunteers' && { applicationCount: 2, createdFromTemplateId: 'tpl-crew', opensAt: '2031-05-01T14:00:00.000Z' }),
 });
 

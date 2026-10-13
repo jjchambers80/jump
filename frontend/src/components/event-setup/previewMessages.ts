@@ -83,7 +83,6 @@ export function previewForm(form: AdminForm, overlay: { name?: string; intro?: s
     tiers: form.tiers.map((t) => ({ id: t.id, name: t.name, description: t.description, price: t.price, applicantPays: t.price, feesIncluded: 0, tax: 0, soldOut: false, addOns: [] })),
     questions: form.questions,
     collectBusiness: form.collectBusiness,
-    shifts: (form.shifts ?? []).map((s) => ({ id: s.id, name: s.name, description: s.description, startsAt: s.startsAt, endsAt: s.endsAt, remaining: s.remaining, full: s.remaining === 0 })),
     timezone: form.timezone,
   };
 }

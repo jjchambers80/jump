@@ -22,7 +22,6 @@ import {
   OFFLINE_METHOD_LABEL,
   PAYMENT_LABEL,
   PAYMENT_STYLE,
-  shiftWhen,
   STATUS_LABEL,
   STATUS_STYLE,
   type AdminApplication,
@@ -350,30 +349,6 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
               <div className={card}>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Event lineup</h3>
                 <AddToLineup eventId={eventId} applicationId={app.id} guestId={app.lineupGuestId ?? null} onAdded={(id) => setApp({ ...app, lineupGuestId: id })} />
-              </div>
-            )}
-
-            {/* Volunteer shifts (spec 050 §6.4): the volunteer's picks and what approval assigned */}
-            {(app.shifts ?? []).some((sh) => sh.picked || sh.assignedToApplication) && (
-              <div className={card} data-testid="application-shifts">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Shifts</h3>
-                <ul className="mt-3 space-y-2">
-                  {(app.shifts ?? [])
-                    .filter((sh) => sh.picked || sh.assignedToApplication)
-                    .map((sh) => (
-                      <li key={sh.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-                        <span className="min-w-0">
-                          <span className="font-medium text-gray-900 dark:text-white">{sh.name}</span>
-                          {shiftWhen(sh, app.event?.timezone) && (
-                            <span className="block text-xs text-gray-600 dark:text-slate-400">{shiftWhen(sh, app.event?.timezone)}</span>
-                          )}
-                        </span>
-                        <span className={sh.assignedToApplication ? 'text-xs font-semibold text-emerald-700 dark:text-emerald-300' : 'text-xs text-gray-600 dark:text-slate-400'}>
-                          {sh.assignedToApplication ? 'Assigned' : 'Picked'}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
               </div>
             )}
           </div>

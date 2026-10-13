@@ -1808,7 +1808,6 @@ model ApplicationForm {
   questions    ApplicationQuestion[]
   applications Application[]
   pages        Page[] // spec 044D: pages using this standing form
-  shifts       VolunteerShift[] // spec 050 §6.4: VOLUNTEER forms only
 
   @@unique([eventId, slug])
   @@index([organizationId, status])
@@ -1960,7 +1959,6 @@ model Application {
   decisions ApplicationDecision[]
   order     Order?
   booth     Booth?
-  shifts    ApplicationShift[] // spec 050 §6.4: volunteer shift picks
   guests    EventGuest[] // spec 050 §6.3: lineup rows added from this application
 
   @@index([eventId, status])
@@ -2491,40 +2489,6 @@ enum OAuthClientKind {
 enum OAuthTokenKind {
   ACCESS
   REFRESH
-}
-
-// Spec 050 §6.4 (050-R): shifts or roles on a VOLUNTEER form. Times are
-// instants rendered in the venue zone; both optional (a role without a time).
-model VolunteerShift {
-  id           String    @id @default(cuid())
-  formId       String
-  name         String // role or shift label, <= 80
-  startsAt     DateTime?
-  endsAt       DateTime?
-  capacity     Int? // null = unlimited; counts assigned picks only
-  description  String?
-  displayOrder Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  form  ApplicationForm    @relation(fields: [formId], references: [id], onDelete: Cascade)
-  picks ApplicationShift[]
-
-  @@index([formId, displayOrder])
-}
-
-// A volunteer's pick of a shift; `assigned` = the organizer confirmed it on approval.
-model ApplicationShift {
-  applicationId String
-  shiftId       String
-  assigned      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-
-  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  shift       VolunteerShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-
-  @@id([applicationId, shiftId])
-  @@index([shiftId, assigned])
 }
 
 // Spec 050 §6.3 (050-Q): the special guest lineup on the event page. Added by

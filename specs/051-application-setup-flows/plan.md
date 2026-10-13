@@ -157,3 +157,7 @@ errors in `role="alert"`, axe clean.
 - Manual (`/run`): create event (8 steps) → Overview → Add a vendor application (PAID, MAP) →
   walk to Review & open → Overview list shows it; repeat on phone viewport.
 - CI green on PRs is the completion gate.
+
+## Update (2026-10-12): shifts removed
+
+Volunteer shifts (spec 050-R/S) were removed because there is no use case yet. The volunteers flow is Start · Form details · Questions · Review and open, and migration `20261109120000_drop_volunteer_shifts` drops `VolunteerShift` and `ApplicationShift`.

@@ -9,7 +9,7 @@ import type { FormPurpose } from '@/lib/applications';
 import { isApplicationStep, stepForPurpose, type ApplicationStepKey } from './applicationSteps';
 
 export type FormFlowKey = ApplicationStepKey;
-export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'shifts' | 'questions' | 'review';
+export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
 export interface FlowForm {
@@ -70,7 +70,6 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     steps: [
       s('start', 'Start a volunteer application', 'People sign up to help run your event.', { formAnchor: 'apply-top' }),
       details,
-      s('shifts', 'Shifts', 'Optional. The shifts volunteers can sign up for.', { formAnchor: 'step-shifts' }),
       questions,
       review,
     ],

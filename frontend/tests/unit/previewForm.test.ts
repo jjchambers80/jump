@@ -9,7 +9,6 @@ const admin = {
   applicationCount: 0, collectBusiness: true, addOns: [], timezone: 'America/New_York',
   tiers: [{ id: 't1', name: 'Corner', description: null, price: 120, quantityTotal: 4, quantityApproved: 0, quantityReserved: 0, remaining: 4, displayOrder: 0, isActive: true, amounts: {}, addOns: [] }],
   questions: [{ id: 'q1', label: 'What do you sell?', helpText: null, type: 'SHORT_TEXT', required: true, options: [], displayOrder: 0 }],
-  shifts: [{ id: 's1', name: 'Gate', description: null, startsAt: null, endsAt: null, capacity: 2, assigned: 2, remaining: 0, displayOrder: 0 }],
 } as unknown as AdminForm;
 
 describe('previewForm (spec 051)', () => {
@@ -18,7 +17,6 @@ describe('previewForm (spec 051)', () => {
     expect(form).toMatchObject({ name: 'Makers', intro: null, acceptance: { open: true, reason: null }, organizationName: 'Retro Org' });
     expect(form.tiers[0]).toMatchObject({ id: 't1', name: 'Corner', price: 120, applicantPays: 120, soldOut: false });
     expect(form.questions.map((q) => q.label)).toEqual(['What do you sell?']);
-    expect(form.shifts?.[0]).toMatchObject({ id: 's1', remaining: 0, full: true });
   });
   it('keeps the saved name and intro when nothing is typed', () => {
     expect(previewForm(admin)).toMatchObject({ name: 'Vendors', intro: 'Saved intro' });

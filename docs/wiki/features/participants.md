@@ -96,7 +96,7 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,shift,shiftMode,q,sort,page,pageSize`) | organizer+ |
+| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,q,sort,page,pageSize`) | organizer+ |
 | GET | `/admin/applications/summary`, `/admin/applications/export.csv` | organizer+ |
 | POST | `/admin/applications/bulk` `{ ids, decision, note? }` | organizer+ |
 | GET | `/admin/application-forms` | organizer+ |
@@ -110,7 +110,6 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 
 `applications.forms` = ADMIN + ORGANIZER by default (spec 050-E); standing forms use `applications.standingForms` (ADMIN). See [Roles & permissions](rbac.md).
 
-**Shift roster (spec 050-S):** `shift=<id>` matches applications that picked or were assigned the shift; `shiftMode=assigned` only assigned picks (the day-of roster). Rows carry `shifts: [{ id, name, assigned }]`; the table gets a Shift filter (options from the forms' shifts, narrowed by Form; `listFormsInScope` returns VOLUNTEER shifts so the org-wide mount fills too) and a Shifts column; the CSV honours the filter. Extends the one `SubmissionsTable`, never a fork (gotcha 18).
 
 ## Testing
 

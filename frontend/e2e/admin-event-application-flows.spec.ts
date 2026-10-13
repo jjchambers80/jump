@@ -276,7 +276,7 @@ test.describe('desktop', () => {
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 7');
   });
 
-  test('a volunteer form is always free, then shifts and questions', async ({ page }) => {
+  test('a volunteer form is always free, then questions', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('volunteers'));
     await expect(heading(page, 'Start a volunteer application')).toBeVisible(COLD);
@@ -286,8 +286,6 @@ test.describe('desktop', () => {
     await expect.poll(() => calls.create.length).toBe(1);
     expect(calls.create[0].postDataJSON()).toMatchObject({ kind: 'FREE', purpose: 'VOLUNTEER' });
     await expect(heading(page, 'Form details')).toBeVisible();
-    await next(page).click();
-    await expect(heading(page, 'Shifts')).toBeVisible();
     await next(page).click();
     const questions = main(page).getByTestId('form-questions');
     await expect(questions.getByText('Name and email are always asked.')).toBeVisible();
