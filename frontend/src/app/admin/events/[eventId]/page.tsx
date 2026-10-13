@@ -257,7 +257,7 @@ function EventDetailsContent() {
         />
       )}
 
-      {cancelled && ticketed && <CancellationPanel key={event.status} orgId={orgId} eventId={eventId} />}
+      {cancelled && <CancellationPanel key={event.status} orgId={orgId} eventId={eventId} />}
 
       {/* Always mounted, so a notice set on arrival (back from the wizard) is announced. */}
       <div role="status">

@@ -30,6 +30,10 @@ const RETRY_AFTER_MS = 60 * 1000;
 
 const ORDER_SELECT = {
   id: true,
+  kind: true,
+  applicationId: true,
+  eventId: true,
+  organizationId: true,
   orderRef: true,
   status: true,
   totalAmount: true,
@@ -98,6 +102,8 @@ class EventCancellationService {
       const order = await prisma.order.findUnique({ where: { id: item.orderId }, select: ORDER_SELECT });
       const result = await this._decide(item, order);
       await prisma.eventCancellationItem.update({ where: { id: item.id }, data: { ...result.data, error: null } });
+      // A vendor whose payment never landed has nothing to refund: close the application instead.
+      if (result.withdraw) await this._withdraw(order.organizationId, order.eventId, order.applicationId, item.cancellation.initiatedById);
       await this._notify(item, order, result);
       return result.data.status === 'REFUNDED' ? 'refunded' : 'skipped';
     } catch (error) {
@@ -114,6 +120,11 @@ class EventCancellationService {
   /** What happens to one order; throws when the refund itself fails (retried). */
   async _decide(item, order) {
     if (!order) return { data: { status: 'SKIPPED', skippedReason: 'ORDER_MISSING' }, refund: null };
+    // Spec 054-D: a vendor payment that was still settling at the cancel.
+    if (order.kind === 'APPLICATION' && order.status === 'PENDING') throw new Error("The vendor's payment is still being confirmed");
+    if (order.kind === 'APPLICATION' && (order.status === 'CANCELLED' || order.status === 'FAILED')) {
+      return { data: { status: 'SKIPPED', skippedReason: 'NOT_PAID' }, refund: 'none', withdraw: true };
+    }
     if (Number(order.totalAmount) <= 0) return { data: { status: 'SKIPPED', skippedReason: 'FREE_ORDER' }, refund: 'none' };
     if (item.cancellation.mode === 'MANUAL') return { data: { status: 'SKIPPED', skippedReason: 'MANUAL_MODE' }, refund: 'manual' };
 
@@ -139,17 +150,78 @@ class EventCancellationService {
     return Number(_sum.amount ?? 0);
   }
 
-  /** The buyer's email, once per order. A failure is logged and the item keeps `notifiedAt` null. */
+  /** The buyer's (or vendor's) email, once per order. A failure is logged and the item keeps `notifiedAt` null. */
   async _notify(item, order, result) {
     if (!result.refund || !order?.contact?.email) return;
     const { count } = await prisma.eventCancellationItem.updateMany({ where: { id: item.id, notifiedAt: null }, data: { notifiedAt: new Date() } });
     if (count !== 1) return;
     try {
-      await emailService.sendEventCancelled(order, { refund: result.refund, refundAmount: result.amount ?? null, message: item.cancellation.message });
+      if (order.kind === 'APPLICATION') {
+        if (!(await this._emailVendor(order.applicationId, result.refund, result.amount))) throw new Error('Vendor email not sent');
+      } else {
+        await emailService.sendEventCancelled(order, { refund: result.refund, refundAmount: result.amount ?? null, message: item.cancellation.message });
+      }
     } catch (error) {
       await prisma.eventCancellationItem.update({ where: { id: item.id }, data: { notifiedAt: null } });
       logger.error('Event cancellation email failed', { event: 'event_cancellation_email_failed', orderId: order.id, error: error.message });
     }
+  }
+
+  // ─── Vendor applications (054-D) ─────────────────────────────────────
+
+  /**
+   * After a cancel: withdraw every live vendor application that has no paid
+   * order on the cancellation (submitted, waitlisted, approved and not yet
+   * paid, or already refunded), releasing its slot, held space, add-ons and
+   * open payment session, and tell the vendor once. Paid vendors are left to
+   * the sweep, which refunds them first. Never throws.
+   */
+  async closeApplications(orgId, eventId, actorId = null) {
+    try {
+      const swept = await prisma.eventCancellationItem.findMany({
+        where: { cancellation: { eventId }, order: { kind: 'APPLICATION' } },
+        select: { order: { select: { applicationId: true } } },
+      });
+      const bySweep = new Set(swept.map((i) => i.order?.applicationId).filter(Boolean));
+      const live = await prisma.application.findMany({
+        where: { eventId, status: { in: ['SUBMITTED', 'WAITLISTED', 'APPROVED'] } },
+        select: { id: true },
+      });
+      for (const { id } of live) {
+        if (bySweep.has(id)) continue;
+        if (await this._withdraw(orgId, eventId, id, actorId)) await this._emailVendor(id, 'none');
+      }
+    } catch (error) {
+      logger.error('Closing the applications of a cancelled event failed', { eventId, error: error.message });
+    }
+  }
+
+  /** Withdraw one application the way staff do, without the usual WITHDRAWN email. True when it was withdrawn. */
+  async _withdraw(orgId, eventId, applicationId, actorId = null) {
+    const { default: applicationService } = await import('./ApplicationService.js');
+    try {
+      await applicationService.decide(eventId, applicationId, orgId, { decision: 'WITHDRAW', note: 'Event cancelled', sendEmail: false, byUserId: actorId });
+      return true;
+    } catch (error) {
+      logger.warn('Could not withdraw an application of a cancelled event', { eventId, applicationId, error: error.message });
+      return false;
+    }
+  }
+
+  /** `application.event.EVENT_CANCELLED` to the vendor; resolves to the sent message or null. */
+  async _emailVendor(applicationId, refund, amount = null) {
+    const [{ default: applicationPaymentService }, { default: applicationTemplateService }, { statusUrlFor }] = await Promise.all([
+      import('./ApplicationPaymentService.js'),
+      import('./ApplicationTemplateService.js'),
+      import('./applicationLinks.js'),
+    ]);
+    const application = await applicationPaymentService._load(applicationId);
+    if (!application?.contact?.email) return null;
+    const statusUrl = await statusUrlFor(application);
+    return applicationTemplateService.send(application.organizationId, 'EVENT_CANCELLED', { ...application, statusUrl }, {
+      payNowUrl: statusUrl,
+      extra: { refund: { issued: refund === 'issued', manual: refund === 'manual', amount: refund === 'issued' ? money(amount) : '' } },
+    });
   }
 
   /**
@@ -247,11 +319,12 @@ class EventCancellationService {
   async preview(orgId, eventId) {
     const event = await this._event(orgId, eventId);
     const paidWhere = { eventId, kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } };
-    const [paid, refunded, openCheckouts, vendorsPaid, rsvps] = await Promise.all([
+    const [paid, refunded, openCheckouts, vendorsPaid, liveApplications, rsvps] = await Promise.all([
       prisma.order.aggregate({ where: paidWhere, _count: true, _sum: { totalAmount: true, quantity: true } }),
       prisma.refund.aggregate({ where: { status: 'SUCCEEDED', order: paidWhere }, _sum: { amount: true } }),
       prisma.order.count({ where: { eventId, kind: 'TICKET', status: 'PENDING' } }),
       prisma.order.count({ where: { eventId, kind: 'APPLICATION', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } } }),
+      prisma.application.count({ where: { eventId, status: { in: ['SUBMITTED', 'WAITLISTED', 'APPROVED'] } } }),
       prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }),
     ]);
     const collected = Number(paid._sum.totalAmount ?? 0) - Number(refunded._sum.amount ?? 0);
@@ -263,6 +336,8 @@ class EventCancellationService {
       collected: Math.round(collected * 100) / 100,
       openCheckouts,
       vendorsPaid,
+      // Spec 054-D: every live application is closed and its vendor told (the paid ones refunded first).
+      applications: liveApplications,
       rsvps,
     };
   }
@@ -365,6 +440,7 @@ class EventCancellationService {
       ALREADY_REFUNDED: 'already refunded',
       HANDLED_BY_STAFF: 'handled by staff',
       ORDER_MISSING: 'order missing',
+      NOT_PAID: 'vendor payment never landed',
     };
     const counts = new Map();
     for (const i of items) counts.set(LABEL[i.skippedReason] || 'other', (counts.get(LABEL[i.skippedReason] || 'other') || 0) + 1);

@@ -474,7 +474,7 @@ describe('Applications contract (spec 011 phase 1)', () => {
       const list = await request(app).get('/admin/settings/notifications').set(...auth(organizerToken));
       expect(list.status).toBe(200);
       const event = list.body.groups.find((g) => g.key === 'applications').notifications;
-      expect(event.map((t) => t.key)).toEqual(['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'].map((a) => `application.event.${a}`));
+      expect(event.map((t) => t.key)).toEqual(['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID', 'EVENT_CANCELLED'].map((a) => `application.event.${a}`));
       expect(event.every((t) => t.isDefault)).toBe(true);
       expect(event[0].mergeFields.some((m) => m.key === 'profile.businessName')).toBe(true);
 

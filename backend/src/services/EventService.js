@@ -768,12 +768,20 @@ class EventService {
         });
       }
 
-      let openOrders = [];
-      if (locked.admissionMode !== 'RSVP') {
-        const paid = await tx.order.findMany({
-          where: { eventId, kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
-          select: { id: true, totalAmount: true },
-        });
+      // Paid ticket orders and paid vendor orders (spec 054-D), plus a vendor
+      // payment still settling: the sweep refunds it once it lands. An RSVP
+      // event has no ticket orders, but its vendors may have paid for space.
+      const paid = await tx.order.findMany({
+        where: {
+          eventId,
+          OR: [
+            { kind: { in: ['TICKET', 'APPLICATION'] }, status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
+            { kind: 'APPLICATION', status: 'PENDING', application: { paymentStatus: 'PROCESSING' } },
+          ],
+        },
+        select: { id: true, totalAmount: true },
+      });
+      if (locked.admissionMode !== 'RSVP' || paid.length) {
         // The sweep settles each item; with no paid order there is nothing to do.
         await tx.eventCancellation.create({
           data: {
@@ -785,11 +793,14 @@ class EventService {
             items: { create: paid.map((o) => ({ orderId: o.id, status: 'PENDING' })) },
           },
         });
-        openOrders = await tx.order.findMany({
-          where: { eventId, kind: 'TICKET', status: 'PENDING', stripeSessionId: { not: null } },
-          select: { id: true, stripeSessionId: true, payment: { select: { stripeAccountId: true } } },
-        });
       }
+      const openOrders =
+        locked.admissionMode === 'RSVP'
+          ? []
+          : await tx.order.findMany({
+              where: { eventId, kind: 'TICKET', status: 'PENDING', stripeSessionId: { not: null } },
+              select: { id: true, stripeSessionId: true, payment: { select: { stripeAccountId: true } } },
+            });
       return { event, rsvps, openOrders };
     });
 
@@ -804,6 +815,9 @@ class EventService {
 
     if (rsvps.length) await emailService.sendCancellationNotification(event, rsvps);
     await this._expireOpenCheckouts(event.id, openOrders);
+    // Spec 054-D: vendors with nothing to refund are withdrawn and told now; paid ones after their refund.
+    const { default: eventCancellationService } = await import('./EventCancellationService.js');
+    await eventCancellationService.closeApplications(orgId, event.id, actorId);
     this._wakeCancellationSweep();
 
     return this._formatEventDetail(event);

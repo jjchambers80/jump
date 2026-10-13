@@ -166,7 +166,8 @@ class ApplicationTemplateService {
     const scope = application.eventId ? 'EVENT' : 'STANDING';
     this._assertAction(action, scope);
     const template = await this.getTemplate(orgId, action, scope);
-    const context = await this.contextFor(application, options);
+    // `extra`: fields one email adds on top of the shared context (spec 054-D `refund`).
+    const context = { ...(await this.contextFor(application, options)), ...(options.extra || {}) };
     return {
       subject: renderTemplate(template.subject, context),
       body: renderTemplate(template.body, context),
@@ -178,10 +179,10 @@ class ApplicationTemplateService {
    * one-off edit from the decision dialog, already rendered text.
    * Never throws: a failed email must not undo a decision.
    */
-  async send(organizationId, action, application, { override = null, payNowUrl = null, accountUrl = null, accountCreated = false } = {}) {
+  async send(organizationId, action, application, { override = null, payNowUrl = null, accountUrl = null, accountCreated = false, extra = null } = {}) {
     let message;
     try {
-      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl, accountUrl, accountCreated });
+      message = override && override.subject && override.body ? override : await this.render(organizationId, action, application, { payNowUrl, accountUrl, accountCreated, extra });
       await emailService.sendApplicationMessage({
         to: application.contact.email,
         subject: message.subject,

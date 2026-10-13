@@ -16,7 +16,7 @@
 // the decision dialog. Their defaults and merge fields live in
 // config/applications.js; spec 053-D moved their storage here.
 
-import { DEFAULT_TEMPLATES, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from './applications.js';
+import { DEFAULT_TEMPLATES, EVENT_CANCELLED_MERGE_FIELDS, MERGE_FIELDS, STANDING_DEFAULT_TEMPLATES, STANDING_TEMPLATE_ACTIONS, TEMPLATE_ACTIONS } from './applications.js';
 
 const EVENT_APPLICATION_COPY = {
   RECEIVED: ['Application received', 'Sent when someone submits an application.'],
@@ -30,6 +30,7 @@ const EVENT_APPLICATION_COPY = {
   TIER_CHANGED: ['Tier changed', 'Paid forms: sent when you move an application to another tier.'],
   WAIVED: ['Balance waived', 'Paid forms: sent when you waive the balance.'],
   OFFLINE_PAID: ['Payment recorded offline', 'Paid forms: sent when you record a payment taken outside Eventimus.'],
+  EVENT_CANCELLED: ['Event cancelled', 'Sent to every vendor with a live application when you cancel the event: after the refund when they paid.'],
 };
 const STANDING_APPLICATION_COPY = {
   RECEIVED: ['Application received', 'Sent when someone submits a standing form.'],
@@ -47,7 +48,7 @@ const applicationEntries = (scope, actions, copy, defaults) =>
     group: scope === 'STANDING' ? 'standingForms' : 'applications',
     label: copy[action][0],
     when: copy[action][1],
-    mergeFields: MERGE_FIELDS,
+    mergeFields: scope === 'EVENT' && action === 'EVENT_CANCELLED' ? [...MERGE_FIELDS, ...EVENT_CANCELLED_MERGE_FIELDS] : MERGE_FIELDS,
     blocks: [],
     application: { scope, action },
     defaults: defaults[action],

@@ -195,6 +195,7 @@ const SAMPLE_APPLICATION_CONTEXT = {
   order: { ref: 'APP-SAMPLE' },
   account: { created: false },
   booth: { label: 'A12', size: '10×10', chooseRequired: true },
+  refund: { amount: '$300.00', issued: true, manual: false },
   links: { status: 'https://example.com/status', payNow: 'https://example.com/pay', account: 'https://example.com/account', map: 'https://example.com/map' },
 };
 
