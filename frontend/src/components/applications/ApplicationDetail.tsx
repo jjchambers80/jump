@@ -22,6 +22,7 @@ import {
   OFFLINE_METHOD_LABEL,
   PAYMENT_LABEL,
   PAYMENT_STYLE,
+  personName,
   STATUS_LABEL,
   STATUS_STYLE,
   type AdminApplication,
@@ -277,7 +278,7 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
             <div className={card} data-testid="application-profile">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">{name}</h3>
               <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
-                {app.contact.firstName} {app.contact.lastName} ·{' '}
+                {personName(app.contact) && `${personName(app.contact)} · `}
                 <a href={`mailto:${app.contact.email}`} className="text-accent-600 hover:underline dark:text-accent-300">
                   {app.contact.email}
                 </a>

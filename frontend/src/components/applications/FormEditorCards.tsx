@@ -38,6 +38,7 @@ export interface EditorForm {
   /** Null on a standing form (spec 044); absent in the template editor. */
   eventId?: string | null;
   collectBusiness?: boolean;
+  collectName?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: AdminForm['kind'];
@@ -538,6 +539,15 @@ function questionBody(d: QuestionDraft) {
   };
 }
 
+type BuiltInKey = 'collectName' | 'collectBusiness';
+export type BuiltInPatch = Partial<Record<BuiltInKey, boolean>>;
+
+/** Fields every form can add with one click; Email is always asked. */
+const BUILT_IN_FIELDS: { key: BuiltInKey; label: string; detail: string }[] = [
+  { key: 'collectName', label: 'Name', detail: 'First and last name' },
+  { key: 'collectBusiness', label: 'Business details', detail: 'Business name, description, website, social links and photos' },
+];
+
 export function QuestionsCard({
   form,
   canEdit,
@@ -545,7 +555,7 @@ export function QuestionsCard({
   onUpdate,
   onRemove,
   onReorder,
-  onToggleBusiness,
+  onToggleBuiltIn,
   mode = 'form',
 }: {
   form: EditorForm;
@@ -554,24 +564,27 @@ export function QuestionsCard({
   onUpdate: (id: string, body: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
-  /** Shows the "Ask for business details" switch. A PAID form always asks, so it is locked on. */
-  onToggleBusiness?: (collectBusiness: boolean) => Promise<void>;
+  /** Adds or removes the built-in fields (Name, Business details); without it they are read-only. */
+  onToggleBuiltIn?: (patch: BuiltInPatch) => Promise<void>;
   mode?: EditorMode;
 }) {
   const template = mode === 'template';
-  // The tick shows at once; it settles on the saved value when the save resolves.
-  const [pendingBusiness, setPendingBusiness] = useState<boolean | null>(null);
-  const paid = form.kind === 'PAID';
-  const asksBusiness = paid || (pendingBusiness ?? form.collectBusiness !== false);
-  const toggleBusiness = async (on: boolean) => {
-    if (!onToggleBusiness || pendingBusiness !== null) return;
-    setPendingBusiness(on);
+  // A change shows at once; it settles on the saved value when the save resolves.
+  const [pending, setPending] = useState<BuiltInPatch | null>(null);
+  const on: Record<BuiltInKey, boolean> = {
+    collectName: pending?.collectName ?? form.collectName !== false,
+    collectBusiness: pending?.collectBusiness ?? form.collectBusiness !== false,
+  };
+  const toggle = async (key: BuiltInKey, value: boolean) => {
+    if (!onToggleBuiltIn || pending !== null) return;
+    setPending({ [key]: value });
     try {
-      await onToggleBusiness(on);
+      await onToggleBuiltIn({ [key]: value });
     } finally {
-      setPendingBusiness(null);
+      setPending(null);
     }
   };
+  const editBuiltIns = canEdit && !!onToggleBuiltIn;
   const [draft, setDraft] = useState<QuestionDraft>(emptyQuestion);
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState<QuestionDraft>(emptyQuestion);
@@ -628,36 +641,29 @@ export function QuestionsCard({
   return (
     <div className={card} data-testid="form-questions">
       <h2 className="text-base font-semibold text-gray-900 dark:text-white">Fields</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Contact details are always asked. Add anything else you need to decide.</p>
-      <div className="mt-3 flex flex-wrap gap-2" data-testid="form-contact-fields">
-        {['First name', 'Last name', 'Email'].map((name) => (
-          <span key={name} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200">
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Email is always asked. Add any other fields you need.</p>
+      <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700" data-testid="form-builtin-fields">
+        <li className="flex items-center justify-between gap-3 py-3">
+          <span className="font-medium text-gray-900 dark:text-white">Email</span>
+          <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-slate-400">
             <Lock className="h-3 w-3" aria-hidden />
-            {name}
-            <span className="sr-only"> (always asked)</span>
+            Always asked
           </span>
+        </li>
+        {BUILT_IN_FIELDS.filter((b) => on[b.key]).map((b) => (
+          <li key={b.key} className="flex items-start justify-between gap-3 py-3" data-testid={`builtin-${b.key}`}>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">{b.label}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400">{b.detail}</p>
+            </div>
+            {editBuiltIns && (
+              <button type="button" className={danger} disabled={pending !== null} onClick={() => void toggle(b.key, false)} aria-label={`Remove ${b.label}`}>
+                Remove
+              </button>
+            )}
+          </li>
         ))}
-      </div>
-      {onToggleBusiness && (
-        <label className="mt-4 flex items-start gap-3 text-sm text-gray-800 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={asksBusiness}
-            disabled={!canEdit || paid || pendingBusiness !== null}
-            onChange={(e) => void toggleBusiness(e.target.checked)}
-            className="mt-0.5 h-4 w-4"
-            data-testid="form-collect-business"
-          />
-          <span>
-            <span className="block font-medium">Ask for business details</span>
-            <span className="block text-gray-600 dark:text-slate-400">
-              {paid
-                ? 'Paid forms always ask for the business profile: description, website, social links and photos.'
-                : 'The business profile: description, website, social links and photos. Turn it on to review vendors or sponsors.'}
-            </span>
-          </span>
-        </label>
-      )}
+      </ol>
       <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700">
         {form.questions.map((q, i) => (
           <li key={q.id} className="py-3" data-testid={`question-row-${q.id}`}>
@@ -717,9 +723,18 @@ export function QuestionsCard({
             setDraft(emptyQuestion);
           }}
         >
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Add a question</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Add a field</p>
+          {editBuiltIns && BUILT_IN_FIELDS.some((b) => !on[b.key]) && (
+            <div className="flex flex-wrap gap-2" data-testid="builtin-add">
+              {BUILT_IN_FIELDS.filter((b) => !on[b.key]).map((b) => (
+                <button key={b.key} type="button" className={btn} disabled={pending !== null} onClick={() => void toggle(b.key, true)}>
+                  + {b.label}
+                </button>
+              ))}
+            </div>
+          )}
           {editor(draft, setDraft, 'qn')}
-          <button type="submit" className={btn}>Add question</button>
+          <button type="submit" className={btn}>Add field</button>
         </form>
       )}
     </div>

@@ -127,7 +127,7 @@ class ApplicationFormTemplateService {
     const settings = applicationFormService._validateFormFields({ name: 'Template', ...settingsBody }, kind, null);
     delete settings.name;
     if (settings.purpose || settings.collectBusiness !== undefined) {
-      applicationFormService._assertEventFormRules(settings.purpose ?? 'OTHER', kind, settings.collectBusiness ?? true);
+      applicationFormService._assertPurposeKind(settings.purpose ?? 'OTHER', kind);
     }
 
     const tiers = definition.tiers ?? [];

@@ -37,7 +37,7 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
     .join(', ');
   const has = (key: FlowStepKey) => steps.some((s) => s.key === key);
   const submitted = form.applicationCount > 0;
-  const fields = ['Contact details', form.collectBusiness !== false && 'business details', form.questions.length > 0 && count(form.questions.length, 'question')].filter(Boolean).join(', ');
+  const fields = ['Email', form.collectName !== false && 'name', form.collectBusiness !== false && 'business details', form.questions.length > 0 && count(form.questions.length, 'other field')].filter(Boolean).join(', ');
   const rows: { label: string; value: string; step: FlowStepKey }[] = [
     { label: 'Name', value: form.name, step: 'details' },
     { label: 'For', value: `${PURPOSE_LABEL[form.purpose ?? 'OTHER']} · ${form.kind === 'PAID' ? 'Paid' : 'Free'}`, step: 'details' },

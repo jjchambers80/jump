@@ -34,8 +34,8 @@ function form(patch: Record<string, any> = {}) {
     id, eventId: EVENT_ID, kind: 'FREE', purpose, name: 'Form', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
     chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW', reserveOnApproval: true,
     spaceSelection: paid ? 'TIERS' : null, displayOrder: 0, createdFromTemplateId: null, acceptance: { accepting: true, reason: null },
-    paymentsEnabled: true, applicationCount: 0, collectBusiness: paid, tiers: [], addOns: [],
-    // Like createForm: a new form starts blank (contact details only).
+    paymentsEnabled: true, applicationCount: 0, collectBusiness: false, collectName: false, tiers: [], addOns: [],
+    // Like createForm: a new form starts blank (an email only).
     questions: [],
     ...patch,
   };
@@ -177,17 +177,19 @@ test.describe('desktop', () => {
     await expect(main(page).getByTestId('form-tiers')).toHaveCount(0);
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeFocused();
-    const fields = main(page).getByTestId('form-contact-fields');
-    for (const name of ['First name', 'Last name', 'Email']) await expect(fields.getByText(name)).toBeVisible();
-    // A paid form always asks for the business.
-    await expect(main(page).getByTestId('form-collect-business')).toBeChecked();
-    await expect(main(page).getByTestId('form-collect-business')).toBeDisabled();
+    // Email only, paid or not; Name and Business details are added like any field.
+    const builtIns = main(page).getByTestId('form-builtin-fields');
+    await expect(builtIns.getByText('Email')).toBeVisible();
+    await expect(builtIns.getByText('Business details')).toHaveCount(0);
+    await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Business details' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectBusiness: true });
+    await expect(main(page).getByTestId('builtin-collectBusiness')).toBeVisible();
     await next(page).click();
 
     await expect(heading(page, 'Review and open')).toBeFocused();
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 6');
     const summary = main(page).getByRole('region', { name: 'Summary' });
-    await expect(summary.getByText('Contact details, business details')).toBeVisible();
+    await expect(summary.getByText('Email, business details')).toBeVisible();
     await expect(main(page).getByRole('checkbox', { name: /template/ })).toHaveCount(0);
     await expect(summary.getByRole('link', { name: 'Edit fields' })).toHaveAttribute('href', /step=questions&form=form-/);
     await main(page).getByLabel('Status').selectOption('OPEN');
@@ -246,6 +248,8 @@ test.describe('desktop', () => {
     await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Crew sign-up' })).toBeVisible(COLD);
     await expect(formPreview(page).getByRole('heading', { name: /Your details/ })).toBeVisible();
     await expect(formPreview(page).getByRole('heading', { name: /Your business/ })).toHaveCount(0);
+    await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
+    await expect(formPreview(page).getByRole('textbox', { name: 'Email', exact: true })).toBeVisible();
     await expect(formPreview(page).getByRole('button', { name: 'Submit application' })).toBeDisabled();
     expect(calls.create).toHaveLength(0);
   });
@@ -269,17 +273,17 @@ test.describe('desktop', () => {
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeVisible();
     const questions = main(page).getByTestId('form-questions');
-    await expect(questions.getByText('Contact details are always asked.', { exact: false })).toBeVisible();
-    // Blank: contact details only, so the preview asks for nothing else.
-    await expect(questions.locator('li')).toHaveCount(0);
-    const business = main(page).getByTestId('form-collect-business');
-    await expect(business).not.toBeChecked();
-    await business.check();
-    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectBusiness: true });
+    await expect(questions.getByText('Email is always asked.', { exact: false })).toBeVisible();
+    // Blank: an email only. Name is one click away, and can be removed again.
+    await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
+    await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Name' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectName: true });
+    await main(page).getByRole('button', { name: 'Remove Name' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectName: false });
     const add = main(page).getByTestId('question-add');
     await add.getByLabel('Question').fill('Years volunteering');
     await add.getByLabel('Type').selectOption('NUMBER');
-    await add.getByRole('button', { name: 'Add question' }).click();
+    await add.getByRole('button', { name: 'Add field' }).click();
     await expect.poll(() => calls.questions.map((r) => r.postDataJSON())).toEqual([expect.objectContaining({ label: 'Years volunteering', type: 'NUMBER' })]);
     await expect(questions.getByText('Years volunteering')).toBeVisible();
   });

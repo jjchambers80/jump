@@ -57,8 +57,9 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
     organizationName: organizationName ?? null,
     tiers: [],
     questions: [],
-    // A new form asks only contact details; a paid one must ask for the business (createForm).
-    collectBusiness: draft.kind === 'PAID',
+    // A new form asks for an email only (createForm); the rest is added on the Fields step.
+    collectBusiness: false,
+    collectName: false,
   };
 }
 
@@ -83,6 +84,7 @@ export function previewForm(form: AdminForm, overlay: { name?: string; intro?: s
     tiers: form.tiers.map((t) => ({ id: t.id, name: t.name, description: t.description, price: t.price, applicantPays: t.price, feesIncluded: 0, tax: 0, soldOut: false, addOns: [] })),
     questions: form.questions,
     collectBusiness: form.collectBusiness,
+    collectName: form.collectName,
     timezone: form.timezone,
   };
 }

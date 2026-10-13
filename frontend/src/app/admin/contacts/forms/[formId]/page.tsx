@@ -196,7 +196,7 @@ function StandingForm({ formId }: { formId: string }) {
               onUpdate={(id, body) => run('Question saved.', () => api.updateQuestion(form.id, id, body))}
               onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id))}
               onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids))}
-              onToggleBusiness={(collectBusiness) => run(collectBusiness ? 'Business details are asked again.' : 'Business details are no longer asked.', () => api.updateForm(form.id, { collectBusiness })).then(() => undefined)}
+              onToggleBuiltIn={(patch) => run('Fields saved.', () => api.updateForm(form.id, patch)).then(() => undefined)}
             />
           </div>
         )}

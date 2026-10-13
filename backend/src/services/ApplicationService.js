@@ -349,7 +349,7 @@ class ApplicationService {
     if (!acceptance.open) throw new ConflictError(`This form is not accepting applications (${acceptance.reason})`);
     if (form.kind === 'PAID' && !paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
 
-    const contact = this._validateContact(body.contact);
+    const contact = this._validateContact(body.contact, { name: form.collectName !== false });
     const organizationId = organization.id;
 
     // Spec 037 phase 5 (apply-then-choose): nobody picks a category, add-ons
@@ -2363,14 +2363,15 @@ class ApplicationService {
   // Validation
   // ---------------------------------------------------------------------------
 
-  _validateContact(contact) {
+  /** Email always; first and last name only when the form asks for them (`collectName`). */
+  _validateContact(contact, { name = true } = {}) {
     if (!contact || typeof contact !== 'object') throw new ValidationError('contact is required');
     const email = normalizeEmail(contact.email);
     if (!EMAIL_RE.test(email) || email.length > 254) throw new ValidationError('contact.email must be a valid email');
     const firstName = String(contact.firstName || '').trim();
     const lastName = String(contact.lastName || '').trim();
-    if (!firstName || firstName.length > 80) throw new ValidationError('contact.firstName is required (max 80)');
-    if (!lastName || lastName.length > 80) throw new ValidationError('contact.lastName is required (max 80)');
+    if ((name && !firstName) || firstName.length > 80) throw new ValidationError('contact.firstName is required (max 80)');
+    if ((name && !lastName) || lastName.length > 80) throw new ValidationError('contact.lastName is required (max 80)');
     return { email, firstName, lastName };
   }
 

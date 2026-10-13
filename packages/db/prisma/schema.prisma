@@ -1794,6 +1794,7 @@ model ApplicationForm {
   displayOrder          Int                   @default(0)
   createdFromTemplateId String? // spec 019: informational, no relation
   collectBusiness       Boolean               @default(true)
+  collectName           Boolean               @default(true) // spec 056: false = the form asks for an email only
   buttonLabel           String?
   successMessage        String?
   spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only

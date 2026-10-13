@@ -205,7 +205,8 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
             onUpdate={async (id, body) => patch((d) => ({ ...d, questions: d.questions.map((q, i) => (i === index(id) ? questionFromBody(body) : q)) }))}
             onRemove={async (id) => patch((d) => ({ ...d, questions: d.questions.filter((_, i) => i !== index(id)) }))}
             onReorder={async (ids) => patch((d) => ({ ...d, questions: ids.map((id) => d.questions[index(id)]) }))}
-            onToggleBusiness={async (collectBusiness) => patch((d) => ({ ...d, collectBusiness }))}
+            // Template definitions carry no collectName: only business details are saved here.
+            onToggleBuiltIn={async (built) => (built.collectBusiness === undefined ? undefined : patch((d) => ({ ...d, collectBusiness: built.collectBusiness })))}
           />
         </div>
       )}

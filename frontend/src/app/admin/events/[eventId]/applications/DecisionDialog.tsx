@@ -13,7 +13,7 @@
 import { FormEvent, RefObject, useEffect, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { errorClass, fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
-import { applicantName, DECISION_LABEL, money, type AdminApplication, type Decision } from '@/lib/applications';
+import { applicantName, DECISION_LABEL, money, personName, type AdminApplication, type Decision } from '@/lib/applications';
 
 /** Select value for "Let the vendor choose" (spec 039 D6). */
 const VENDOR_CHOOSES = '__vendor';
@@ -138,7 +138,7 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{applicantName(application)}</strong> · {application.contact.firstName} {application.contact.lastName} · {application.form.name}
+          <strong>{applicantName(application)}</strong> · {[personName(application.contact), application.form.name].filter(Boolean).join(' · ')}
           {application.tier ? ` · ${application.tier.name}` : ''}
         </p>
         {assignsCategory && (
