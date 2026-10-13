@@ -28,6 +28,8 @@ export interface FlowStep {
   anchor: string;
   /** Steps that shape the form preview the form itself, scrolled to this id; null = the event page. */
   formAnchor: string | null;
+  /** `space`: the preview shows the vendor's choose-and-pay screen instead of the apply form. */
+  preview?: 'space';
 }
 
 const always = () => true;
@@ -48,8 +50,8 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     steps: [
       s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.', { formAnchor: 'apply-top' }),
       details,
-      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary' }),
-      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary' }),
+      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
+      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
       s('floor-map', 'Floor map', 'Vendors pick their spot on this map.', { visible: onMap, anchor: 'floor-map' }),
       questions,
       review,

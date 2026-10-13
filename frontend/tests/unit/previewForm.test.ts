@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PREVIEW_MESSAGE, draftPreviewForm, isPreviewMessage, previewForm } from '@/components/event-setup/previewMessages';
+import { PREVIEW_MESSAGE, draftPreviewForm, isPreviewMessage, previewForm, spacePreviewApplication } from '@/components/event-setup/previewMessages';
 import type { AdminForm } from '@/lib/applications';
 
 const admin = {
@@ -37,5 +37,26 @@ describe('draftPreviewForm (spec 051 Start step)', () => {
       name: 'Makers', kind: 'PAID', purpose: 'VENDOR', questions: [], tiers: [], collectBusiness: false, collectName: false, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
     });
     expect(draftPreviewForm({ name: '', kind: 'FREE', purpose: 'VOLUNTEER' })).toMatchObject({ name: 'Untitled application', collectBusiness: false });
+  });
+});
+
+describe('spacePreviewApplication (spec 056 Options and pricing)', () => {
+  const form = draftPreviewForm({ name: 'Makers', kind: 'PAID', purpose: 'VENDOR' });
+  const tiers = [
+    { id: 't1', name: 'Table', description: null, price: 100, applicantPays: 108, feesIncluded: 8, tax: 0, soldOut: false, addOns: [] },
+    { id: 't2', name: 'Corner', description: 'Two sides open', price: 150, applicantPays: 160, feesIncluded: 10, tax: 0, soldOut: true, addOns: [] },
+  ];
+
+  it('is an approved vendor picking one of the form options, with nothing held', () => {
+    const app = spacePreviewApplication({ ...form, tiers }, { id: 'e1', name: 'Fair', date: null });
+    expect(app).toMatchObject({ status: 'APPROVED', paymentStatus: 'AWAITING_SELECTION', tier: null });
+    expect(app.selection).toMatchObject({ mode: 'TIERS', state: 'CHOOSE', category: null, savedCard: null, placedBooth: null });
+    expect(app.selection?.categories?.map((c) => [c.id, c.listedPrice, c.spacesLeft])).toEqual([['t1', 100, 1], ['t2', 150, 0]]);
+  });
+
+  it('the message may ask for the space view, and nothing else', () => {
+    const base = { type: PREVIEW_MESSAGE, orgId: 'o1', eventId: 'e1', overlay: {}, revision: 0, anchor: 'apply-top', form };
+    expect(isPreviewMessage({ ...base, view: 'space' })).toBe(true);
+    expect(isPreviewMessage({ ...base, view: 'map' })).toBe(false);
   });
 });

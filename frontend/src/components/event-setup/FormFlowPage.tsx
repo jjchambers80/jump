@@ -309,6 +309,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               revision: f.revision,
               anchor: (previewing && step.formAnchor) || step.anchor,
               form: previewing,
+              ...(previewing && step.preview && { view: step.preview }),
             }}
             subject={previewing ? 'form' : 'event'}
             isDesktop={isDesktop}
