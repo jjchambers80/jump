@@ -21,6 +21,8 @@ interface Preview {
   collected: number;
   openCheckouts: number;
   vendorsPaid: number;
+  /** Live applications (submitted, waitlisted, approved): all are closed and emailed. */
+  applications: number;
   rsvps: number;
 }
 
@@ -74,7 +76,7 @@ export default function CancelEventDialog({ orgId, eventId, eventName, onCancell
   });
 
   const rsvp = preview?.admissionMode === 'RSVP';
-  const paid = !!preview && !rsvp && preview.orders > 0;
+  const paid = !!preview && (preview.orders > 0 || preview.vendorsPaid > 0);
   const nameMatches = typed.trim().toLowerCase() === eventName.trim().toLowerCase();
   const ready = !!preview && nameMatches && !busy;
   const body = paid ? { mode, ...(message.trim() && { message: message.trim() }) } : {};
@@ -135,16 +137,24 @@ export default function CancelEventDialog({ orgId, eventId, eventName, onCancell
           <>
             <ul className="mt-3 space-y-1 text-sm text-gray-700 dark:text-slate-300" data-testid="cancel-event-summary">
               {rsvp ? (
-                <li>{plural(preview.rsvps, 'guest')} will be emailed that the event is cancelled.</li>
+                <>
+                  <li>{plural(preview.rsvps, 'guest')} will be emailed that the event is cancelled.</li>
+                  {preview.applications > 0 && <li>{plural(preview.applications, 'application')} will be closed and the applicants emailed.</li>}
+                </>
               ) : (
                 <>
                   <li>
-                    {paid
+                    {preview.orders > 0
                       ? `${plural(preview.orders, 'paid order')} · ${plural(preview.tickets, 'ticket')} · ${money(preview.collected)} collected`
-                      : 'No paid orders yet.'}
+                      : 'No paid ticket orders yet.'}
                   </li>
                   {preview.openCheckouts > 0 && <li>{plural(preview.openCheckouts, 'open checkout')} will be closed so nobody can pay.</li>}
-                  {preview.vendorsPaid > 0 && <li>{plural(preview.vendorsPaid, 'vendor has', 'vendors have')} paid for a space. Refund them from the Applications tab.</li>}
+                  {preview.applications > 0 && (
+                    <li>
+                      {plural(preview.applications, 'application')} will be closed and the applicants emailed
+                      {preview.vendorsPaid > 0 ? `, including ${plural(preview.vendorsPaid, 'vendor')} who paid for a space` : ''}.
+                    </li>
+                  )}
                   <li>Sales stop at once and tickets no longer scan at the door.</li>
                 </>
               )}
@@ -160,7 +170,7 @@ export default function CancelEventDialog({ orgId, eventId, eventName, onCancell
                       <span className="block font-medium text-gray-900 dark:text-white">Refund every order now</span>
                       <span className="block text-gray-600 dark:text-slate-400">
                         {canRefund
-                          ? `Each buyer gets the full amount back, ${money(preview.collected)} in total, and an email once it's done. Stripe keeps its processing fees.`
+                          ? 'Every buyer, and every vendor who paid for a space, gets the full amount back and an email once it’s done. Stripe keeps its processing fees.'
                           : "You don't have permission to refund orders. Ask an admin, or handle refunds yourself."}
                       </span>
                     </span>

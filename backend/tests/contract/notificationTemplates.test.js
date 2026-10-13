@@ -157,7 +157,7 @@ describe('Settings › Notifications (spec 053)', () => {
       orders: ['order.confirmation', 'order.event_cancelled'],
       rsvps: ['rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled'],
       applicationPayments: ['application.receipt'],
-      applications: ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'].map((a) => `application.event.${a}`),
+      applications: ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID', 'EVENT_CANCELLED'].map((a) => `application.event.${a}`),
       standingForms: ['RECEIVED', 'APPROVED', 'WAITLISTED', 'REJECTED'].map((a) => `application.standing.${a}`),
     });
     const optional = res.body.groups.flatMap((g) => g.notifications).filter((n) => n.optional).map((n) => n.key);

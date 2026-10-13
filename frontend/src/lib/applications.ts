@@ -14,7 +14,7 @@ export type ApplicationStatus = 'DRAFT' | 'SUBMITTED' | 'WAITLISTED' | 'APPROVED
  */
 export type PaymentStatus = 'NOT_REQUIRED' | 'NOT_DUE' | 'AWAITING_SELECTION' | 'AWAITING_CARD' | 'CARD_ON_FILE' | 'PROCESSING' | 'PAID' | 'PAYMENT_DUE' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
 export type Decision = 'APPROVE' | 'REJECT' | 'WAITLIST' | 'WITHDRAW';
-export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'CHOOSE_SPACE' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE' | 'ADD_ONS_CHANGED' | 'TIER_CHANGED' | 'WAIVED' | 'OFFLINE_PAID';
+export type TemplateAction = 'RECEIVED' | 'APPROVED' | 'CHOOSE_SPACE' | 'REJECTED' | 'WAITLISTED' | 'WITHDRAWN' | 'PAYMENT_DUE' | 'ADD_ONS_CHANGED' | 'TIER_CHANGED' | 'WAIVED' | 'OFFLINE_PAID' | 'EVENT_CANCELLED';
 
 export interface Acceptance {
   open: boolean;

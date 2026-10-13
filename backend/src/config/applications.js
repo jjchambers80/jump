@@ -70,8 +70,15 @@ export const MERGE_FIELDS = [
   ['links.map', 'Link to the public floor map centred on the applicant\'s booth (empty until one is owned)'],
 ];
 
-/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018; CHOOSE_SPACE from spec 037 phase 5. */
-export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'];
+/** Actions that have a template. PAYMENT_DUE is used from phase 2; ADD_ONS_CHANGED from spec 012; TIER_CHANGED / WAIVED / OFFLINE_PAID from spec 018; CHOOSE_SPACE from spec 037 phase 5; EVENT_CANCELLED from spec 054-D. */
+export const TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID', 'EVENT_CANCELLED'];
+
+/** Spec 054-D: extra merge fields of the EVENT_CANCELLED email (refund sections). */
+export const EVENT_CANCELLED_MERGE_FIELDS = [
+  ['refund.amount', 'Amount refunded, e.g. $300.00 (empty when nothing was refunded)'],
+  ['refund.issued', 'Section: shown when the vendor was refunded, e.g. {{#refund.issued}}…{{/refund.issued}}'],
+  ['refund.manual', 'Section: shown when the vendor paid and you handle refunds yourself'],
+];
 
 export const DEFAULT_TEMPLATES = {
   RECEIVED: {
@@ -214,7 +221,19 @@ We recorded your payment of {{amount.applicantPays}} for {{profile.businessName}
 Your application: {{links.status}}
 
 {{organization.name}}`,
+  },  EVENT_CANCELLED: {
+    subject: '{{event.name}} has been cancelled',
+    body: `Hi {{applicant.firstName}},
+
+We're sorry: {{event.name}} has been cancelled, so your application ({{form.name}}) is closed.
+
+{{#refund.issued}}We've refunded {{refund.amount}} to the card you paid with. It usually arrives in 5–10 business days.{{/refund.issued}}{{#refund.manual}}We'll contact you about the money you paid.{{/refund.manual}}
+
+If you have questions, reply to this email.
+
+{{organization.name}}`,
   },
+
 };
 
 export const STANDING_TEMPLATE_ACTIONS = ['RECEIVED', 'APPROVED', 'WAITLISTED', 'REJECTED'];

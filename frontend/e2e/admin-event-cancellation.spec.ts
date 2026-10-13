@@ -32,7 +32,7 @@ const overviewOf = (event: Record<string, unknown>) => ({
   applications: { forms: [] },
   map: null,
 });
-const PREVIEW = { status: 'PUBLISHED', admissionMode: 'TICKETED', orders: 3, tickets: 4, collected: 66, openCheckouts: 1, vendorsPaid: 0, rsvps: 0 };
+const PREVIEW = { status: 'PUBLISHED', admissionMode: 'TICKETED', orders: 3, tickets: 4, collected: 66, openCheckouts: 1, vendorsPaid: 1, applications: 2, rsvps: 0 };
 const failedItem = { id: 'item-broke', orderId: 'ord-3', orderRef: 'ORD-3', buyer: 'Pat Lee', email: 'pat@example.com', amount: 22, error: 'Insufficient funds in Stripe account', attempts: 3 };
 const cancellation = (over: Record<string, unknown> = {}) => ({
   id: 'canc-1', mode: 'REFUND_ALL', message: null, createdAt: '2026-10-13T20:00:00Z', completedAt: '2026-10-13T20:05:00Z',
@@ -102,6 +102,7 @@ test('the dialog counts what is sold, previews the email, and cancels with refun
   const summary = dialog.getByTestId('cancel-event-summary');
   await expect(summary).toContainText('3 paid orders · 4 tickets · $66.00 collected');
   await expect(summary).toContainText('1 open checkout will be closed');
+  await expect(summary).toContainText('2 applications will be closed and the applicants emailed, including 1 vendor who paid for a space.');
   await expect(dialog.getByRole('radio', { name: /Refund every order now/ })).toBeChecked();
   expect(await serious(page, '[role="dialog"]')).toEqual([]);
 
