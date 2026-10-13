@@ -1,8 +1,9 @@
-// Spec 054-A: cancelling a paid event stops the money. ADMIN + step-up only;
-// the cancellation records every paid order; open checkouts are expired and
-// their holds released; a checkout paid after the cancel is refunded instead
-// of issuing tickets; a cancelled event's tickets never scan; the public page
-// stays up with `cancelled: true`.
+// Spec 054-A/B: cancelling a paid event stops the money. ADMIN + step-up only
+// (refund-all also needs orders.refund); the cancellation records every paid
+// order for the sweep, which emails each buyer once (MANUAL: no refund); open
+// checkouts are expired and their holds released; a checkout paid after the
+// cancel is refunded instead of issuing tickets and its buyer told; a
+// cancelled event's tickets never scan; the public page stays up.
 
 import { jest } from '@jest/globals';
 import request from 'supertest';
@@ -51,6 +52,8 @@ const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 const { default: paymentService } = await import('../../src/services/PaymentService.js');
 const { default: ticketService } = await import('../../src/services/TicketService.js');
+const { default: eventCancellationService } = await import('../../src/services/EventCancellationService.js');
+const { default: permissionService } = await import('../../src/services/PermissionService.js');
 
 const TAG = `evt-cancel-${Date.now()}`;
 const contact = (n) => ({ email: `buyer${n}@${TAG}.test`, firstName: `Buyer${n}`, lastName: 'Test' });
@@ -104,7 +107,7 @@ describe('Cancelling a paid event (spec 054-A)', () => {
     await cleanupStaff(emails);
   });
 
-  it('refuses ORGANIZER (events.cancel is ADMIN by default), a missing step-up, bad bodies and REFUND_ALL for now', async () => {
+  it('refuses ORGANIZER (events.cancel is ADMIN by default), a missing step-up, bad bodies and REFUND_ALL without orders.refund', async () => {
     expect((await request(app).post(cancelPath()).set(...auth(organizerToken)).set(...(await reauthHeader(organizerToken))).send({})).status).toBe(403);
     const noProof = await request(app).post(cancelPath()).set(...auth(adminToken)).send({});
     expect(noProof.status).toBe(401);
@@ -112,7 +115,12 @@ describe('Cancelling a paid event (spec 054-A)', () => {
     const proof = await reauthHeader(adminToken);
     expect((await request(app).post(cancelPath()).set(...auth(adminToken)).set(...proof).send({ mode: 'LATER' })).status).toBe(400);
     expect((await request(app).post(cancelPath()).set(...auth(adminToken)).set(...proof).send({ notify: false })).status).toBe(400);
-    expect((await request(app).post(cancelPath()).set(...auth(adminToken)).set(...proof).send({ mode: 'REFUND_ALL' })).status).toBe(400);
+    permissionService._cache = { at: Date.now() + 3_600_000, value: { ADMIN: { 'orders.refund': false }, ORGANIZER: {}, disabled: [] } };
+    try {
+      expect((await request(app).post(cancelPath()).set(...auth(adminToken)).set(...proof).send({ mode: 'REFUND_ALL' })).status).toBe(403);
+    } finally {
+      permissionService.clearCache();
+    }
     expect((await prisma.event.findUnique({ where: { id: event.id } })).status).toBe('PUBLISHED');
   });
 
@@ -123,9 +131,8 @@ describe('Cancelling a paid event (spec 054-A)', () => {
     expect(res.body.status).toBe('CANCELLED');
 
     const cancellation = await prisma.eventCancellation.findUnique({ where: { eventId: event.id }, include: { items: true } });
-    expect(cancellation).toMatchObject({ mode: 'MANUAL', message: 'Venue flooded' });
-    expect(cancellation.completedAt).not.toBeNull();
-    expect(cancellation.items.map((i) => [i.orderId, i.status, i.skippedReason])).toEqual([[orders.paid.id, 'SKIPPED', 'MANUAL_MODE']]);
+    expect(cancellation).toMatchObject({ mode: 'MANUAL', message: 'Venue flooded', completedAt: null });
+    expect(cancellation.items.map((i) => [i.orderId, i.status])).toEqual([[orders.paid.id, 'PENDING']]);
 
     expect(stripeCalls.expired.sort()).toEqual([orders.open.stripeSessionId, orders.late.stripeSessionId].sort());
     expect((await prisma.order.findUnique({ where: { id: orders.open.id } })).status).toBe('FAILED');
@@ -135,6 +142,26 @@ describe('Cancelling a paid event (spec 054-A)', () => {
     expect(after.quantityReserved).toBe(before.quantityReserved - 1);
 
     expect((await request(app).post(cancelPath()).set(...auth(adminToken)).set(...(await reauthHeader(adminToken))).send({})).status).toBe(409);
+  });
+
+  it('MANUAL: the sweep refunds nothing, emails the buyer once with the store note, then closes the cancellation', async () => {
+    sentEmails.length = 0;
+    const refundsBefore = stripeCalls.refunds.length;
+    await eventCancellationService.sweep();
+    await eventCancellationService.sweep();
+    expect(stripeCalls.refunds.length).toBe(refundsBefore);
+    const item = await prisma.eventCancellationItem.findUnique({ where: { orderId: orders.paid.id } });
+    expect(item).toMatchObject({ status: 'SKIPPED', skippedReason: 'MANUAL_MODE' });
+    expect(item.notifiedAt).not.toBeNull();
+    const buyerMail = sentEmails.filter((m) => m.to.includes(contact(1).email));
+    expect(buyerMail).toHaveLength(1);
+    expect(buyerMail[0].subject).toContain('Event Cancelled');
+    expect(buyerMail[0].text).toContain('will contact you about your order');
+    expect(buyerMail[0].text).toContain('Venue flooded');
+    expect(buyerMail[0].text).not.toContain('Refunded $');
+    expect((await prisma.eventCancellation.findUnique({ where: { eventId: event.id } })).completedAt).not.toBeNull();
+    // One staff summary, to the organization's members.
+    expect(sentEmails.filter((m) => String(m.subject).startsWith('Refunds complete')).length).toBeGreaterThan(0);
   });
 
   it('refunds a checkout paid after the cancel instead of issuing usable tickets or a confirmation', async () => {
@@ -148,6 +175,11 @@ describe('Cancelling a paid event (spec 054-A)', () => {
     const item = await prisma.eventCancellationItem.findUnique({ where: { orderId: orders.late.id } });
     expect(item).toMatchObject({ status: 'REFUNDED', attempts: 1 });
     expect(Number(item.refundedAmount)).toBe(Number(late.totalAmount));
+    // Told it was refunded, whatever the cancellation's mode.
+    const told = sentEmails.filter((m) => m.to.includes(contact(3).email));
+    expect(told).toHaveLength(1);
+    expect(told[0].text).toContain(`Refunded $${Number(late.totalAmount).toFixed(2)}`);
+    expect(item.notifiedAt).not.toBeNull();
   });
 
   it("refuses to scan or check in a cancelled event's tickets", async () => {

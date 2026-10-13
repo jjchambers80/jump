@@ -727,19 +727,16 @@ class EventService {
    * EventCancellation with one item per paid ticket order (ticketed events).
    * After the commit, open Checkout sessions are expired so nobody can pay
    * for the cancelled event; a session paid before its expiry lands is
-   * refunded by PaymentService.handleCheckoutCompleted.
-   *
-   * 054-A takes MANUAL only (staff refund in Orders); REFUND_ALL arrives with
-   * the refund sweep in 054-B.
+   * refunded by PaymentService.handleCheckoutCompleted. Every item starts
+   * PENDING: the refund sweep (EventCancellationService) refunds it
+   * (REFUND_ALL) or not (MANUAL) and emails its buyer once.
    *
    * @param {string} orgId
    * @param {string} eventId
    * @param {{ mode?: 'MANUAL'|'REFUND_ALL', message?: string|null, actorId?: string|null }} [options]
    */
   async cancelEvent(orgId, eventId, { mode = 'MANUAL', message = null, actorId = null } = {}) {
-    if (mode !== 'MANUAL') {
-      throw new ValidationError('Refunding every order automatically is not available yet; cancel with mode MANUAL');
-    }
+    if (mode !== 'MANUAL' && mode !== 'REFUND_ALL') throw new ValidationError('mode must be MANUAL or REFUND_ALL');
 
     const { event, rsvps, openOrders } = await prisma.$transaction(async (tx) => {
       const [locked] = await tx.$queryRaw`
@@ -777,22 +774,15 @@ class EventService {
           where: { eventId, kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } },
           select: { id: true, totalAmount: true },
         });
-        // Nothing is left to do in 054-A, so the cancellation is complete at
-        // once; 054-B leaves REFUND_ALL ones open for the refund sweep.
+        // The sweep settles each item; with no paid order there is nothing to do.
         await tx.eventCancellation.create({
           data: {
             eventId,
             mode,
             message: message?.trim() || null,
             initiatedById: actorId,
-            completedAt: new Date(),
-            items: {
-              create: paid.map((o) => ({
-                orderId: o.id,
-                status: 'SKIPPED',
-                skippedReason: Number(o.totalAmount) > 0 ? 'MANUAL_MODE' : 'FREE_ORDER',
-              })),
-            },
+            completedAt: paid.length ? null : new Date(),
+            items: { create: paid.map((o) => ({ orderId: o.id, status: 'PENDING' })) },
           },
         });
         openOrders = await tx.order.findMany({
@@ -814,8 +804,21 @@ class EventService {
 
     if (rsvps.length) await emailService.sendCancellationNotification(event, rsvps);
     await this._expireOpenCheckouts(event.id, openOrders);
+    this._wakeCancellationSweep();
 
     return this._formatEventDetail(event);
+  }
+
+  /** Start the refund sweep now instead of at its next tick (never under test: suites run it themselves). */
+  _wakeCancellationSweep() {
+    if (process.env.NODE_ENV === 'test') return;
+    setImmediate(async () => {
+      const [{ default: auditLogService }, { default: eventCancellationService }] = await Promise.all([
+        import('../audit/AuditLogService.js'),
+        import('./EventCancellationService.js'),
+      ]);
+      auditLogService.runAsSystem('sweep:cancellations', 'Event cancellation sweep', () => eventCancellationService.sweep()).catch(() => {});
+    });
   }
 
   /**

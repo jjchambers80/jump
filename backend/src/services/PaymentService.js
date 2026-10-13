@@ -127,29 +127,24 @@ class PaymentService {
   }
 
   /**
-   * Refund a payment that completed after its event was cancelled, and record
-   * it on the event's cancellation. Never throws: the webhook has already
-   * settled the order, so a failed refund is left FAILED on the cancellation
-   * for staff (and the 054-B sweep) to retry rather than redelivered.
+   * Refund a payment that completed after its event was cancelled and email
+   * its buyer, recorded on the event's cancellation (spec 054). Never throws:
+   * the webhook has already settled the order, so a failed refund is left
+   * FAILED on the cancellation for staff rather than redelivered.
    */
   async _refundLatePayment(order) {
-    const RefundService = (await import('./RefundService.js')).default;
-    const cancellation = await prisma.eventCancellation.findUnique({ where: { eventId: order.eventId }, select: { id: true } });
-    let item;
+    const { default: eventCancellationService } = await import('./EventCancellationService.js');
     try {
-      const result = await RefundService.refundOrder(order.id, { reason: 'Event cancelled before the payment completed' });
-      item = { status: 'REFUNDED', refundedAmount: result.amount, error: null };
-      logger.info('Late payment for a cancelled event refunded', { event: 'cancelled_event_late_payment_refunded', orderId: order.id, eventId: order.eventId });
+      const cancellation = await prisma.eventCancellation.findUnique({ where: { eventId: order.eventId }, select: { id: true } });
+      if (!cancellation) {
+        logger.error('Late payment for a cancelled event has no cancellation record', { orderId: order.id, eventId: order.eventId });
+        return;
+      }
+      const outcome = await eventCancellationService.settleLatePayment(cancellation, order.id);
+      logger.info('Late payment for a cancelled event settled', { event: 'cancelled_event_late_payment', orderId: order.id, eventId: order.eventId, outcome });
     } catch (error) {
-      item = { status: 'FAILED', error: error.message };
-      logger.error('Could not refund a late payment for a cancelled event', { orderId: order.id, eventId: order.eventId, error: error.message });
+      logger.error('Could not settle a late payment for a cancelled event', { orderId: order.id, eventId: order.eventId, error: error.message });
     }
-    if (!cancellation) return;
-    await prisma.eventCancellationItem.upsert({
-      where: { orderId: order.id },
-      update: { ...item, attempts: { increment: 1 } },
-      create: { cancellationId: cancellation.id, orderId: order.id, attempts: 1, ...item },
-    });
   }
 
   /**

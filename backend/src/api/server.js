@@ -60,6 +60,7 @@ import domainService from '../services/DomainService.js';
 import applicationPaymentService from '../services/ApplicationPaymentService.js';
 import applicationDigestService from '../services/ApplicationDigestService.js';
 import orderService from '../services/OrderService.js';
+import eventCancellationService from '../services/EventCancellationService.js';
 import boothService from '../services/BoothService.js';
 import rsvpReminderService from '../services/RsvpReminderService.js';
 import { BOOTH_SWEEP_INTERVAL_MS } from '../config/applications.js';
@@ -275,6 +276,13 @@ if (process.env.NODE_ENV !== 'test') {
   // Abandoned-checkout sweep (spec 020): PENDING ticket orders past the
   // Checkout session lifetime + grace are settled against Stripe (hold
   // released, or completed if the webhook was missed).
+  // Refund sweep of cancelled paid events (spec 054-B): refunds (or not) and
+  // emails each paid order once; cancelling an event also wakes it at once.
+  const CANCELLATION_SWEEP_MS = Number(process.env.EVENT_CANCELLATION_SWEEP_INTERVAL_MS) || 60 * 1000;
+  const cancellationSweep = asSystem('sweep:cancellations', 'Event cancellation sweep', () => eventCancellationService.sweep());
+  setTimeout(cancellationSweep, 20 * 1000).unref();
+  setInterval(cancellationSweep, CANCELLATION_SWEEP_MS).unref();
+
   const ORDER_SWEEP_MS = Number(process.env.ORDER_SWEEP_INTERVAL_MS) || 5 * 60 * 1000;
   const orderSweep = asSystem('sweep:orders', 'Abandoned-checkout sweep', () => orderService.sweepAbandoned());
   setTimeout(orderSweep, 60 * 1000).unref();
