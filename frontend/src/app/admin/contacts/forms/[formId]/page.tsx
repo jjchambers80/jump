@@ -49,7 +49,6 @@ function StandingForm({ formId }: { formId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [savingAs, setSavingAs] = useState(false);
-  const [savingBusiness, setSavingBusiness] = useState(false);
   const saveAsRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
@@ -95,13 +94,6 @@ function StandingForm({ formId }: { formId: string }) {
     } catch {
       setError('Could not copy the link. Copy it from the address bar of the public form.');
     }
-  };
-
-  const toggleBusiness = async (collectBusiness: boolean) => {
-    if (!form || savingBusiness) return;
-    setSavingBusiness(true);
-    await run(collectBusiness ? 'Business details are asked again.' : 'Business details are no longer asked.', () => api.updateForm(form.id, { collectBusiness }));
-    setSavingBusiness(false);
   };
 
   const tabHref = (key: Tab) => {
@@ -197,27 +189,6 @@ function StandingForm({ formId }: { formId: string }) {
 
         {form && tab === 'fields' && (
           <div className="space-y-6">
-            <section aria-labelledby="business-heading" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5">
-              <h2 id="business-heading" className="text-base font-semibold text-gray-900 dark:text-white">
-                Business details
-              </h2>
-              <label className="mt-3 flex items-start gap-3 text-sm text-gray-800 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={form.collectBusiness !== false}
-                  disabled={!canEdit || savingBusiness}
-                  onChange={(e) => toggleBusiness(e.target.checked)}
-                  className="mt-0.5 h-4 w-4"
-                  data-testid="form-collect-business"
-                />
-                <span>
-                  <span className="block font-medium">Ask for business details</span>
-                  <span className="block text-gray-600 dark:text-slate-400">
-                    Business name, description, website, social links and photos — what you need to review a vendor. Turn it off for press, volunteers or a waitlist.
-                  </span>
-                </span>
-              </label>
-            </section>
             <QuestionsCard
               form={form}
               canEdit={canEdit}
@@ -225,6 +196,7 @@ function StandingForm({ formId }: { formId: string }) {
               onUpdate={(id, body) => run('Question saved.', () => api.updateQuestion(form.id, id, body))}
               onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id))}
               onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids))}
+              onToggleBusiness={(collectBusiness) => run(collectBusiness ? 'Business details are asked again.' : 'Business details are no longer asked.', () => api.updateForm(form.id, { collectBusiness })).then(() => undefined)}
             />
           </div>
         )}

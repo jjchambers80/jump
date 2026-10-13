@@ -15,7 +15,7 @@ import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from 
 import feeService from './FeeService.js';
 import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
-import { FORM_PURPOSES, FREE_ONLY_PURPOSES, defaultsFor } from './applicationFormDefaults.js';
+import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
@@ -232,17 +232,17 @@ class ApplicationFormService {
       if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
     }
     const { templateId: _templateId, ...fields } = body;
-    // No template and no questions: start from the purpose's defaults (spec 050 §5.2).
+    // No template and no questions (the wizard's blank form): it asks only name
+    // and email. Business details are off unless the form charges (a PAID form
+    // must collect them). A caller sending its own questions keeps the default.
     const base = template
       ? this._templateSettings(template.definition, body.kind)
       : body.questions === undefined
-        ? defaultsFor(body.purpose)
+        ? { collectBusiness: body.kind === 'PAID' }
         : {};
-    const { questions: defaultQuestions, ...baseSettings } = base;
-    const settings = { ...baseSettings, ...fields };
+    const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     this._assertEventFormRules(data.purpose ?? 'OTHER', body.kind, data.collectBusiness ?? true);
-    if (defaultQuestions) body = { ...body, questions: defaultQuestions };
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');

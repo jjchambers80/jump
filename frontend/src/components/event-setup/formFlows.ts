@@ -39,7 +39,7 @@ const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowSte
 });
 
 const details = s('details', 'Form details', 'What applicants see first, and when the form takes applications.', { formAnchor: 'apply-top' });
-const questions = s('questions', 'Questions', 'What you ask everyone who applies.', { formAnchor: 'step-questions' });
+const questions = s('questions', 'Fields', 'Contact details are always asked. Add or remove anything else.', { formAnchor: 'step-questions' });
 const review = s('review', 'Review and open', 'Check the form, then decide when it takes applications.', { formAnchor: 'apply-top' });
 
 export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] }> = {

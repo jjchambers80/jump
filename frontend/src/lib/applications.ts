@@ -423,6 +423,8 @@ export interface TemplateQuestion {
   pinned: boolean;
 }
 export interface TemplateDefinition {
+  /** Null on older templates: the form's default (ask) applies. */
+  collectBusiness?: boolean | null;
   intro: string | null;
   chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
   feeMode: 'PASS' | 'ABSORB' | null;

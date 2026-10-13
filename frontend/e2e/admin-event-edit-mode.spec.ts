@@ -207,17 +207,18 @@ test.describe('Details links into the wizard', () => {
 });
 
 test.describe('edit mode', () => {
-  test('a form\'s Review step keeps the old editor page actions: Save as template, View public form', async ({ page }) => {
+  test('a form\'s Review step: save-as-template checkbox, View public form', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
     await expect(heading(page, 'Review and open')).toBeFocused(COLD);
     await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
-    const saveAs = main(page).getByRole('button', { name: 'Save as template' });
-    await saveAs.click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await expect(saveAs).toBeFocused();
+    await expect(main(page).getByLabel('Template name')).toHaveCount(0);
+    await main(page).getByRole('checkbox', { name: /Save this form as a template/ }).check();
+    // Made from a template: updating it is the default, a new one asks for a name.
+    await expect(main(page).getByRole('radio', { name: /Update the/ })).toBeChecked();
+    await expect(main(page).getByLabel('Template name')).toHaveCount(0);
+    await main(page).getByRole('radio', { name: 'Save as a new template' }).check();
+    await expect(main(page).getByLabel('Template name')).toBeVisible();
   });
 
   test('a failed save then "Leave anyway" never says "Saved."; focus returns to the exact control', async ({ page }) => {

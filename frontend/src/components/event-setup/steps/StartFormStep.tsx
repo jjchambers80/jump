@@ -3,9 +3,8 @@
 // Start of an application flow (spec 051, from the spec 050 "Add a …
 // application" dialog): name, what the form is for (Other applications only),
 // whether it charges, and where it starts ("Start with", shown only when the
-// org has a template of this kind): the standard form with Jump's suggested
-// questions for the purpose (backend applicationFormDefaults.js), or one of
-// the org's templates for that purpose ("Also show templates from other kinds
+// org has a template of this kind): a blank form (first name, last name and
+// email; the rest is added on the Fields step), or one of the org's templates for that purpose ("Also show templates from other kinds
 // of forms" widens the list to every template of the same kind, and appears
 // only when there are some). Templates are edited on their editor page and
 // deleted here: there is no template library page (spec 037 D2). The wizard
@@ -23,12 +22,6 @@ import { hintClass, inputClass, labelClass, textButton } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
 
-/** What the suggested questions ask, for purposes that get them (backend applicationFormDefaults.js). */
-const SUGGESTED: Partial<Record<FormPurpose, string>> = {
-  VENDOR: 'what they sell, power and tables',
-  SPECIAL_GUEST: 'appearance fee, travel, A/V needs and availability',
-  VOLUNTEER: 'availability, roles, T-shirt size and an emergency contact',
-};
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
 export interface NewFormBody {
@@ -77,10 +70,7 @@ export default function StartFormStep({ config, existing, onBusyChange, onDraftC
   const options = allPurposes ? sameKind : matching;
   // Nothing saved that fits: no choice to make, so the section stays out of the way.
   const showStartWith = !loading && sameKind.length > 0;
-  const suggested = SUGGESTED[purpose];
-  const standard = suggested
-    ? { title: `Standard ${PURPOSE_LABEL[purpose].toLowerCase()} form`, detail: `Starts with suggested questions about ${suggested}. Change them on the Questions step.` }
-    : { title: 'Blank form', detail: 'Starts with no questions. Add your own on the Questions step.' };
+  const standard = { title: 'Blank form', detail: 'Asks for contact details only. Add more on the Fields step.' };
   const removeTemplate = async (template: FormTemplateSummary) => {
     setError(null);
     try {

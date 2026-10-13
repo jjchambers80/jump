@@ -174,7 +174,7 @@ test.describe('desktop', () => {
     await main(page).getByTestId('form-space-tiers').check();
     await next.click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('TIERS');
-    await expect(heading(page, 'Questions')).toBeVisible();
+    await expect(heading(page, 'Fields')).toBeVisible();
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 6');
   });
 

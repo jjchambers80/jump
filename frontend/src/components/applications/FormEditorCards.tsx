@@ -9,6 +9,7 @@
 // and the thank-you message; it is FREE, so it never shows tiers or money.
 
 import Link from 'next/link';
+import { Lock } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
@@ -578,6 +579,7 @@ export function QuestionsCard({
   onUpdate,
   onRemove,
   onReorder,
+  onToggleBusiness,
   mode = 'form',
 }: {
   form: EditorForm;
@@ -586,9 +588,24 @@ export function QuestionsCard({
   onUpdate: (id: string, body: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
+  /** Shows the "Ask for business details" switch. A PAID form always asks, so it is locked on. */
+  onToggleBusiness?: (collectBusiness: boolean) => Promise<void>;
   mode?: EditorMode;
 }) {
   const template = mode === 'template';
+  // The tick shows at once; it settles on the saved value when the save resolves.
+  const [pendingBusiness, setPendingBusiness] = useState<boolean | null>(null);
+  const paid = form.kind === 'PAID';
+  const asksBusiness = paid || (pendingBusiness ?? form.collectBusiness !== false);
+  const toggleBusiness = async (on: boolean) => {
+    if (!onToggleBusiness || pendingBusiness !== null) return;
+    setPendingBusiness(on);
+    try {
+      await onToggleBusiness(on);
+    } finally {
+      setPendingBusiness(null);
+    }
+  };
   const [draft, setDraft] = useState<QuestionDraft>(emptyQuestion);
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState<QuestionDraft>(emptyQuestion);
@@ -644,10 +661,37 @@ export function QuestionsCard({
 
   return (
     <div className={card} data-testid="form-questions">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Questions</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-        {form.collectBusiness === false ? 'Name and email are always asked.' : 'Name, email and business profile are always asked.'} Add anything else you need to decide.
-      </p>
+      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Fields</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Contact details are always asked. Add anything else you need to decide.</p>
+      <div className="mt-3 flex flex-wrap gap-2" data-testid="form-contact-fields">
+        {['First name', 'Last name', 'Email'].map((name) => (
+          <span key={name} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200">
+            <Lock className="h-3 w-3" aria-hidden />
+            {name}
+            <span className="sr-only"> (always asked)</span>
+          </span>
+        ))}
+      </div>
+      {onToggleBusiness && (
+        <label className="mt-4 flex items-start gap-3 text-sm text-gray-800 dark:text-slate-200">
+          <input
+            type="checkbox"
+            checked={asksBusiness}
+            disabled={!canEdit || paid || pendingBusiness !== null}
+            onChange={(e) => void toggleBusiness(e.target.checked)}
+            className="mt-0.5 h-4 w-4"
+            data-testid="form-collect-business"
+          />
+          <span>
+            <span className="block font-medium">Ask for business details</span>
+            <span className="block text-gray-600 dark:text-slate-400">
+              {paid
+                ? 'Paid forms always ask for the business profile: description, website, social links and photos.'
+                : 'The business profile: description, website, social links and photos. Turn it on to review vendors or sponsors.'}
+            </span>
+          </span>
+        </label>
+      )}
       <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700">
         {form.questions.map((q, i) => (
           <li key={q.id} className="py-3" data-testid={`question-row-${q.id}`}>

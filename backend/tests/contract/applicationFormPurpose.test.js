@@ -1,5 +1,5 @@
 // Contract tests for ApplicationForm.purpose (spec 050 §6.2, card 050-B):
-// per-purpose defaults, purpose/kind rules, FREE event forms without the
+// blank start, purpose/kind rules, FREE event forms without the
 // business step, purpose fixed once submitted, templates round-trip it, and
 // the admin, public and preview payloads carry it.
 
@@ -43,8 +43,23 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     await cleanupStaff(emails);
   });
 
-  it('a VOLUNTEER form starts from its defaults: no business step, availability questions', async () => {
-    const res = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Crew' });
+  it('a VOLUNTEER form starts blank with no business step; explicit questions are kept', async () => {
+    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Blank crew' });
+    expect(blank.status).toBe(201);
+    expect(blank.body).toMatchObject({ purpose: 'VOLUNTEER', collectBusiness: false, questions: [] });
+    const days = ['Friday', 'Saturday', 'Sunday'];
+    const res = await request(app).post(forms()).set(...auth()).send({
+      kind: 'FREE',
+      purpose: 'VOLUNTEER',
+      name: 'Crew',
+      collectBusiness: false,
+      questions: [
+        { label: 'Which days are you available?', type: 'MULTI_CHOICE', required: true, options: days },
+        { label: 'Which roles interest you?', type: 'MULTI_CHOICE', required: false, options: ['Setup', 'Front door'] },
+        { label: 'T-shirt size', type: 'SINGLE_CHOICE', required: false, options: ['S', 'M', 'L'] },
+        { label: 'Emergency contact (name and phone)', type: 'SHORT_TEXT', required: true },
+      ],
+    });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ purpose: 'VOLUNTEER', collectBusiness: false });
     expect(res.body.questions.map((q) => q.label)).toEqual([
@@ -56,12 +71,12 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     volunteer = res.body;
   });
 
-  it('explicit questions win over the defaults; no purpose means OTHER', async () => {
+  it('explicit questions are kept; no purpose means OTHER', async () => {
     const own = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'VENDOR', name: 'Makers', questions: [] });
     expect(own.status).toBe(201);
     expect(own.body.questions).toEqual([]);
     const plain = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', name: 'Plain' });
-    expect(plain.body).toMatchObject({ purpose: 'OTHER', collectBusiness: true, questions: [] });
+    expect(plain.body).toMatchObject({ purpose: 'OTHER', collectBusiness: false, questions: [] });
   });
 
   it('SPECIAL_GUEST and VOLUNTEER refuse PAID; PAID keeps the business step; bad purpose is 400', async () => {

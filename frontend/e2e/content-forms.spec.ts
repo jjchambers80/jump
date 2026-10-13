@@ -162,12 +162,14 @@ for (const viewport of [
 
     await page.goto('/admin/contacts/forms');
     await expect(page.getByTestId('forms-empty-state')).toContainText('No forms yet');
+    await expect(page.getByTestId('templates-empty')).toContainText('No templates yet');
     expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
     await page.getByRole('link', { name: 'Create your first form' }).click();
 
     await page.locator('#new-form-name').fill('Become a vendor');
     await page.getByRole('button', { name: 'Create form' }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}\\?tab=fields`));
+    // First visit compiles the form page on the dev server.
+    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}\\?tab=fields`), { timeout: 30000 });
     expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/standing-application-forms')?.body).toEqual({ name: 'Become a vendor' });
     await expect(page.getByTestId('form-tab-fields')).toHaveAttribute('aria-current', 'page');
 
