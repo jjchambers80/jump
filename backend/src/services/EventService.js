@@ -1062,9 +1062,18 @@ class EventService {
       }
     }
 
+    // Spec 054-C: a cancelled event whose refund sweep is still running reads "Cancelled · refunding".
+    const cancelledIds = events.filter((e) => e.status === 'CANCELLED').map((e) => e.id);
+    const refunding = new Set(
+      cancelledIds.length
+        ? (await prisma.eventCancellation.findMany({ where: { eventId: { in: cancelledIds }, completedAt: null }, select: { eventId: true } })).map((c) => c.eventId)
+        : []
+    );
+
     const formattedEvents = events.map((e) => ({
       ...this._formatEventDetail(e),
       rsvpGoingCount: e.admissionMode === 'RSVP' ? (rsvpGoingMap[e.id] || 0) : null,
+      ...(e.status === 'CANCELLED' && { refunding: refunding.has(e.id) }),
     }));
 
     return {

@@ -18,6 +18,8 @@ import refundService from './RefundService.js';
 import emailService from './EmailService.js';
 import applicationDigestService from './ApplicationDigestService.js';
 import { platformBaseUrl } from '../utils/storefrontUrl.js';
+import notificationTemplateService from './NotificationTemplateService.js';
+import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import logger from '../utils/logger.js';
 
 export const MAX_ATTEMPTS = 3;
@@ -227,6 +229,132 @@ class EventCancellationService {
     } catch (error) {
       logger.error('Event cancellation summary failed', { cancellationId, error: error.message });
     }
+  }
+
+  // ─── Admin (054-C): preview before cancelling, progress after ──────────
+
+  /** The event in the organization, or 404. */
+  async _event(orgId, eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null, venue: { organizationId: orgId } },
+      select: { id: true, name: true, date: true, status: true, admissionMode: true, venue: { select: { timezone: true } } },
+    });
+    if (!event) throw new NotFoundError('Event not found');
+    return event;
+  }
+
+  /** What cancelling would touch: paid orders, tickets and money, open checkouts, paid vendors, RSVPs. */
+  async preview(orgId, eventId) {
+    const event = await this._event(orgId, eventId);
+    const paidWhere = { eventId, kind: 'TICKET', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } };
+    const [paid, refunded, openCheckouts, vendorsPaid, rsvps] = await Promise.all([
+      prisma.order.aggregate({ where: paidWhere, _count: true, _sum: { totalAmount: true, quantity: true } }),
+      prisma.refund.aggregate({ where: { status: 'SUCCEEDED', order: paidWhere }, _sum: { amount: true } }),
+      prisma.order.count({ where: { eventId, kind: 'TICKET', status: 'PENDING' } }),
+      prisma.order.count({ where: { eventId, kind: 'APPLICATION', status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] } } }),
+      prisma.eventRsvp.count({ where: { eventId, status: 'GOING' } }),
+    ]);
+    const collected = Number(paid._sum.totalAmount ?? 0) - Number(refunded._sum.amount ?? 0);
+    return {
+      status: event.status,
+      admissionMode: event.admissionMode,
+      orders: paid._count,
+      tickets: Number(paid._sum.quantity ?? 0),
+      collected: Math.round(collected * 100) / 100,
+      openCheckouts,
+      vendorsPaid,
+      rsvps,
+    };
+  }
+
+  /** The buyer email as it would go out for this event, mode and note; a sample buyer, never a real one. */
+  async previewEmail(orgId, eventId, { mode = 'MANUAL', message = null } = {}) {
+    const event = await this._event(orgId, eventId);
+    const organization = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, email: true, logoUrl: true, brandColor: true } });
+    const template = await notificationTemplateService.resolve(orgId, 'order.event_cancelled');
+    const msg = emailService.buildEventCancelled(
+      {
+        id: 'sample',
+        orderRef: 'ORD-SAMPLE',
+        totalAmount: 52.5,
+        quantity: 2,
+        contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' },
+        event,
+        organization,
+      },
+      { refund: mode === 'REFUND_ALL' ? 'issued' : 'manual', refundAmount: 52.5, message, template }
+    );
+    return { subject: msg.subject, html: msg.html };
+  }
+
+  /** Progress of a cancelled event's refunds: counts by status, money, and every item that needs staff. */
+  async status(orgId, eventId) {
+    await this._event(orgId, eventId);
+    const cancellation = await prisma.eventCancellation.findUnique({
+      where: { eventId },
+      include: {
+        items: {
+          orderBy: { createdAt: 'asc' },
+          include: { order: { select: { id: true, orderRef: true, totalAmount: true, contact: { select: { email: true, firstName: true, lastName: true } } } } },
+        },
+      },
+    });
+    if (!cancellation) return null;
+    const counts = { PENDING: 0, REFUNDED: 0, SKIPPED: 0, FAILED: 0 };
+    let refundedTotal = 0;
+    for (const i of cancellation.items) {
+      counts[i.status] += 1;
+      refundedTotal += Number(i.refundedAmount ?? 0);
+    }
+    return {
+      id: cancellation.id,
+      mode: cancellation.mode,
+      message: cancellation.message,
+      createdAt: cancellation.createdAt,
+      completedAt: cancellation.completedAt,
+      total: cancellation.items.length,
+      counts: { pending: counts.PENDING, refunded: counts.REFUNDED, skipped: counts.SKIPPED, failed: counts.FAILED },
+      refundedTotal: Math.round(refundedTotal * 100) / 100,
+      failed: cancellation.items
+        .filter((i) => i.status === 'FAILED')
+        .map((i) => ({
+          id: i.id,
+          orderId: i.orderId,
+          orderRef: i.order?.orderRef ?? null,
+          buyer: [i.order?.contact?.firstName, i.order?.contact?.lastName].filter(Boolean).join(' ') || i.order?.contact?.email || null,
+          email: i.order?.contact?.email ?? null,
+          amount: Number(i.order?.totalAmount ?? 0),
+          error: i.error,
+          attempts: i.attempts,
+        })),
+    };
+  }
+
+  async _failedItem(orgId, eventId, itemId) {
+    await this._event(orgId, eventId);
+    const item = await prisma.eventCancellationItem.findFirst({ where: { id: itemId, cancellation: { eventId } }, include: { cancellation: true } });
+    if (!item) throw new NotFoundError('Cancellation item not found');
+    if (item.status !== 'FAILED') throw new ConflictError('Only a failed refund can be retried or marked handled');
+    return item;
+  }
+
+  /** Retry: the item goes back in the queue with fresh attempts; the cancellation is open again. */
+  async retry(orgId, eventId, itemId) {
+    const item = await this._failedItem(orgId, eventId, itemId);
+    await prisma.$transaction([
+      prisma.eventCancellationItem.update({ where: { id: item.id }, data: { status: 'PENDING', attempts: 0, error: null } }),
+      prisma.eventCancellation.update({ where: { id: item.cancellationId }, data: { completedAt: null } }),
+    ]);
+    return { mode: item.cancellation.mode };
+  }
+
+  /** Mark handled: staff sorted it out themselves; the buyer gets the "we'll be in touch" email once. */
+  async markHandled(orgId, eventId, itemId) {
+    const item = await this._failedItem(orgId, eventId, itemId);
+    await prisma.eventCancellationItem.update({ where: { id: item.id }, data: { status: 'SKIPPED', skippedReason: 'HANDLED_BY_STAFF', error: null } });
+    const order = await prisma.order.findUnique({ where: { id: item.orderId }, select: ORDER_SELECT });
+    await this._notify(item, order, { refund: 'manual' });
+    await this._closeFinished();
   }
 
   _reasons(items) {

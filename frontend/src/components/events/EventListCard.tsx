@@ -65,6 +65,8 @@ export interface AdminEvent {
   status: string;
   /** Spec 050-D: published but checkout, RSVPs and new applications are off. */
   salesClosed?: boolean;
+  /** Spec 054-C: a cancelled event whose refunds are still running. */
+  refunding?: boolean;
   venue: EventVenue | null;
   priceTiers: PriceTier[];
   createdAt: string;
@@ -246,7 +248,7 @@ export default function EventListCard({
                   statusPillColors[event.status] || ''
                 }`}
               >
-                {event.status}
+                {event.status === 'CANCELLED' ? (event.refunding ? 'Cancelled · refunding' : 'Cancelled') : event.status}
               </span>
               {/* Sales closed (spec 050-D): text + icon, never color alone */}
               {event.status === 'PUBLISHED' && event.salesClosed && (

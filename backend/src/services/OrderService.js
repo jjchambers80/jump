@@ -25,7 +25,7 @@ import { csvCell } from '../utils/csv.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
-  event: { select: { id: true, name: true, date: true, venue: { select: { timezone: true } } } },
+  event: { select: { id: true, name: true, date: true, status: true, venue: { select: { timezone: true } } } },
   organization: { select: { id: true, name: true } },
   contact: { select: { id: true, firstName: true, lastName: true, email: true } },
   payment: { select: { source: true, stripePaymentIntentId: true, stripeAccountId: true, status: true } },
@@ -1354,6 +1354,8 @@ class OrderService {
       statusDetail: pendingDetail || (waived ? { paymentStatus: 'NOT_REQUIRED', label: 'Waived', dueAt: null } : null),
       paymentSource: order.payment?.source === 'OFFLINE' || waived ? 'offline' : 'stripe',
       refunded: Math.round(refunded * 100) / 100,
+      // Spec 054-C: the buyer account labels an order of a cancelled event.
+      eventCancelled: order.event?.status === 'CANCELLED',
       net: Math.round((total - refunded) * 100) / 100,
       // Spec 037: null unless the order has a dispute. The money already shows
       // in `refunded` / `net`; this says a chargeback took it, not a refund.
