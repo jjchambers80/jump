@@ -194,6 +194,10 @@ class ApiClient {
     if (activeOrganizationId && !headers['X-Jump-Org']) {
       headers['X-Jump-Org'] = activeOrganizationId;
     }
+    // Step-up proof, as on every JSON request (spec 055 CSV import needs it)
+    if (reauthToken && !headers['X-Jump-Reauth']) {
+      headers['X-Jump-Reauth'] = reauthToken;
+    }
 
     if (typeof window !== 'undefined' && !headers['Authorization']) {
       try {
@@ -222,6 +226,7 @@ class ApiClient {
         message: data.message || 'Upload failed',
         error: data.error,
         code: data.code,
+        details: data.details,
       };
     }
     return data;
@@ -1171,6 +1176,10 @@ export async function downloadCsv(endpoint: string, filename: string): Promise<v
   if (activeOrganizationId) {
     headers['X-Jump-Org'] = activeOrganizationId;
   }
+  // Step-up proof, as on every JSON request (spec 055 contact export needs it)
+  if (reauthToken) {
+    headers['X-Jump-Reauth'] = reauthToken;
+  }
 
   if (typeof window !== 'undefined') {
     try {
@@ -1186,7 +1195,14 @@ export async function downloadCsv(endpoint: string, filename: string): Promise<v
   const response = await fetch(url, { headers });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw { status: response.status, message: text || 'CSV download failed' };
+    // JSON errors carry a code (REAUTH_REQUIRED opens the step-up dialog in withReauth)
+    let body: { message?: string; code?: string } | null = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+    throw { status: response.status, message: body?.message || text || 'CSV download failed', code: body?.code };
   }
 
   const blob = await response.blob();

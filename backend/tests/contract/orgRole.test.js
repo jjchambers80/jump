@@ -122,7 +122,7 @@ describe('role in the active organization', () => {
       expect(b.body.granted).toEqual(expect.arrayContaining(['events', 'orders.refund']));
       expect(b.body.granted).not.toContain('customers');
       expect(b.body.granted).not.toContain('settings.tax');
-      expect(b.body.hiddenPaths).toEqual(['/admin/customers']);
+      expect(b.body.hiddenPaths).toEqual(['/admin/contacts']);
       const a = await request(app).get('/admin/permissions').set(...auth(token)).set('X-Jump-Org', orgA.id);
       expect(a.body.role).toBe('ADMIN');
       expect(a.body.granted).toContain('settings.tax');

@@ -23,7 +23,7 @@ Plan and decisions D1–D11: `specs/039-vendor-space-selection/plan.md`. PRs: #2
 | `backend/src/services/OrderLineService.js` | `applicationOrderData(…, { booth })`: prices the tier line from the booth and names it `"<tier> · <label>"` |
 | `backend/src/services/ApplicationService.js` | `decide` (category rules per mode, `_assertSpotsInCategory`), `select` (per-mode rules, vendor-picked tier), `changeTier` (locks a vendor-picked tier), `_selectionView` (applicant payload) |
 | `backend/src/services/ApplicationPaymentService.js` | `releaseSelection`: gives a vendor-picked tier and its slot back |
-| `backend/src/services/ApplicationFormService.js` | Validates `spaceSelection`, `_assertMapReady` (D9), `_assertSpaceSelectionChangeable` (D8), templates and duplication |
+| `backend/src/services/ApplicationFormService.js` | Validates `spaceSelection`, `_assertMapReady` (D9), `_assertSpaceSelectionChangeable` (D8), duplication |
 | `backend/src/services/MapService.js` | Saves `price` per booth under a row lock and refuses changes on in-use booths; public payload booth `price` and legend `priceFrom` / `priceTo`; duplication copies prices |
 | `backend/src/services/ApplicationTemplateService.js` | CHOOSE_SPACE merge fields `space.onMap`, `space.pickTier`; hides the single price on MAP forms |
 | `backend/src/scripts/backfill-039-space-selection.js` | Sets forms that already sold from a published map to MAP |
@@ -84,7 +84,7 @@ cd backend && DRY_RUN=false npm run db:backfill:039-space-selection
 
 - `ApplicationForm.spaceSelection` applies to PAID forms only (`TIERS` by default).
 - It cannot change while any vendor on the form is `AWAITING_SELECTION`, `PAYMENT_DUE` or `PROCESSING` (409 `SPACE_SELECTION_LOCKED`, `details.choosing`).
-- Form templates, save-as-template and event duplication carry it. Map templates carry no prices (D11); event duplication copies them.
+- Event duplication carries it. Since spec 056 the setup wizard no longer offers the MAP choice: new forms are TIERS, and a form already on MAP keeps it. Map templates carry no prices (D11); event duplication copies them.
 
 ### Staff placement (D10)
 

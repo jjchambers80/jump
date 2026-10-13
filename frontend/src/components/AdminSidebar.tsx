@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
   { label: 'Venues', href: '/admin/venues', icon: MapPin },
   { label: 'Maps', href: '/admin/maps', icon: Map },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-  { label: 'Customers', href: '/admin/customers', icon: Users },
+  { label: 'Contacts', href: '/admin/contacts', icon: Users },
   { label: 'Check In', href: '/admin/orders/scan', icon: ScanLine },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartColumn },
   {
@@ -83,7 +83,6 @@ const navItems: NavItem[] = [
     icon: FileText,
     children: [
       { label: 'Files', href: '/admin/content/files' },
-      { label: 'Forms', href: '/admin/content/forms' },
       { label: 'Galleries', href: '/admin/content/galleries' },
       { label: 'Menus', href: '/admin/content/menus' },
       { label: 'Blog posts', href: '/admin/content/blog-posts' },

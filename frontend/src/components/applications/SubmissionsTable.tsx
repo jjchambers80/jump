@@ -9,7 +9,6 @@
 // (Content › Forms) — no event, so no payment, add-on, booth or check-in.
 
 import Link from 'next/link';
-import { Check } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -43,7 +42,7 @@ const STATUS_ORDER: ApplicationStatus[] = ['SUBMITTED', 'WAITLISTED', 'APPROVED'
 /** Organization mount page size (plan §7.4); the per-event mount keeps the API default. */
 const ORG_PAGE_SIZE = 25;
 type Filters = Omit<ParticipantsQuery, 'page' | 'pageSize'>;
-const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'shift', 'shiftMode', 'booth', 'q', 'sort'];
+const FILTER_KEYS: (keyof Filters)[] = ['event', 'form', 'status', 'payment', 'addOn', 'tag', 'booth', 'q', 'sort'];
 const DECIDED: Record<Decision, string> = { APPROVE: 'approved', REJECT: 'rejected', WAITLIST: 'waitlisted', WITHDRAW: 'withdrawn' };
 
 /** The subset of a form the filters need, common to the per-event and org-wide form lists. */
@@ -56,15 +55,12 @@ interface FilterForm {
   /** Per-event forms carry every question; the org-wide list only the pinned ones. */
   questions?: { id: string; label: string; pinned?: boolean }[];
   pinnedQuestions?: { id: string; label: string }[];
-  /** Spec 050-S: a VOLUNTEER form's shifts (per-event list), for the Shift filter. */
-  shifts?: { id: string; name: string }[];
 }
 
 const select = 'rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
 const chip = 'inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-slate-700 dark:text-slate-200';
 const tagChip = 'inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200';
-const assignedChip = 'inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900 dark:bg-green-900/40 dark:text-green-200';
 const heldChip = 'inline-block rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
 
 /**
@@ -78,22 +74,6 @@ function BoothCell({ row }: { row: ApplicationRow }) {
   if (row.boothLabel) return <span className={chip}>{row.boothLabel}</span>;
   if (row.mapBound && row.status === 'APPROVED') return <span className="text-xs text-gray-500 dark:text-slate-400">Not chosen</span>;
   return <span className="text-gray-400 dark:text-slate-500">—</span>;
-}
-
-/** Spec 050-S: the volunteer's shifts; an assigned one says so in text and with a check, a pick is plain. */
-function ShiftsCell({ shifts }: { shifts: { id: string; name: string; assigned: boolean }[] }) {
-  if (!shifts.length) return <span className="text-gray-400 dark:text-slate-500">—</span>;
-  return (
-    <ul className="flex max-w-[14rem] flex-wrap gap-1">
-      {shifts.map((s) => (
-        <li key={s.id} className={s.assigned ? assignedChip : chip}>
-          {s.assigned && <Check className="mr-0.5 inline h-3 w-3" aria-hidden />}
-          {s.name}
-          <span className={s.assigned ? '' : 'sr-only'}>{s.assigned ? ' · assigned' : ' (picked)'}</span>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function submittedLines(value: string | null) {
@@ -121,8 +101,6 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
       payment: searchParams.get('payment') || undefined,
       addOn: searchParams.get('addOn') || undefined,
       tag: searchParams.get('tag') || undefined,
-      shift: searchParams.get('shift') || undefined,
-      shiftMode: searchParams.get('shift') && searchParams.get('shiftMode') === 'assigned' ? 'assigned' : undefined,
       booth: (['none', 'chosen'].includes(searchParams.get('booth') ?? '') ? searchParams.get('booth') : undefined) as 'none' | 'chosen' | undefined,
       q: searchParams.get('q') || undefined,
       sort: searchParams.get('sort') || undefined,
@@ -225,7 +203,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
   const patchRow = (next: AdminApplication) =>
     setList((prev) =>
       prev
-        ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt, boothLabel: next.boothLabel, booth: next.booth ? { id: next.booth.id, label: next.booth.label, status: next.booth.status } : null, tags: next.tags ?? [], ...(next.shifts && { shifts: next.shifts.filter((s) => s.picked || s.assignedToApplication).map((s) => ({ id: s.id, name: s.name, assigned: s.assignedToApplication })) }), checkedInAt: next.checkedInAt ?? null, checkedOutAt: next.checkedOutAt ?? null } : r)) }
+        ? { ...prev, data: prev.data.map((r) => (r.id === next.id ? { ...r, status: next.status, paymentStatus: next.paymentStatus, decidedAt: next.decidedAt, boothLabel: next.boothLabel, booth: next.booth ? { id: next.booth.id, label: next.booth.label, status: next.booth.status } : null, tags: next.tags ?? [], checkedInAt: next.checkedInAt ?? null, checkedOutAt: next.checkedOutAt ?? null } : r)) }
         : prev
     );
 
@@ -333,16 +311,6 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
     for (const f of formOptions) for (const a of f.addOns ?? []) if (!seen.has(a.id)) seen.set(a.id, { id: a.id, name: a.name });
     return [...seen.values()];
   }, [formOptions]);
-  // Spec 050-S: the shift roster. With a Form filter, that form's shifts only.
-  const shiftOptions = useMemo(() => {
-    const scoped = query.form ? formOptions.filter((f) => f.id === query.form) : formOptions;
-    const many = scoped.filter((f) => (f.shifts ?? []).length > 0).length > 1;
-    const options = scoped.flatMap((f) => (f.shifts ?? []).map((s) => ({ id: s.id, label: many ? `${s.name} · ${f.name}${orgWide && !query.event && f.event ? ` · ${f.event.name}` : ''}` : s.name })));
-    // A shared link can name a shift outside the current options: keep it visible in the control.
-    if (query.shift && !options.some((o) => o.id === query.shift)) options.push({ id: query.shift, label: 'the selected shift' });
-    return options;
-  }, [formOptions, query.form, query.shift, query.event, orgWide]);
-  const showShifts = shiftOptions.length > 0 || (list?.data ?? []).some((r) => (r.shifts ?? []).length > 0);
 
   // Pinned answer columns (spec 019 follow-up): with a Form filter, one column per
   // pinned question of that form; otherwise one "Answers" column listing label: value.
@@ -361,9 +329,9 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
   // Spec 014 phase 2: a Booth column once any row in view sells from a map or carries a placement.
   const showBooth = (list?.data ?? []).some((r) => r.mapBound || r.booth || r.boothLabel);
   const awaitingSpaceActive = query.status === 'APPROVED' && query.payment === 'AWAITING_SELECTION';
-  const columns = (standing ? 8 : 10) + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0) + (showShifts ? 1 : 0);
+  const columns = (standing ? 8 : 10) + (showOrganization ? 1 : 0) + pinnedColumns.length + (showAnswers ? 1 : 0) + (showBooth ? 1 : 0);
   const detailHref = (row: ApplicationRow) =>
-    standing ? `/admin/content/forms/${standingFormId}/submissions/${row.id}` : `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
+    standing ? `/admin/contacts/forms/${standingFormId}/submissions/${row.id}` : `/admin/events/${row.eventId ?? eventId}/applications/${row.id}`;
 
   return (
     <>
@@ -399,7 +367,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
         }}
       >
         {orgWide && (
-          <select aria-label="Event" value={query.event || ''} onChange={(e) => setQuery({ event: e.target.value || undefined, form: undefined, addOn: undefined, shift: undefined, shiftMode: undefined })} className={select} data-testid="participants-event-filter">
+          <select aria-label="Event" value={query.event || ''} onChange={(e) => setQuery({ event: e.target.value || undefined, form: undefined, addOn: undefined })} className={select} data-testid="participants-event-filter">
             <option value="">All events</option>
             {eventOptions.map((ev) => (
               <option key={ev.id} value={ev.id}>
@@ -409,7 +377,7 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
           </select>
         )}
         {!standing && (
-        <select aria-label="Form" value={query.form || ''} onChange={(e) => setQuery({ form: e.target.value || undefined, shift: undefined, shiftMode: undefined })} className={select}>
+        <select aria-label="Form" value={query.form || ''} onChange={(e) => setQuery({ form: e.target.value || undefined })} className={select}>
           <option value="">All forms</option>
           {formOptions.map((f) => (
             <option key={f.id} value={f.id}>
@@ -435,26 +403,6 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
               <option key={a.id} value={a.id}>
                 Has {a.name}
               </option>
-            ))}
-          </select>
-        )}
-        {shiftOptions.length > 0 && (
-          <select
-            aria-label="Shift"
-            value={query.shift ? `${query.shift}${query.shiftMode === 'assigned' ? '|assigned' : ''}` : ''}
-            onChange={(e) => {
-              const [shift, mode] = e.target.value.split('|');
-              setQuery({ shift: shift || undefined, shiftMode: mode === 'assigned' ? 'assigned' : undefined });
-            }}
-            className={select}
-            data-testid="applications-shift-filter"
-          >
-            <option value="">Any shift</option>
-            {shiftOptions.map((s) => (
-              <optgroup key={s.id} label={s.label}>
-                <option value={s.id}>Picked or on {s.label}</option>
-                <option value={`${s.id}|assigned`}>Assigned to {s.label}</option>
-              </optgroup>
             ))}
           </select>
         )}
@@ -560,7 +508,6 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
               ))}
               {showAnswers && <th className="px-3 py-2">Answers</th>}
               {showBooth && <th className="px-3 py-2">Booth</th>}
-              {showShifts && <th className="px-3 py-2">Shifts</th>}
               <th className="px-3 py-2" aria-sort={statusSort}>
                 <button
                   type="button"
@@ -663,11 +610,6 @@ export default function SubmissionsTable({ eventId, standingFormId }: { eventId?
                   {showBooth && (
                     <td className="px-3 py-2 align-top" data-testid={`application-booth-${row.id}`}>
                       <BoothCell row={row} />
-                    </td>
-                  )}
-                  {showShifts && (
-                    <td className="px-3 py-2 align-top" data-testid={`application-shifts-${row.id}`}>
-                      <ShiftsCell shifts={row.shifts ?? []} />
                     </td>
                   )}
                   <td className="px-3 py-2 align-top">

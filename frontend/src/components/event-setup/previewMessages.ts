@@ -4,7 +4,7 @@
 // event itself (GET …/preview-payload) and lays the overlay on top.
 
 import type { EventPageEvent, EventVenue } from '@/app/events/[eventId]/eventPage';
-import type { AdminForm, PublicForm } from '@/lib/applications';
+import type { AdminForm, ApplicantApplication, PublicForm } from '@/lib/applications';
 
 export const PREVIEW_MESSAGE = 'jump:event-preview';
 export const PREVIEW_READY = 'jump:event-preview-ready';
@@ -34,6 +34,11 @@ export interface PreviewMessage {
    * it. Present = the frame shows the application form instead of the event page.
    */
   form?: PublicForm | null;
+  /**
+   * With `form`: `space` shows what an approved vendor sees when they choose
+   * a space and pay (Options and pricing), instead of the apply form.
+   */
+  view?: 'form' | 'space';
 }
 
 /** What Start knows before the form exists: its preview is the form's frame with no questions yet. */
@@ -57,8 +62,9 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
     organizationName: organizationName ?? null,
     tiers: [],
     questions: [],
-    // Volunteers skip the business step (backend applicationFormDefaults.js).
-    collectBusiness: draft.purpose !== 'VOLUNTEER',
+    // A new form asks for an email only (createForm); the rest is added on the Fields step.
+    collectBusiness: false,
+    collectName: false,
   };
 }
 
@@ -83,8 +89,67 @@ export function previewForm(form: AdminForm, overlay: { name?: string; intro?: s
     tiers: form.tiers.map((t) => ({ id: t.id, name: t.name, description: t.description, price: t.price, applicantPays: t.price, feesIncluded: 0, tax: 0, soldOut: false, addOns: [] })),
     questions: form.questions,
     collectBusiness: form.collectBusiness,
-    shifts: (form.shifts ?? []).map((s) => ({ id: s.id, name: s.name, description: s.description, startsAt: s.startsAt, endsAt: s.endsAt, remaining: s.remaining, full: s.remaining === 0 })),
+    collectName: form.collectName,
     timezone: form.timezone,
+  };
+}
+
+/**
+ * The vendor's choose-and-pay screen for a form being built (spec 056): an
+ * approved application on a TIERS form that lets the vendor pick, with the
+ * form's options as the space types. Nothing here is held or charged.
+ */
+export function spacePreviewApplication(form: PublicForm, event: { id: string; name: string; date: string | null; timezone?: string | null }): ApplicantApplication {
+  return {
+    id: 'preview',
+    orderRef: null,
+    form: { id: form.id, name: form.name, kind: form.kind },
+    event: { id: event.id, name: event.name, date: event.date ?? '', timezone: event.timezone ?? null },
+    organization: null,
+    status: 'APPROVED',
+    paymentStatus: 'AWAITING_SELECTION',
+    tier: null,
+    addOns: [],
+    amounts: { subtotal: 0, platformFee: 0, processingFee: 0, tax: 0, applicantPays: 0, orgReceives: 0, feeMode: form.feeMode ?? 'PASS', currency: 'usd' },
+    paymentDueAt: null,
+    submittedAt: null,
+    decidedAt: null,
+    paidAt: null,
+    refundedTotal: 0,
+    canWithdraw: false,
+    canResume: false,
+    canPay: false,
+    canUpdateCard: false,
+    profile: null,
+    answers: [],
+    boothLabel: null,
+    selection: {
+      mode: 'TIERS',
+      tierLocked: false,
+      categories: form.tiers.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        price: t.price,
+        listedPrice: t.price,
+        applicantPays: t.applicantPays,
+        feesIncluded: t.feesIncluded,
+        tax: t.tax,
+        spacesLeft: t.soldOut ? 0 : 1,
+        guaranteed: false,
+        addOns: t.addOns,
+      })),
+      state: 'CHOOSE',
+      heldUntil: null,
+      dueAt: null,
+      reserveOnApproval: false,
+      category: null,
+      addOns: [],
+      map: { available: false, mapId: null, boothsAvailable: 0 },
+      placedBooth: null,
+      savedCard: null,
+      pricing: { feeMode: form.feeMode ?? 'PASS', taxable: false, taxRate: 0, taxInclusive: false },
+    },
   };
 }
 
@@ -108,6 +173,7 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
   if (venue !== undefined && venue !== null && (typeof venue !== 'object' || typeof venue.id !== 'string' || typeof venue.name !== 'string')) return false;
   const form = m.form as Record<string, unknown> | null | undefined;
   if (form !== undefined && form !== null && (typeof form !== 'object' || typeof form.name !== 'string' || !Array.isArray(form.questions) || !Array.isArray(form.tiers))) return false;
+  if (m.view !== undefined && m.view !== 'form' && m.view !== 'space') return false;
   return true;
 }
 

@@ -141,7 +141,7 @@ class ApplicationDigestService {
     for (const { event, forms } of byEvent.values()) {
       parts.push(event
         ? `${event.name}\n${base}/admin/events/${event.id}/applications?status=SUBMITTED`
-        : `Standing forms\n${base}/admin/content/forms`);
+        : `Standing forms\n${base}/admin/contacts/forms`);
       for (const { form, rows: list } of forms.values()) {
         const lines = [`${form.name}: ${list.length}`];
         // Add-on counts across the form's new applications (spec 012 phase 3)

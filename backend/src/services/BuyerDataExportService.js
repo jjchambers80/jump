@@ -39,7 +39,7 @@ class BuyerDataExportService {
     if (!contact) throw new NotFoundError('Customer not found');
     const scope = { contactId, organizationId };
 
-    const [orders, tickets, rsvps, applications, profiles, acceptances, comments] = await Promise.all([
+    const [orders, tickets, rsvps, applications, profiles, acceptances, comments, lists] = await Promise.all([
       prisma.order.findMany({
         where: { contactId, organizationId },
         orderBy: { createdAt: 'asc' },
@@ -87,8 +87,6 @@ class BuyerDataExportService {
             },
           },
           decisions: { select: { action: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
-          // Spec 050 §6.4: volunteer shift picks belong to the application.
-          shifts: { select: { assigned: true, shift: { select: { name: true, startsAt: true, endsAt: true } } } },
           // Spec 050 §6.3: lineup rows copied from the application (name, bio, photo, links).
           guests: { select: { name: true, role: true, bio: true, links: true, isVisible: true, createdAt: true, image: { select: IMAGE_SELECT } } },
         },
@@ -107,6 +105,14 @@ class BuyerDataExportService {
             where: scope,
             orderBy: { createdAt: 'asc' },
             select: { kind: true, body: true, createdAt: true, author: { select: { name: true, email: true } } },
+          })
+        : Promise.resolve([]),
+      // Spec 055: manual lists staff put this person on (staff data, like notes)
+      includeStaffNotes
+        ? prisma.contactListMember.findMany({
+            where: { contactId, list: { organizationId } },
+            orderBy: { addedAt: 'asc' },
+            select: { addedAt: true, list: { select: { name: true } } },
           })
         : Promise.resolve([]),
     ]);
@@ -194,13 +200,13 @@ class BuyerDataExportService {
           value: ans.image ? imageUrl(ans.image) : ans.valueJson ?? ans.valueText,
         })),
         decisions: a.decisions,
-        shifts: a.shifts.map((p) => ({ name: p.shift.name, startsAt: p.shift.startsAt, endsAt: p.shift.endsAt, assigned: p.assigned })),
         lineup: a.guests.map((g) => ({ name: g.name, role: g.role, bio: g.bio, links: g.links, photo: imageUrl(g.image), shownOnEventPage: g.isVisible, createdAt: g.createdAt })),
         ...(includeStaffNotes && { internalNote: a.internalNote, tags: a.tags }),
       })),
       legalAcceptances: acceptances,
       ...(includeStaffNotes && {
         staffTimeline: comments.map((c) => ({ kind: c.kind, body: c.body, createdAt: c.createdAt, author: c.author ? c.author.name || c.author.email : 'Customer' })),
+        contactLists: lists.map((m) => ({ name: m.list.name, addedAt: m.addedAt })),
       }),
     };
   }

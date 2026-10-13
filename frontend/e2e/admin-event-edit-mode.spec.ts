@@ -46,26 +46,21 @@ const adminForm = (f: ReturnType<typeof overviewForm>) => ({
   ...f, eventId: EVENT_ID, intro: null, chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7,
   overduePolicy: 'WITHDRAW', reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null,
   acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.purpose !== 'VOLUNTEER',
-  addOns: [], questions: [], shifts: [], timezone: VENUE.timezone,
-  ...(f.id === 'f-volunteers' && { applicationCount: 2, createdFromTemplateId: 'tpl-crew', opensAt: '2031-05-01T14:00:00.000Z' }),
+  addOns: [], questions: [], timezone: VENUE.timezone,
+  ...(f.id === 'f-volunteers' && { applicationCount: 2, opensAt: '2031-05-01T14:00:00.000Z' }),
 });
 
-const TEMPLATES = [
-  { id: 'tpl-crew', name: 'Crew sign-up', kind: 'FREE', purpose: 'VOLUNTEER', tierCount: 0, questionCount: 2, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-  { id: 'tpl-press', name: 'Press desk', kind: 'FREE', purpose: 'PRESS', tierCount: 0, questionCount: 1, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-  { id: 'tpl-market', name: 'Makers market', kind: 'PAID', purpose: 'VENDOR', tierCount: 1, questionCount: 3, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-];
 const OTHER_ORG = { id: 'org-other', name: 'Other Org', slug: 'other-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
 
 const FORMS = [overviewForm('f-vendors', 'Vendor booths', 'VENDOR', 'MAP'), overviewForm('f-volunteers', 'Volunteer crew', 'VOLUNTEER')];
 
-type Calls = { patch: Request[]; templateDelete: Request[] };
+type Calls = { patch: Request[] };
 type Options = { failPatch?: boolean; otherOrgFirst?: boolean };
 
 /** A stateful fake API: PATCH changes the event that later loads return. */
 async function mockApi(page: Page, initial = baseEvent(), options: Options = {}) {
   const event: Record<string, any> = structuredClone(initial);
-  const calls: Calls = { patch: [], templateDelete: [] };
+  const calls: Calls = { patch: [] };
   const org = { id: ORG_ID, name: 'Edit Org', slug: 'edit-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) => route.fulfill(json(options.otherOrgFirst ? [OTHER_ORG, org] : [org])));
@@ -100,14 +95,6 @@ async function mockApi(page: Page, initial = baseEvent(), options: Options = {})
     const id = route.request().url().split('/').pop();
     const found = FORMS.find((f) => f.id === id);
     route.fulfill(found ? json(adminForm(found)) : json({ message: 'Not found' }, 404));
-  });
-  let templates = structuredClone(TEMPLATES);
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: templates })));
-  await page.route(new RegExp(`${API}/admin/application-templates/[^/]+$`), (route) => {
-    calls.templateDelete.push(route.request());
-    const id = route.request().url().split('/').pop();
-    templates = templates.filter((t) => t.id !== id);
-    route.fulfill({ status: 204, body: '' });
   });
   return calls;
 }
@@ -207,17 +194,12 @@ test.describe('Details links into the wizard', () => {
 });
 
 test.describe('edit mode', () => {
-  test('a form\'s Review step keeps the old editor page actions: Save as template, View public form', async ({ page }) => {
+  test('a form\'s Review step: View public form, and no template checkbox', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
     await expect(heading(page, 'Review and open')).toBeFocused(COLD);
     await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
-    const saveAs = main(page).getByRole('button', { name: 'Save as template' });
-    await saveAs.click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toBeHidden();
-    await expect(saveAs).toBeFocused();
+    await expect(main(page).getByRole('checkbox', { name: /template/ })).toHaveCount(0);
   });
 
   test('a failed save then "Leave anyway" never says "Saved."; focus returns to the exact control', async ({ page }) => {
@@ -270,11 +252,10 @@ test.describe('edit mode', () => {
     await expect(main(page).getByText('The event is live. Links already shared with the old address stop working.')).toBeVisible();
   });
 
-  test('a form shows its template, its applications and its window in the venue zone', async ({ page }) => {
+  test('a form shows its applications and its window in the venue zone', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
     await expect(heading(page, 'Review and open')).toBeFocused(COLD);
-    await expect(main(page).getByRole('link', { name: 'Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
     await expect(main(page).getByRole('link', { name: 'View applications' })).toHaveAttribute(
       'href',
       `/admin/events/${EVENT_ID}/applications?form=f-volunteers`
@@ -284,23 +265,6 @@ test.describe('edit mode', () => {
     // 14:00 UTC is 10:00 on the venue's clock (New York, EDT).
     await expect(main(page).getByLabel('Opens')).toHaveValue('2031-05-01T10:00');
     await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
-  });
-
-  test('templates stay manageable from Start with: edit, delete, other kinds of forms', async ({ page }) => {
-    const calls = await mockApi(page);
-    await page.goto(flowUrl('volunteers'));
-    await expect(heading(page, 'Start a volunteer application')).toBeFocused(COLD);
-    const dialog = main(page);
-    await expect(dialog.getByRole('link', { name: 'Edit template Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
-    // Other purposes' templates appear on request; a PAID one is another kind and never fits a free-only step.
-    await expect(dialog.getByText('Press desk')).toHaveCount(0);
-    await dialog.getByLabel('Also show templates from other kinds of forms (1)').check();
-    await expect(dialog.getByText('Press desk')).toBeVisible();
-    await expect(dialog.getByText('Makers market')).toHaveCount(0);
-    page.once('dialog', (d) => void d.accept());
-    await dialog.getByRole('button', { name: 'Delete template Crew sign-up' }).click();
-    await expect.poll(() => calls.templateDelete.length).toBe(1);
-    await expect(dialog.getByRole('radio', { name: /Crew sign-up/ })).toHaveCount(0);
   });
 
   test('the progress is the bar alone: no step line, no saved line, no step menu', async ({ page }) => {
@@ -376,7 +340,8 @@ test.describe('redirects to the wizard', () => {
     [`${DETAILS}/edit/details`, '?step=name'],
     [`${DETAILS}/edit/sales#event-admission`, '?step=tickets'],
     [`${DETAILS}/edit/sales`, '?step=tickets'],
-    [`${DETAILS}/applications/forms`, '/vendors?step=start'],
+    // The event already has a live vendor form, so Start opens it (one per purpose).
+    [`${DETAILS}/applications/forms`, '/vendors?step=details&form=f-vendors'],
     [`${DETAILS}/applications/forms/f-volunteers`, '/volunteers?step=details&form=f-volunteers'],
   ];
   for (const [from, path] of cases) {

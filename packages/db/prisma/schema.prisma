@@ -76,6 +76,7 @@ model User {
   agentAuditLogs    AgentAuditLog[]
   securityEvents    SecurityEvent[]
   contactComments   ContactComment[]
+  contactLists      ContactList[]  @relation("ContactListCreatedBy")
 
   @@index([role])
   @@index([email])
@@ -582,7 +583,6 @@ model Organization {
   applicationForms         ApplicationForm[]
   orders                   Order[]
   notificationTemplates    NotificationTemplate[]
-  applicationFormTemplates ApplicationFormTemplate[]
   stripeAccounts           OrganizationStripeAccount[]
   pages                    Page[]
   storeFiles               StoreFile[]
@@ -600,6 +600,7 @@ model Organization {
   oauthAuthCodes           OAuthAuthCode[]
   agentAuditLogs           AgentAuditLog[]
   pageTemplates            PageTemplate[]
+  contactLists             ContactList[]
 }
 
 // Custom content pages managed under Online Store. Content is stored as the
@@ -863,6 +864,7 @@ model Contact {
   applications      Application[]
   contactComments   ContactComment[]
   rsvps             EventRsvp[]
+  listMemberships   ContactListMember[]
 
   @@unique([organizationId, email])
   @@index([email])
@@ -1793,8 +1795,8 @@ model ApplicationForm {
   // nothing and approved vendors choose first-come.
   reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
-  createdFromTemplateId String? // spec 019: informational, no relation
   collectBusiness       Boolean               @default(true)
+  collectName           Boolean               @default(true) // spec 056: false = the form asks for an email only
   buttonLabel           String?
   successMessage        String?
   spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only
@@ -1809,7 +1811,6 @@ model ApplicationForm {
   questions    ApplicationQuestion[]
   applications Application[]
   pages        Page[] // spec 044D: pages using this standing form
-  shifts       VolunteerShift[] // spec 050 §6.4: VOLUNTEER forms only
 
   @@unique([eventId, slug])
   @@index([organizationId, status])
@@ -1961,7 +1962,6 @@ model Application {
   decisions ApplicationDecision[]
   order     Order?
   booth     Booth?
-  shifts    ApplicationShift[] // spec 050 §6.4: volunteer shift picks
   guests    EventGuest[] // spec 050 §6.3: lineup rows added from this application
 
   @@index([eventId, status])
@@ -2001,26 +2001,6 @@ model ApplicationDecision {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
-}
-
-// Spec 019 phase 2: a reusable form definition per organization. A snapshot
-// (tiers and questions as JSON), not a live form — materialised into an
-// ApplicationForm through ApplicationFormService._materialise.
-model ApplicationFormTemplate {
-  id             String              @id @default(cuid())
-  organizationId String
-  name           String
-  kind           ApplicationFormKind
-  definition     Json // { intro, chargeTiming, feeMode, taxable, paymentDueDays, overduePolicy, tiers: [...], questions: [...] }
-  sourceFormId   String? // informational: the form it was saved from
-  createdById    String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, name])
-  @@index([organizationId, updatedAt])
 }
 
 // Spec 054: one cancellation per cancelled event, and one item per paid order
@@ -2541,40 +2521,6 @@ enum OAuthTokenKind {
   REFRESH
 }
 
-// Spec 050 §6.4 (050-R): shifts or roles on a VOLUNTEER form. Times are
-// instants rendered in the venue zone; both optional (a role without a time).
-model VolunteerShift {
-  id           String    @id @default(cuid())
-  formId       String
-  name         String // role or shift label, <= 80
-  startsAt     DateTime?
-  endsAt       DateTime?
-  capacity     Int? // null = unlimited; counts assigned picks only
-  description  String?
-  displayOrder Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  form  ApplicationForm    @relation(fields: [formId], references: [id], onDelete: Cascade)
-  picks ApplicationShift[]
-
-  @@index([formId, displayOrder])
-}
-
-// A volunteer's pick of a shift; `assigned` = the organizer confirmed it on approval.
-model ApplicationShift {
-  applicationId String
-  shiftId       String
-  assigned      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-
-  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  shift       VolunteerShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-
-  @@id([applicationId, shiftId])
-  @@index([shiftId, assigned])
-}
-
 // Spec 050 §6.3 (050-Q): the special guest lineup on the event page. Added by
 // hand or from an approved SPECIAL_GUEST application. `bio` is plain text.
 model EventGuest {
@@ -2597,4 +2543,47 @@ model EventGuest {
 
   @@unique([applicationId]) // one lineup row per application (add-to-lineup 409)
   @@index([eventId, displayOrder])
+}
+
+// Spec 055: Contacts › Lists. AUTOMATIC lists are saved filters (no member
+// rows); MANUAL lists hold exactly the contacts staff put in. The three
+// built-in lists live in code (ContactListService.BUILT_IN_LISTS).
+model ContactList {
+  id             String              @id @default(cuid())
+  organizationId String
+  name           String // unique per org ignoring case (ContactListService checks)
+  type           ContactListType
+  filters        Json? // AUTOMATIC only, see services/contactListFilters.js
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User?               @relation("ContactListCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members        ContactListMember[]
+
+  @@index([organizationId])
+}
+
+model ContactListMember {
+  listId    String
+  contactId String
+  addedById String? // null = import or system
+  source    ContactListMemberSource
+  addedAt   DateTime                @default(now())
+  list      ContactList             @relation(fields: [listId], references: [id], onDelete: Cascade)
+  contact   Contact                 @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([listId, contactId])
+  @@index([contactId])
+}
+
+enum ContactListType {
+  AUTOMATIC
+  MANUAL
+}
+
+enum ContactListMemberSource {
+  MANUAL
+  PICKED
+  IMPORT
 }

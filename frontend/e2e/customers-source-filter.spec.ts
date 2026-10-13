@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signInAsStaff } from './helpers/session';
 
-// Spec 044C: Customers is the one contact list; Source narrows it by how a contact came in.
+// Spec 044C: Contacts is the one contact list; Source narrows it by how a contact came in.
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 const ORG_ID = 'org-customer-source';
 const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
@@ -25,10 +25,9 @@ const vendor = {
   totalRefunded: 0,
   lastActivityAt: null,
   createdAt: '2026-10-01T12:00:00.000Z',
-  segment: 'Prospect',
 };
 
-test('Submitted a form switches to all contacts, narrows by form and shows the form chip', async ({ page, baseURL }) => {
+test('Submitted a form narrows by form and shows the form chip', async ({ page, baseURL }) => {
   const listRequests: URL[] = [];
   await signInAsStaff(page, { id: 'admin-1', email: 'admin@test.com', role: 'ADMIN' }, baseURL!);
   await page.route(`${API}/organizations`, (route) =>
@@ -44,11 +43,10 @@ test('Submitted a form switches to all contacts, narrows by form and shows the f
     route.fulfill(json({ data: rows, pagination: { page: 1, limit: 20, total: rows.length, totalPages: rows.length ? 1 : 0 } }));
   });
 
-  await page.goto('/admin/customers');
-  await expect(page.getByTestId('customer-scope-customers')).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/admin/contacts');
+  await expect(page.getByLabel('Show')).toHaveValue('all');
 
   await page.getByLabel('Source', { exact: true }).selectOption('form');
-  await expect(page.getByTestId('customer-scope-all')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => listRequests.some((u) => u.searchParams.get('source') === 'form' && u.searchParams.get('scope') === 'all')).toBe(true);
   await expect(page.locator('li', { hasText: 'Form: Become a vendor' }).locator('visible=true').first()).toBeVisible();
 

@@ -82,7 +82,6 @@ async function mockApi(page: Page, { forms: initial, map: initialMap = null, cre
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) =>
     route.fulfill(json({ event: EVENT, organization: { id: ORG_ID, name: 'Map Org' }, forms }))
   );
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
   await page.route(list, (route) => route.fulfill(json({ data: forms })));
   await page.route(new RegExp(`${list}/[^/]+$`), (route) => {
     calls.patch.push(route.request());
@@ -156,27 +155,6 @@ test.beforeEach(async ({ page, baseURL }) => {
 
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
-
-  test('the step follows a vendor form between TIERS and MAP', async ({ page }) => {
-    const calls = await mockApi(page, { forms: [form({ id: 'form-paid' })] });
-    const next = page.locator('footer').getByRole('button', { name: 'Next' });
-    await page.goto(flowUrl('step=payment&form=form-paid'));
-    await expect(heading(page, 'How vendors choose and pay')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 4 of 6');
-    await main(page).getByTestId('form-space-map').check();
-    await next.click();
-    await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('MAP');
-    await expect(heading(page, 'Floor map')).toBeVisible();
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 7');
-
-    await page.locator('footer').getByRole('button', { name: 'Back' }).click();
-    await expect(heading(page, 'How vendors choose and pay')).toBeVisible();
-    await main(page).getByTestId('form-space-tiers').check();
-    await next.click();
-    await expect.poll(() => calls.patch.map((r) => r.postDataJSON().spaceSelection)).toContain('TIERS');
-    await expect(heading(page, 'Questions')).toBeVisible();
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 6');
-  });
 
   test('no map yet: create a blank map, then open the builder with returnTo', async ({ page }) => {
     const calls = await mockApi(page, { forms: [MAP_FORM] });

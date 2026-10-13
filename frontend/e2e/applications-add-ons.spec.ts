@@ -199,7 +199,6 @@ async function mockWizard(page: Page) {
     tax: { rate: 0.1, source: 'MANUAL', region: 'NC' }, taxInclusivePricing: false,
   };
   await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['*'], hiddenPaths: [] })));
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/venues`, (route) => route.fulfill(json([event.venue])));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) =>
     route.fulfill(json({ event: adminEvent, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
@@ -509,27 +508,16 @@ test('vendor flow Options and pricing: tier rows show offered add-ons; ADMIN att
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Extra vendor badge');
 });
 
-test('vendor flow How vendors choose and pay: how vendors choose their space (spec 039); an open form cannot switch to the map before it is ready', async ({ page, baseURL }) => {
+test('vendor flow How vendors choose and pay: no floor-map choice; the form keeps TIERS', async ({ page, baseURL }) => {
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
   test.setTimeout(120000);
   await mockWizard(page);
   await page.goto(`/admin/events/${EVENT_ID}/setup/vendors?step=payment&form=${FORM_ID}`);
   const settings = page.getByTestId('form-settings');
-  const next = page.locator('footer').getByRole('button', { name: 'Next' });
-  await expect(settings.getByText('How vendors choose their space')).toBeVisible({ timeout: 60000 });
-  await expect(page.getByTestId('form-space-tiers')).toBeChecked();
-
-  await page.getByTestId('form-space-map').check();
-  await expect(page.getByTestId('form-space-map-hint')).toContainText('Publish the floor map');
-  await expect(page.getByTestId('form-space-map-hint').getByRole('link', { name: 'Go to the Floor map step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup/vendors?step=floor-map&form=${FORM_ID}`);
-  await next.click();
-  // The refused save keeps the organizer on the step, with the server's reason.
-  await expect(page.getByText('Add spots on the floor map for: Corner')).toBeVisible();
-  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'How vendors choose and pay' })).toBeVisible();
-  expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'MAP' });
-
-  await page.getByTestId('form-space-tiers').check();
-  await next.click();
-  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Questions' })).toBeVisible({ timeout: 30000 });
+  await expect(settings.getByText('When you approve a vendor')).toBeVisible({ timeout: 60000 });
+  await expect(settings.getByText('How vendors choose their space')).toHaveCount(0);
+  await expect(page.getByTestId('form-space-map')).toHaveCount(0);
+  await page.locator('footer').getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Fields' })).toBeVisible({ timeout: 30000 });
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

@@ -21,6 +21,7 @@ import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import { assertSalesOpen } from './salesOpen.js';
+import { csvCell } from '../utils/csv.js';
 
 /** Include for org-wide order rows (spec 024 phase 2): enough to describe either kind without a second query. */
 const LIST_INCLUDE = {
@@ -56,12 +57,6 @@ const APPLICATION_PAYMENT_LABEL = {
   NOT_DUE: 'Under review',
   AWAITING_SELECTION: 'Awaiting space',
 };
-
-function csvCell(value) {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-}
 
 /** Stripe Checkout sessions are created with a 30-minute expiry (createOrder). */
 const SESSION_TTL_MS = 30 * 60 * 1000;

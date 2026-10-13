@@ -321,9 +321,8 @@ describe('Vendor space selection modes (spec 039)', () => {
     });
   });
 
-  describe('templates and duplication', () => {
-    it('carry the mode', async () => {
-      expect(applicationFormService.snapshotForm({ ...mapForm, spaceSelection: 'MAP', tiers: [], questions: [] }).spaceSelection).toBe('MAP');
+  describe('duplication', () => {
+    it('carries the mode', async () => {
       await prisma.$transaction((tx) => applicationFormService.copyForms(event.id, copyEvent.id, tx));
       const copies = await prisma.applicationForm.findMany({ where: { eventId: copyEvent.id, kind: 'PAID' }, orderBy: { name: 'asc' } });
       expect(copies.map((f) => [f.name, f.spaceSelection, f.status])).toEqual([

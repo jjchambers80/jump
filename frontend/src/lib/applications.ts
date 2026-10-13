@@ -2,7 +2,6 @@
 // helpers shared by the storefront apply pages, the buyer account and admin.
 
 import { computeOrderFees, roundCurrency } from './fees';
-import { formatEventDate, formatEventDateTime, formatEventTime } from './eventTime';
 
 export type FormKind = 'PAID' | 'FREE';
 export type FormStatus = 'DRAFT' | 'OPEN' | 'CLOSED';
@@ -130,6 +129,8 @@ export interface AdminForm {
   eventId: string | null;
   /** Spec 044 standing forms: ask for the business profile, the storefront button label, the thank-you text. */
   collectBusiness?: boolean;
+  /** Spec 056: false = the form asks for an email only. */
+  collectName?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: FormKind;
@@ -150,8 +151,6 @@ export interface AdminForm {
   /** Spec 039: how an approved vendor chooses — a tier, or a spot on the floor map (PAID forms; null on FREE). */
   spaceSelection?: 'TIERS' | 'MAP' | null;
   displayOrder: number;
-  /** Spec 019: the template this form was created from (informational). */
-  createdFromTemplateId: string | null;
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
@@ -161,31 +160,8 @@ export interface AdminForm {
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
   addOns: { id: string; name: string; price: number; allTiers: boolean; isActive: boolean; scope: 'TICKET' | 'APPLICATION' | 'BOTH' }[];
-  /** Spec 050 §6.4: shifts on a VOLUNTEER form (empty otherwise); times render in `timezone`, the venue's. */
-  shifts?: AdminShift[];
   timezone?: string | null;
   updatedAt?: string;
-}
-
-/** Spec 050 §6.4: a volunteer shift as staff edit it. `capacity` / `remaining` null = unlimited. */
-export interface AdminShift {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  capacity: number | null;
-  assigned: number;
-  remaining: number | null;
-  displayOrder: number;
-}
-
-/** Create / PATCH body for a shift (ISO instants; null clears a time or the cap). */
-export interface ShiftInput {
-  name?: string;
-  startsAt?: string | null;
-  endsAt?: string | null;
-  capacity?: number | null;
 }
 
 /** Public shape. */
@@ -219,47 +195,12 @@ export interface PublicForm {
   questions: Question[];
   /** Spec 044 / 050: standing forms and FREE event forms may skip the business step. */
   collectBusiness?: boolean;
+  /** Spec 056: false = the form asks for an email only. */
+  collectName?: boolean;
   /** Spec 044: standing forms' own button label and thank-you line. */
   buttonLabel?: string | null;
   successMessage?: string | null;
-  /** Spec 050 §6.4: shifts on a VOLUNTEER form; times render in `timezone` (the venue's). */
-  shifts?: PublicShift[];
   timezone?: string | null;
-}
-
-/** Spec 050 §6.4: a volunteer shift as applicants see it. `remaining` null = unlimited. */
-export interface PublicShift {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  remaining: number | null;
-  full: boolean;
-}
-
-/** Staff view of a shift on an application: capacity, what is left, and this volunteer's pick. */
-export interface ApplicationShiftView {
-  id: string;
-  name: string;
-  description: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  capacity: number | null;
-  assigned: number;
-  remaining: number | null;
-  picked: boolean;
-  assignedToApplication: boolean;
-}
-
-/** "Sat, Sep 18, 2027 · 9:00 AM EDT – 1:00 PM EDT" in the venue zone (gotcha 28), the end date added past midnight; null for a role without a time. */
-export function shiftWhen(shift: { startsAt: string | null; endsAt: string | null }, zone: string | null | undefined): string | null {
-  if (!shift.startsAt) return null;
-  const start = formatEventDateTime(shift.startsAt, zone);
-  if (!shift.endsAt) return start;
-  // A shift past midnight (venue clock) names its end date too.
-  const sameDay = formatEventDate(shift.startsAt, zone) === formatEventDate(shift.endsAt, zone);
-  return `${start} – ${sameDay ? formatEventTime(shift.endsAt, zone) : formatEventDateTime(shift.endsAt, zone)}`;
 }
 
 export interface ProfilePhoto {
@@ -459,66 +400,12 @@ export interface ApplicationRow {
   selectionHeldUntil?: string | null;
   /** Spec 019 phase 3: organizer tags and on-site check-in (APPROVED only). */
   tags: string[];
-  /** Spec 050-S: the volunteer's shift picks, `assigned` once confirmed on approval. */
-  shifts?: { id: string; name: string; assigned: boolean }[];
   checkedInAt: string | null;
   checkedOutAt: string | null;
   /** Answers to the form's pinned questions, in question order. */
   pinnedAnswers: PinnedAnswer[];
   /** The applicant's status-page link, for "Copy status link" (spec 019). */
   statusUrl: string | null;
-}
-
-/** Spec 019 phase 2: a form template definition — a snapshot, not a live form. */
-export interface TemplateTier {
-  name: string;
-  description: string | null;
-  price: number;
-  quantityTotal: number;
-  isActive: boolean;
-}
-export interface TemplateQuestion {
-  label: string;
-  helpText: string | null;
-  type: QuestionType;
-  required: boolean;
-  options: string[];
-  pinned: boolean;
-}
-export interface TemplateDefinition {
-  intro: string | null;
-  chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
-  feeMode: 'PASS' | 'ABSORB' | null;
-  taxable: boolean | null;
-  paymentDueDays: number | null;
-  overduePolicy: 'WITHDRAW' | 'HOLD' | null;
-  reserveOnApproval?: boolean | null;
-  spaceSelection?: 'TIERS' | 'MAP' | null;
-  tiers: TemplateTier[];
-  questions: TemplateQuestion[];
-}
-export interface FormTemplateSummary {
-  id: string;
-  name: string;
-  kind: FormKind;
-  /** Spec 050 §6.2: optional snapshot key; null on older templates. */
-  purpose?: FormPurpose | null;
-  tierCount: number;
-  questionCount: number;
-  sourceFormId: string | null;
-  organization?: { id: string; name: string };
-  createdAt: string;
-  updatedAt: string;
-}
-export interface FormTemplate {
-  id: string;
-  organizationId: string;
-  name: string;
-  kind: FormKind;
-  definition: TemplateDefinition;
-  sourceFormId: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 /** One form across events, from `GET /admin/application-forms` (spec 019). */
@@ -537,8 +424,6 @@ export interface OrgForm {
   applicationCount: number;
   pinnedQuestions: { id: string; label: string; type: QuestionType }[];
   addOns: { id: string; name: string }[];
-  /** Spec 050-S: a VOLUNTEER form's shifts, for the Shift filter. */
-  shifts?: { id: string; name: string }[];
   updatedAt: string;
 }
 
@@ -603,8 +488,6 @@ export interface AdminApplication {
   lineupGuestId?: string | null;
   /** Spec 037 phase 5: the categories an approval can assign, with what is left. */
   categories?: { id: string; name: string; price: number; isActive: boolean; remaining: number }[];
-  /** Spec 050 §6.4: every shift of a VOLUNTEER form, flagged with this volunteer's picks. */
-  shifts?: ApplicationShiftView[];
   /** Spec 037 phase 5: while set, the vendor holds a chosen space and is paying. */
   selectionHeldUntil?: string | null;
   /** Whether the organizer may change the category (freely before a space is chosen). */
@@ -816,7 +699,10 @@ export function acceptanceLine(a: Acceptance): string | null {
   return 'Not available';
 }
 
-/** Who applied: the business, or the person when a standing form asked for no business (spec 044). */
-export function applicantName(a: { businessName?: string | null; profile?: { businessName: string } | null; contact: { firstName: string; lastName: string } }): string {
-  return a.businessName ?? a.profile?.businessName ?? `${a.contact.firstName} ${a.contact.lastName}`.trim();
+/** The person's name; empty when the form asked for an email only (`collectName: false`, spec 056). */
+export const personName = (c: { firstName: string; lastName: string }) => `${c.firstName} ${c.lastName}`.trim();
+
+/** Who applied: the business, else the person, else their email (a form that asked for neither). */
+export function applicantName(a: { businessName?: string | null; profile?: { businessName: string } | null; contact: { firstName: string; lastName: string; email?: string } }): string {
+  return a.businessName ?? a.profile?.businessName ?? (personName(a.contact) || a.contact.email || '');
 }

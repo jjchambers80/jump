@@ -16,7 +16,7 @@ import {
 import { validateUpdateBusinessDetails } from '../validators/organizationValidators.js';
 import { validateCreateOrganizationPerson } from '../validators/organizationPersonValidators.js';
 import { validateTaxRegionParams, validateUpsertTaxRegion, validateUpdateTaxSettings, validateTaxReportQuery } from '../validators/taxValidators.js';
-import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateFormTemplateBody, validateSaveAsTemplateBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
+import { validateFormBody, validateTierBody, validateQuestionBody, validateDecisionBody, validateBulkBody, validateNotificationBody, validateRefundBody, validateAddOnLinesBody, validateTierAddOnsBody, validateTierChangeBody, validateAdjustmentBody, validateWaiveBody, validateOfflinePaymentBody, validateMetaBody, validateCheckInBody, validateScanBody } from '../validators/applicationValidators.js';
 import { validateUpdatePaymentSettings, validateUpdatePayoutSettings } from '../validators/paymentValidators.js';
 import { validateCreatePage, validateUpdatePage } from '../validators/pageValidators.js';
 import { validateUpdateStorefrontPreferences } from '../validators/storefrontPreferencesValidators.js';
@@ -36,6 +36,7 @@ import orderService from '../../services/OrderService.js';
 import ticketService from '../../services/TicketService.js';
 import refundService from '../../services/RefundService.js';
 import customerService from '../../services/CustomerService.js';
+import contactListService from '../../services/ContactListService.js';
 import buyerDataExportService from '../../services/BuyerDataExportService.js';
 import contactErasureService from '../../services/ContactErasureService.js';
 import { requireRecentAuth } from '../../middleware/recentAuth.js';
@@ -50,8 +51,6 @@ import applicationFormService from '../../services/ApplicationFormService.js';
 import applicationService from '../../services/ApplicationService.js';
 import applicationTemplateService from '../../services/ApplicationTemplateService.js';
 import notificationTemplateService from '../../services/NotificationTemplateService.js';
-import applicationFormTemplateService from '../../services/ApplicationFormTemplateService.js';
-import volunteerShiftService from '../../services/VolunteerShiftService.js';
 import eventGuestService from '../../services/EventGuestService.js';
 import applicationDigestService from '../../services/ApplicationDigestService.js';
 import vendorCheckInService from '../../services/VendorCheckInService.js';
@@ -85,7 +84,7 @@ router.use(requireOrganizer);
 router.use('/customers', requireFeature('customers'));
 router.use('/finance', requireFeature('finance'));
 router.use(['/pages', '/page-templates', '/online-store'], requireFeature('onlineStore'));
-router.use('/standing-application-forms', requireFeature('content'));
+router.use('/standing-application-forms', requireFeature('customers'));
 router.use('/events/:eventId/map', requireFeature('maps'));
 
 // Organization the Settings pages act on — see routes/adminScope.js.
@@ -751,16 +750,6 @@ router.delete('/standing-application-forms/:formId', requirePermission('applicat
   await applicationFormService.deleteStandingForm(await activeOrgFor(req), req.params.formId);
   res.status(204).end();
 }));
-router.post('/standing-application-forms/:formId/save-as-template', requirePermission('applications.standingForms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
-  const organizationId = await activeOrgFor(req);
-  await applicationFormService.getStandingForm(organizationId, req.params.formId);
-  const form = await prisma.applicationForm.findUnique({
-    where: { id: req.params.formId },
-    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
-  });
-  const status = req.body.replaceTemplateId ? 200 : 201;
-  res.status(status).json(await applicationFormTemplateService.saveFrom(form, organizationId, req.body, { byUserId: req.user.id }));
-}));
 router.post('/standing-application-forms/:formId/questions', requirePermission('applications.standingForms'), validateQuestionBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addStandingQuestion(await activeOrgFor(req), req.params.formId, req.body));
 }));
@@ -822,33 +811,6 @@ router.post('/standing-application-forms/:formId/submissions/:applicationId/deci
   ));
 }));
 
-// Form templates (spec 019 phase 2). Reads follow the Participants scope;
-// writes need one organization — a member's own, SYSTEM_ADMIN's active one.
-router.get('/application-templates', wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) return res.json({ data: [] });
-  res.json({ data: await applicationFormTemplateService.list(scope.organizationId) });
-}));
-router.post('/application-templates', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
-  res.status(201).json(await applicationFormTemplateService.create(await activeOrgFor(req), req.body, { byUserId: req.user.id }));
-}));
-router.get('/application-templates/:templateId', wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  res.json(await applicationFormTemplateService.get(req.params.templateId, scope.organizationId));
-}));
-router.put('/application-templates/:templateId', requirePermission('applications.forms'), validateFormTemplateBody, wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  res.json(await applicationFormTemplateService.update(req.params.templateId, scope.organizationId, req.body));
-}));
-router.delete('/application-templates/:templateId', requirePermission('applications.forms'), wrap(async (req, res) => {
-  const scope = await participantsScopeFor(req);
-  if (scope.empty) throw new NotFoundError('Application form template not found');
-  await applicationFormTemplateService.remove(req.params.templateId, scope.organizationId);
-  res.status(204).end();
-}));
-
 // Map deep-link for event Map button (spec 014)
 router.get('/events/:eventId/map', wrap(async (req, res) => {
   const orgId = await activeOrgFor(req);
@@ -875,18 +837,6 @@ router.delete('/events/:eventId/application-forms/:formId', requirePermission('a
   res.status(204).end();
 }));
 
-router.post('/events/:eventId/application-forms/:formId/save-as-template', requirePermission('applications.forms'), validateSaveAsTemplateBody, wrap(async (req, res) => {
-  const { eventId, formId } = req.params;
-  const event = await applicationFormService.requireEvent(eventId, await scopedOrgFor(req));
-  const form = await prisma.applicationForm.findFirst({
-    where: { id: formId, eventId },
-    include: { tiers: { orderBy: { displayOrder: 'asc' } }, questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } } },
-  });
-  if (!form) throw new NotFoundError('Application form not found');
-  const status = req.body.replaceTemplateId ? 200 : 201;
-  res.status(status).json(await applicationFormTemplateService.saveFrom(form, event.venue.organizationId, req.body, { byUserId: req.user.id }));
-}));
-
 // Tiers
 router.post('/events/:eventId/application-forms/:formId/tiers', requirePermission('applications.forms'), validateTierBody, wrap(async (req, res) => {
   res.status(201).json(await applicationFormService.addTier(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body));
@@ -911,21 +861,6 @@ router.patch('/events/:eventId/application-forms/:formId/questions/:questionId',
 }));
 router.delete('/events/:eventId/application-forms/:formId/questions/:questionId', requirePermission('applications.forms'), wrap(async (req, res) => {
   res.json(await applicationFormService.removeQuestion(req.params.eventId, req.params.formId, req.params.questionId, await scopedOrgFor(req)));
-}));
-
-// Spec 050 §6.4: volunteer shifts on a VOLUNTEER form (ORGANIZER through the forms permission)
-router.get('/events/:eventId/application-forms/:formId/shifts', wrap(async (req, res) => {
-  res.json({ data: await volunteerShiftService.list(req.params.eventId, req.params.formId, await scopedOrgFor(req)) });
-}));
-router.post('/events/:eventId/application-forms/:formId/shifts', requirePermission('applications.forms'), wrap(async (req, res) => {
-  res.status(201).json(await volunteerShiftService.create(req.params.eventId, req.params.formId, await scopedOrgFor(req), req.body || {}));
-}));
-router.patch('/events/:eventId/application-forms/:formId/shifts/:shiftId', requirePermission('applications.forms'), wrap(async (req, res) => {
-  res.json(await volunteerShiftService.update(req.params.eventId, req.params.formId, req.params.shiftId, await scopedOrgFor(req), req.body || {}));
-}));
-router.delete('/events/:eventId/application-forms/:formId/shifts/:shiftId', requirePermission('applications.forms'), wrap(async (req, res) => {
-  await volunteerShiftService.remove(req.params.eventId, req.params.formId, req.params.shiftId, await scopedOrgFor(req));
-  res.status(204).end();
 }));
 
 // Spec 012: which restricted add-ons a tier offers (ADMIN)
@@ -1797,7 +1732,7 @@ router.get('/customers', async (req, res, next) => {
       // Staff with no membership see no customers rather than every org's
       return res.json({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
     }
-    const { page, limit, search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { page, limit, search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId, list } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1824,16 +1759,49 @@ router.get('/customers', async (req, res, next) => {
       search,
       tag,
       scope: effectiveScope,
-      segment,
       rsvp,
       eventId,
       source,
       formId,
+      list,
       sort,
       direction,
     });
     res.json(result);
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /admin/customers/export.csv — the Contacts list (or a list, with ?list=)
+ * for the same filters as the page, every row (spec 055-E). ADMIN by default
+ * (customers.export), step-up, rate limited; the audit trail logs the download.
+ */
+const contactExportLimiter = makeLimiter('CONTACT_EXPORT', LIMITS.CONTACT_EXPORT);
+router.get('/customers/export.csv', contactExportLimiter, requirePermission('customers.export'), requireRecentAuth, async (req, res, next) => {
+  try {
+    const organizationId = await activeOrgFor(req);
+    const { search, tag, rsvp, eventId, scope = 'customers', source, formId, list } = req.query;
+    if (!['customers', 'all'].includes(scope)) throw new ValidationError('scope must be customers or all');
+    let base = 'contacts';
+    if (list) {
+      const { name } = await contactListService.get(organizationId, String(list));
+      base = `${name}-contacts`;
+    }
+    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '').slice(0, 60) || 'contacts';
+    const options = { search, tag, rsvp, eventId, scope: source === 'form' ? 'all' : scope, source, formId, list };
+    // Resolve the filters before any byte goes out, so a bad list is still a clean 404.
+    await customerService.whereFor(organizationId, options);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    await customerService.exportCsv(organizationId, options, (chunk) => res.write(chunk));
+    res.end();
+  } catch (error) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     next(error);
   }
 });
@@ -1845,7 +1813,7 @@ router.get('/customers/:contactId', async (req, res, next) => {
     if (!isUnscoped(scope) && !scope.organizationId) {
       throw new NotFoundError('Customer not found');
     }
-    const { search, tag, segment, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId } = req.query;
+    const { search, tag, rsvp, eventId, sort, direction, scope: customerScope = 'customers', source, formId, list } = req.query;
     if (!['customers', 'all'].includes(customerScope)) {
       throw new ValidationError('scope must be customers or all');
     }
@@ -1853,11 +1821,11 @@ router.get('/customers/:contactId', async (req, res, next) => {
       search,
       tag,
       scope: customerScope,
-      segment,
       rsvp,
       eventId,
       source,
       formId,
+      list,
       sort,
       direction,
     });
@@ -1868,6 +1836,15 @@ router.get('/customers/:contactId', async (req, res, next) => {
 });
 
 /** GET /admin/customers/:contactId/timeline — comments and derived customer events. */
+/** GET /admin/customers/:contactId/lists — manual lists the contact is on (spec 055). */
+router.get('/customers/:contactId/lists', async (req, res, next) => {
+  try {
+    res.json({ lists: await contactListService.listsForContact(await activeOrgFor(req), req.params.contactId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/customers/:contactId/timeline', async (req, res, next) => {
   try {
     const scope = await resolveOrgScope(req.user.id, req.user.role, req.user.organizationId);

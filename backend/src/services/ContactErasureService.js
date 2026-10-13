@@ -280,8 +280,6 @@ class ContactErasureService {
       const answerImages = await tx.applicationAnswer.findMany({ where: { application: { contactId }, imageId: { not: null } }, select: { imageId: true } });
       imageIds.push(...answerImages.map((a) => a.imageId));
       await tx.applicationAnswer.updateMany({ where: { application: { contactId } }, data: { valueText: null, imageId: null } });
-      // Spec 050 §6.4: volunteer shift picks go with the answers.
-      await tx.applicationShift.deleteMany({ where: { application: { contactId } } });
       // Spec 050 §6.3: lineup rows copied from their applications are content about the person.
       const guests = await tx.eventGuest.findMany({ where: { application: { contactId } }, select: { imageId: true } });
       imageIds.push(...guests.map((g) => g.imageId).filter(Boolean));
@@ -289,6 +287,7 @@ class ContactErasureService {
 
       // Staff notes about the person go too; one audit line remains.
       await tx.contactComment.deleteMany({ where: { contactId } });
+      await tx.contactListMember.deleteMany({ where: { contactId } }); // spec 055
       await tx.buyerLoginToken.deleteMany({ where: { contactId } });
       await tx.contact.update({ where: { id: contactId }, data: anonymizedContactData(contact, now) });
       await tx.contactComment.create({

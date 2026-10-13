@@ -13,10 +13,8 @@ import { slugify, uniqueSlug } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
-import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
-import { FORM_PURPOSES, FREE_ONLY_PURPOSES, defaultsFor } from './applicationFormDefaults.js';
-import volunteerShiftService, { SHIFTS_INCLUDE } from './VolunteerShiftService.js';
+import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
@@ -119,7 +117,6 @@ const FORM_INCLUDE = {
   organization: { select: { id: true, name: true, taxInclusivePricing: true, logoUrl: true, brandColor: true } },
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
-  shifts: SHIFTS_INCLUDE, // spec 050 §6.4
   _count: { select: { applications: true } },
   // Spec 050-L: one submitted application is enough to fix the purpose (updateForm's PURPOSE_LOCKED rule).
   applications: { where: { status: { not: 'DRAFT' } }, select: { id: true }, take: 1 },
@@ -169,8 +166,6 @@ class ApplicationFormService {
         _count: { select: { applications: { where: { status: { not: 'DRAFT' } } } } },
         event: { select: { id: true, name: true, date: true, status: true, venue: { select: { timezone: true, organization: { select: { id: true, name: true } } } } } },
         questions: { where: { pinned: true, archivedAt: null }, select: { id: true, label: true, type: true }, orderBy: { displayOrder: 'asc' } },
-        // Spec 050-S: the org-wide Shift filter.
-        shifts: { select: { id: true, name: true }, orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }] },
       },
       orderBy: [{ event: { date: 'desc' } }, { displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -198,7 +193,6 @@ class ApplicationFormService {
       applicationCount: f._count.applications,
       pinnedQuestions: f.questions.map((q) => ({ id: q.id, label: q.label, type: q.type })),
       addOns: addOns.filter((a) => a.eventId === f.eventId).map((a) => ({ id: a.id, name: a.name })),
-      shifts: f.purpose === 'VOLUNTEER' ? f.shifts : [],
       updatedAt: f.updatedAt,
     }));
   }
@@ -221,33 +215,26 @@ class ApplicationFormService {
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
-  /**
-   * Create a form. With `body.templateId` (spec 019 phase 2) the template's
-   * definition supplies settings, tiers and questions — `kind` must match
-   * and the template must be in the caller's scope; explicit body fields
-   * still win over the template's settings.
-   */
+  /** Create a form on an event, with optional `tiers` and `questions`. */
   async createForm(eventId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
-    let template = null;
-    if (body.templateId) {
-      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId ?? event.venue.organizationId);
-      if (template.kind !== body.kind) throw new ValidationError(`Template "${template.name}" is for ${template.kind} forms`);
-      if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
-    }
-    const { templateId: _templateId, ...fields } = body;
-    // No template and no questions: start from the purpose's defaults (spec 050 §5.2).
-    const base = template
-      ? this._templateSettings(template.definition, body.kind)
-      : body.questions === undefined
-        ? defaultsFor(body.purpose)
-        : {};
-    const { questions: defaultQuestions, ...baseSettings } = base;
-    const settings = { ...baseSettings, ...fields };
+    const { setup, ...fields } = body;
+    // No questions: the setup flows' blank form (`setup: true`)
+    // asks for an email only, and the organizer adds name and business details
+    // as fields. Other callers without questions keep the older blank form
+    // (name and email, business details when it charges); callers sending
+    // their own questions keep the column defaults.
+    const base = body.questions !== undefined
+      ? {}
+      : setup
+        ? { collectBusiness: false, collectName: false }
+        : { collectBusiness: body.kind === 'PAID' };
+    const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
-    this._assertEventFormRules(data.purpose ?? 'OTHER', body.kind, data.collectBusiness ?? true);
-    if (defaultQuestions) body = { ...body, questions: defaultQuestions };
+    this._assertPurposeKind(data.purpose ?? 'OTHER', body.kind);
+    // The setup flows (`setup: true`) keep one live form per purpose on an event.
+    if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -260,35 +247,15 @@ class ApplicationFormService {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
       this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
     }
-    if (template) data.createdFromTemplateId = template.id;
-    const form = await prisma.$transaction(async (tx) => {
-      const created = await tx.applicationForm.create({ data, select: { id: true } });
-      if (template) await this._materialise(tx, created.id, template.definition);
-      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
-    });
-    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind, templateId: template?.id });
+    const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
+    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
-  }
-
-  /** The settings half of a template definition, shaped like a create body (PAID keys only on PAID). */
-  _templateSettings(definition, kind) {
-    const out = { intro: definition.intro ?? null };
-    // Old snapshots carry no purpose: the form falls back to OTHER unless the body names one.
-    if (definition.purpose) out.purpose = definition.purpose;
-    // Old snapshots carry no collectBusiness either: the column default (true) applies.
-    if (typeof definition.collectBusiness === 'boolean') out.collectBusiness = definition.collectBusiness;
-    if (kind === 'PAID') {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
-        if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
-      }
-    }
-    return out;
   }
 
   /**
    * Create tiers and questions on `formId` from a plain definition
    * `{ tiers: [...], questions: [...] }` in list order, inside `tx`. Shared by
-   * `copyForms` (event duplication) and create-from-template. Returns the
+   * `copyForms` (event duplication). Returns the
    * created tiers in order.
    */
   async _materialise(tx, formId, definition) {
@@ -326,31 +293,6 @@ class ApplicationFormService {
   }
 
   /**
-   * A form as a template definition (spec 019): settings, tiers without
-   * add-on attachments, non-archived questions in order. No status / window /
-   * slug — those belong to an event.
-   */
-  snapshotForm(form) {
-    // FREE forms carry the column defaults for the PAID settings; a template
-    // definition holds null there (and the validator refuses them on FREE).
-    const paid = form.kind === 'PAID';
-    return {
-      purpose: form.purpose ?? 'OTHER',
-      collectBusiness: form.collectBusiness !== false,
-      intro: form.intro ?? null,
-      chargeTiming: paid ? form.chargeTiming : null,
-      feeMode: paid ? form.feeMode : null,
-      taxable: paid ? form.taxable : null,
-      paymentDueDays: paid ? form.paymentDueDays : null,
-      overduePolicy: paid ? form.overduePolicy : null,
-      reserveOnApproval: paid ? form.reserveOnApproval !== false : null,
-      spaceSelection: paid ? form.spaceSelection ?? 'TIERS' : null,
-      tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
-      questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [], pinned: q.pinned ?? false })),
-    };
-  }
-
-  /**
    * Copy every form on `fromEventId` to `toEventId` (event duplication, spec
    * 011 phase 3). Copies land as DRAFT with no open/close window; tiers keep
    * price and quantity but start empty; archived questions are skipped.
@@ -360,16 +302,11 @@ class ApplicationFormService {
   async copyForms(fromEventId, toEventId, tx = prisma) {
     const target = await tx.event.findUnique({ where: { id: toEventId }, select: { date: true, venue: { select: { organizationId: true } } } });
     if (!target) throw new NotFoundError('Event not found');
-    // Spec 050 §6.4: shift times move with the event, like endDate in duplicateEvent.
-    const source = await tx.event.findUnique({ where: { id: fromEventId }, select: { date: true } });
-    const shiftBy = source?.date && target.date ? target.date.getTime() - source.date.getTime() : 0;
-    const moved = (d) => (d ? new Date(d.getTime() + shiftBy) : null);
     const forms = await tx.applicationForm.findMany({
       where: { eventId: fromEventId },
       include: {
         tiers: { orderBy: { displayOrder: 'asc' } },
         questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
-        shifts: { orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }] },
       },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -398,8 +335,8 @@ class ApplicationFormService {
           spaceSelection: f.spaceSelection,
           purpose: f.purpose,
           collectBusiness: f.collectBusiness,
+          collectName: f.collectName,
           displayOrder: f.displayOrder,
-          createdFromTemplateId: f.createdFromTemplateId,
         },
         select: { id: true },
       });
@@ -407,12 +344,6 @@ class ApplicationFormService {
         tiers: f.tiers.map((t) => ({ name: t.name, description: t.description, price: t.price, quantityTotal: t.quantityTotal, displayOrder: t.displayOrder, isActive: t.isActive })),
         questions: f.questions.map((q) => ({ label: q.label, helpText: q.helpText, type: q.type, required: q.required, options: q.options, displayOrder: q.displayOrder, pinned: q.pinned })),
       });
-      // Shifts copy without picks: volunteers apply again for the new edition.
-      if (f.shifts.length) {
-        await tx.volunteerShift.createMany({
-          data: f.shifts.map((sh) => ({ formId: created.id, name: sh.name, description: sh.description, startsAt: moved(sh.startsAt), endsAt: moved(sh.endsAt), capacity: sh.capacity, displayOrder: sh.displayOrder })),
-        });
-      }
       // Tiers were created in source order, so index i of each list is the same tier.
       f.tiers.forEach((t, i) => tierIdMap.set(t.id, tiers[i]?.id));
       copied += 1;
@@ -426,7 +357,7 @@ class ApplicationFormService {
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
     const data = this._validateFormFields(body, existing.kind, existing);
-    this._assertEventFormRules(data.purpose ?? existing.purpose, existing.kind, data.collectBusiness ?? existing.collectBusiness);
+    this._assertPurposeKind(data.purpose ?? existing.purpose, existing.kind);
     if (data.purpose !== undefined && data.purpose !== existing.purpose) {
       const submitted = await prisma.application.count({ where: { formId, status: { not: 'DRAFT' } } });
       if (submitted > 0) throw coded(new ConflictError('Purpose cannot change once the form has submissions'), 'PURPOSE_LOCKED');
@@ -474,26 +405,14 @@ class ApplicationFormService {
     const organization = await this.requireOrganization(organizationId);
     if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
     if (body.tiers?.length) throw new ValidationError('Standing forms cannot have tiers');
-    let template = null;
-    if (body.templateId) {
-      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId);
-      if (template.kind !== 'FREE') throw new ValidationError('Standing forms require a FREE template');
-      if (body.questions !== undefined) throw new ValidationError('questions come from the template');
-    }
-    const { templateId: _templateId, tiers: _tiers, ...fields } = body;
-    const settings = template ? { ...this._templateSettings(template.definition, 'FREE'), ...fields } : fields;
-    const data = { organizationId, eventId: null, kind: 'FREE', ...this._validateFormFields(settings, 'FREE', null) };
+    const { tiers: _tiers, ...fields } = body;
+    const data = { organizationId, eventId: null, kind: 'FREE', ...this._validateFormFields(fields, 'FREE', null) };
     data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug || data.name);
     if (body.questions !== undefined) {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
       this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
     }
-    if (template) data.createdFromTemplateId = template.id;
-    const form = await prisma.$transaction(async (tx) => {
-      const created = await tx.applicationForm.create({ data, select: { id: true } });
-      if (template) await this._materialise(tx, created.id, { ...template.definition, tiers: [] });
-      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
-    });
+    const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
     return this._serializeForm(form, null, [], organization);
   }
 
@@ -502,7 +421,7 @@ class ApplicationFormService {
     const existing = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null }, include: { tiers: true } });
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
-    if (body.tiers !== undefined || body.templateId !== undefined) throw new ValidationError('Standing forms cannot have tiers or change template');
+    if (body.tiers !== undefined) throw new ValidationError('Standing forms cannot have tiers');
     const data = this._validateFormFields(body, 'FREE', existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug, formId);
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
@@ -788,6 +707,10 @@ class ApplicationFormService {
       if (!Number.isInteger(body.displayOrder) || body.displayOrder < 0) throw new ValidationError('displayOrder must be a non-negative integer');
       data.displayOrder = body.displayOrder;
     }
+    if (body.collectName !== undefined) {
+      if (typeof body.collectName !== 'boolean') throw new ValidationError('collectName must be a boolean');
+      data.collectName = body.collectName;
+    }
     if (body.collectBusiness !== undefined) {
       if (typeof body.collectBusiness !== 'boolean') throw new ValidationError('collectBusiness must be a boolean');
       data.collectBusiness = body.collectBusiness;
@@ -848,9 +771,13 @@ class ApplicationFormService {
    * Spec 050 §3: special guests and volunteers are never charged, and a PAID
    * form keeps the business profile approval, booth assignment and check-in read.
    */
-  _assertEventFormRules(purpose, kind, collectBusiness) {
-    this._assertPurposeKind(purpose, kind);
-    if (kind === 'PAID' && collectBusiness === false) throw new ValidationError('PAID application forms must collect business details');
+  /** One live (not CLOSED) form per purpose per event: the setup flows edit that one. */
+  async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
+    const other = await prisma.applicationForm.findFirst({
+      where: { eventId, purpose, status: { not: 'CLOSED' }, ...(excludeId && { id: { not: excludeId } }) },
+      select: { id: true, name: true },
+    });
+    if (other) throw coded(new ConflictError(`This event already has a ${purpose.toLowerCase().replace('_', ' ')} form: ${other.name}. Close it first.`), 'FORM_EXISTS');
   }
 
   _assertPurposeKind(purpose, kind) {
@@ -988,6 +915,7 @@ class ApplicationFormService {
       slug: form.slug,
       intro: form.intro,
       collectBusiness: form.collectBusiness,
+      collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       status: form.status,
@@ -1001,15 +929,12 @@ class ApplicationFormService {
       reserveOnApproval: form.reserveOnApproval !== false,
       spaceSelection: form.kind === 'PAID' ? form.spaceSelection ?? 'TIERS' : null,
       displayOrder: form.displayOrder,
-      createdFromTemplateId: form.createdFromTemplateId ?? null,
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,
       purposeLocked: (form.applications?.length ?? 0) > 0,
       tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
-      // Spec 050 §6.4: volunteer shifts (VOLUNTEER forms only), times in `timezone`.
-      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serialize(sh)) : [],
       timezone: event?.venue?.timezone ?? null,
       // Spec 012: every application add-on of the event, so the tier dialog can offer restricted ones.
       addOns: addOns.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), allTiers: a.allTiers, isActive: a.isActive, scope: a.scope })),
@@ -1028,6 +953,7 @@ class ApplicationFormService {
       slug: form.slug,
       intro: form.intro,
       collectBusiness: form.collectBusiness,
+      collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       // Spec 050-D: an event-level sales close shuts every form without touching its status.
@@ -1055,8 +981,6 @@ class ApplicationFormService {
           };
         }) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
-      // Spec 050 §6.4: shifts to pick, rendered in the venue zone; a full one is still pickable as a preference.
-      shifts: form.purpose === 'VOLUNTEER' ? (form.shifts || []).map((sh) => volunteerShiftService.serializePublic(sh)) : [],
       timezone: event?.venue?.timezone ?? null,
     };
   }

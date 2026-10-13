@@ -1,4 +1,4 @@
-// Content › Forms (spec 044B): create a standing form, add a field, review a
+// Contacts › Forms (spec 044B): create a standing form, add a field, review a
 // submission in the shared submissions table and decide on it. Backend mocked.
 
 import { expect, test, type Page } from '@playwright/test';
@@ -126,7 +126,6 @@ async function mockApi(page: Page, baseURL: string) {
     const body = req.postData() ? JSON.parse(req.postData() as string) : undefined;
     calls.push({ method, path, body });
     if (path === '/organizations') return route.fulfill(json([ORG]));
-    if (path === '/admin/application-templates') return route.fulfill(json({ data: [] }));
     if (path === '/admin/standing-application-forms' && method === 'GET') return route.fulfill(json({ data: state.created ? [standingForm(state.questions)] : [] }));
     if (path === '/admin/standing-application-forms' && method === 'POST') {
       state.created = true;
@@ -160,19 +159,21 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const calls = await mockApi(page, baseURL!);
 
-    await page.goto('/admin/content/forms');
+    await page.goto('/admin/contacts/forms');
     await expect(page.getByTestId('forms-empty-state')).toContainText('No forms yet');
+    await expect(page.getByTestId('form-templates')).toHaveCount(0);
     expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
     await page.getByRole('link', { name: 'Create your first form' }).click();
 
     await page.locator('#new-form-name').fill('Become a vendor');
     await page.getByRole('button', { name: 'Create form' }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/content/forms/${FORM_ID}\\?tab=fields`));
+    // First visit compiles the form page on the dev server.
+    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}\\?tab=fields`), { timeout: 30000 });
     expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/standing-application-forms')?.body).toEqual({ name: 'Become a vendor' });
     await expect(page.getByTestId('form-tab-fields')).toHaveAttribute('aria-current', 'page');
 
     await page.getByLabel('Question', { exact: true }).fill('What do you sell?');
-    await page.getByRole('button', { name: 'Add question' }).click();
+    await page.getByRole('button', { name: 'Add field' }).click();
     await expect(page.getByText('Question added.')).toBeVisible();
     await expect(page.getByTestId('question-row-q-1')).toContainText('What do you sell?');
 
@@ -200,7 +201,7 @@ for (const viewport of [
     expect(calls.some((c) => c.path === `${SUB}/${row.id}/decision` && (c.body as { decision: string }).decision === 'APPROVE')).toBe(true);
 
     await tableRow.getByRole('link', { name: 'Pixel Pins' }).click();
-    await expect(page).toHaveURL(new RegExp(`/admin/content/forms/${FORM_ID}/submissions/${row.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/admin/contacts/forms/${FORM_ID}/submissions/${row.id}$`));
     await expect(page.getByRole('heading', { level: 1, name: 'Pixel Pins' })).toBeVisible();
     await expect(page.getByLabel('Booth / placement')).toHaveCount(0);
   });

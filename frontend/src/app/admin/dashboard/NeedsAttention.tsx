@@ -15,7 +15,7 @@ type Attention = DashboardOverview['attention'];
 function reviewHref(row: Attention['applicationsToReview'][number]) {
   return row.eventId
     ? `/admin/events/${row.eventId}/applications?status=SUBMITTED`
-    : `/admin/content/forms/${row.formId}?status=SUBMITTED`;
+    : `/admin/contacts/forms/${row.formId}?status=SUBMITTED`;
 }
 
 const rowLink =

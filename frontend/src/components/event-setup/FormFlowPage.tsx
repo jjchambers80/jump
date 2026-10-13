@@ -4,16 +4,14 @@
 // other application form, set up step by step in the event wizard's shell
 // (header, progress bar, footer, live preview). Started from the
 // event's Overview. Cards save explicitly: Next submits a step's settings and
-// moves on only when the save succeeded; list editors (tiers, shifts,
+// moves on only when the save succeeded; list editors (tiers,
 // questions, the lineup) save each change themselves.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useCan, useOrg } from '@/components/OrgContext';
-import { useParticipantsApi } from '@/components/applications/useParticipantsApi';
 import { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 import { QuestionsCard, SettingsCard, TiersCard } from '@/components/applications/FormEditorCards';
-import type { FormTemplateSummary } from '@/lib/applications';
 import SetupShell from './SetupShell';
 import SetupHeader from './SetupHeader';
 import SetupProgress from './SetupProgress';
@@ -27,7 +25,6 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import ReviewFormStep, { REVIEW_FORM_ID } from './steps/ReviewFormStep';
-import ShiftsCard from './steps/ShiftsCard';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, inputClass, labelClass, secondaryButton } from './ui';
@@ -41,11 +38,9 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const { form, step, list, at, event } = f;
   const config = APPLICATION_STEPS[flow];
   const api = useApplicationsApi(eventId);
-  const participants = useParticipantsApi();
   const canEdit = useCan('applications.forms');
   const maps = useCan('maps');
   const isDesktop = useIsDesktop();
-  const [templates, setTemplates] = useState<FormTemplateSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -57,12 +52,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const [typed, setTyped] = useState<{ name?: string; intro?: string | null }>({});
   // Start, before the form exists: what is being set up (name, purpose, paid).
   const [draft, setDraft] = useState<DraftForm | null>(null);
-
-  const loadTemplates = useCallback(() => {
-    if (!canEdit) return setTemplates([]);
-    participants.templates().then((r) => setTemplates(r.data)).catch(() => setTemplates([]));
-  }, [participants, canEdit]);
-  useEffect(loadTemplates, [loadTemplates]);
 
   // Every step change (and arrival: the organizer came from a link) focuses the h1 and announces the step.
   const show = f.ready && !f.redirecting;
@@ -118,7 +107,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     else f.exit(true);
   };
   const create = async (body: NewFormBody) => {
-    const created = await api.createForm(body);
+    const created = await api.createForm({ ...body, setup: true });
     f.forms.upsert(created);
     saved();
     f.go('details', created.id);
@@ -189,19 +178,12 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           {step.key === 'start' && !form && canEdit && (
             <StartFormStep
               config={config}
-              existing={formsOnStep(flow, f.forms.forms).map((x) => ({ id: x.id, name: x.name, status: x.status, href: formEditHref(eventId, x, f.orgId) }))}
+              live={formsOnStep(flow, f.forms.forms)
+                .filter((x) => x.status !== 'CLOSED')
+                .map((x) => ({ purpose: x.purpose ?? 'OTHER', name: x.name, href: formEditHref(eventId, x, f.orgId) }))}
               onBusyChange={setBusy}
               onDraftChange={setDraft}
               eventName={event.name}
-              templates={templates}
-              canManage={canEdit}
-              onDeleteTemplate={async (template) => {
-                if (!window.confirm(`Delete the "${template.name}" template? Forms already created from it are kept.`)) return false;
-                await participants.deleteTemplate(template.id);
-                setTemplates((all) => (all ?? []).filter((t) => t.id !== template.id));
-                setNotice(`Template ${template.name} deleted.`);
-                return true;
-              }}
               onCreate={create}
             />
           )}
@@ -255,7 +237,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             />
           )}
           {form && step.key === 'floor-map' && <FloorMapStep eventId={eventId} returnTo={f.href('floor-map')} refreshPreview={f.refreshPreview} onMapStatus={noop} />}
-          {form && step.key === 'shifts' && <ShiftsCard form={form} api={api} canEdit={canEdit} eventStart={event.date} eventEnd={event.endDate} onSaved={saved} />}
           {form && step.key === 'questions' && (
             <QuestionsCard
               form={form}
@@ -264,6 +245,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onUpdate={(id, b) => run('Question saved.', () => api.updateQuestion(form.id, id, b)).then(noop)}
               onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id)).then(noop)}
               onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids)).then(noop)}
+              onToggleBuiltIn={(patch) => run('Fields saved.', async () => f.forms.upsert(await api.updateForm(form.id, patch))).then(noop)}
             />
           )}
           {form && step.key === 'review' && (
@@ -273,9 +255,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               stepHref={(key) => f.href(key)}
               canEdit={canEdit}
               eventDraft={event.status === 'DRAFT'}
-              api={api}
-              templates={templates ?? []}
-              onTemplatesChanged={loadTemplates}
               onSaveStatus={saveAndContinue}
               onRemove={async (action) => {
                 if (action === 'close') return void (await run(`${form.name} closed.`, () => api.updateForm(form.id, { status: 'CLOSED' })));
@@ -315,7 +294,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             onNext={onNext}
             nextForm={nextForm}
             nextLabel={nextLabel}
-            busy={busy || (nextForm === START_FORM_ID && templates === null)}
+            busy={busy}
           />
         )
       }
@@ -330,6 +309,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               revision: f.revision,
               anchor: (previewing && step.formAnchor) || step.anchor,
               form: previewing,
+              ...(previewing && step.preview && { view: step.preview }),
             }}
             subject={previewing ? 'form' : 'event'}
             isDesktop={isDesktop}

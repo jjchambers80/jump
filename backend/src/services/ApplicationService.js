@@ -45,7 +45,6 @@ import {
   NotFoundError,
   ValidationError,
 } from '../middleware/errorHandler.js';
-import volunteerShiftService, { SHIFTS_INCLUDE } from './VolunteerShiftService.js';
 import applicationFormService, { paymentsEnabled } from './ApplicationFormService.js';
 import addOnService from './AddOnService.js';
 import applicantProfileService from './ApplicantProfileService.js';
@@ -122,8 +121,6 @@ const LIST_INCLUDE = {
     include: { question: { select: { id: true, label: true, type: true, displayOrder: true } }, image: { include: { file: true } } },
     orderBy: { question: { displayOrder: 'asc' } },
   },
-  // Spec 050 §6.4 (050-S): the volunteer's shift picks for the Shifts column.
-  shifts: { select: { assigned: true, shift: { select: { id: true, name: true } } }, orderBy: { shift: { displayOrder: 'asc' } } },
 };
 
 /** Organizer decisions: which statuses they leave from and land on. */
@@ -167,8 +164,6 @@ const DETAIL_INCLUDE = {
       spaceSelection: true, // spec 039
       purpose: true, // spec 050
       organization: { select: { id: true, name: true, email: true, logoUrl: true, brandColor: true, taxInclusivePricing: true } },
-      // Spec 050 §6.4: every shift of a VOLUNTEER form, with what is left, for the approval dialog.
-      shifts: SHIFTS_INCLUDE,
       // Spec 037 phase 5: the categories the organizer can assign on approval.
       tiers: {
         orderBy: { displayOrder: 'asc' },
@@ -191,8 +186,6 @@ const DETAIL_INCLUDE = {
   order: { include: ORDER_INCLUDE },
   // Spec 014: booth assignment for map-bound applications.
   booth: { select: { id: true, label: true, mapId: true } },
-  // Spec 050 §6.4: the volunteer's shift picks and which were assigned.
-  shifts: { select: { shiftId: true, assigned: true } },
 };
 
 const OFFLINE_METHODS = new Set(['CHEQUE', 'CASH', 'BANK_TRANSFER', 'COMPED', 'OTHER']);
@@ -356,7 +349,7 @@ class ApplicationService {
     if (!acceptance.open) throw new ConflictError(`This form is not accepting applications (${acceptance.reason})`);
     if (form.kind === 'PAID' && !paymentsEnabled()) throw new ConflictError('Paid applications are not available yet');
 
-    const contact = this._validateContact(body.contact);
+    const contact = this._validateContact(body.contact, { name: form.collectName !== false });
     const organizationId = organization.id;
 
     // Spec 037 phase 5 (apply-then-choose): nobody picks a category, add-ons
@@ -373,8 +366,6 @@ class ApplicationService {
     if (!form.collectBusiness && (files.profilePhotos || []).length) throw new ValidationError('This form does not collect business details');
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
-    // Spec 050 §6.4: shift picks are preferences, full shifts included.
-    const shiftIds = await volunteerShiftService.validatePicks(form, body.shiftIds);
 
     // Spec 024 phase 3: the consent trail. Terms and privacy; no card is saved
     // at submission any more, so there is no card-on-file authorization.
@@ -460,7 +451,6 @@ class ApplicationService {
           optInMarketing,
           statusTokenHash: `pending-${Date.now()}-${Math.random()}`,
           answers: { create: answerRows },
-          ...(shiftIds.length && { shifts: { create: shiftIds.map((shiftId) => ({ shiftId })) } }),
         },
         select: { id: true, eventId: true, contactId: true },
       });
@@ -1355,8 +1345,6 @@ class ApplicationService {
       });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
-      // Spec 050 §6.4: the approval dialog assigns shifts within capacity (409 SHIFT_FULL).
-      if (spec.to === 'APPROVED' && input.shiftIds !== undefined) await volunteerShiftService.assign(tx, application, form, input.shiftIds);
       // Any decision ends the pay-now session the vendor may still have open
       // (it is expired on Stripe after commit), so it can never pay a
       // withdrawn, rejected or re-approved application.
@@ -1952,8 +1940,6 @@ class ApplicationService {
    * `include: null` returns only the id, status and paymentStatus.
    */
   async _transition(tx, applicationId, data, { include = DETAIL_INCLUDE, orderData = {} } = {}) {
-    // Spec 050 §6.4: only an APPROVED volunteer holds assigned shifts.
-    if (data.status && data.status !== 'APPROVED') await volunteerShiftService.unassignAll(tx, applicationId);
     // Spec 050-Q: a guest who is no longer approved leaves the public lineup (the organizer may show them again by hand).
     if (data.status && data.status !== 'APPROVED') await tx.eventGuest.updateMany({ where: { applicationId, isVisible: true }, data: { isVisible: false } });
     const row = await tx.application.update({
@@ -2185,7 +2171,6 @@ class ApplicationService {
             image: { include: { file: true } },
           },
         },
-        shifts: { select: { assigned: true, shift: { select: { name: true, displayOrder: true } } }, orderBy: { shift: { displayOrder: 'asc' } } },
         order: {
           select: {
             orderRef: true,
@@ -2240,7 +2225,6 @@ class ApplicationService {
       'applicantPays',
       'orgReceives',
       'boothLabel',
-      'shifts',
       'tags',
       'checkedInAt',
       'checkedOutAt',
@@ -2281,7 +2265,6 @@ class ApplicationService {
         Number(a.order?.totalAmount ?? 0).toFixed(2),
         Number(a.order?.orgReceives ?? 0).toFixed(2),
         a.boothLabel ?? '',
-        volunteerShiftService.csvCell(a.shifts),
         (a.tags || []).join('; '),
         a.checkedInAt?.toISOString() ?? '',
         a.checkedOutAt?.toISOString() ?? '',
@@ -2380,14 +2363,15 @@ class ApplicationService {
   // Validation
   // ---------------------------------------------------------------------------
 
-  _validateContact(contact) {
+  /** Email always; first and last name only when the form asks for them (`collectName`). */
+  _validateContact(contact, { name = true } = {}) {
     if (!contact || typeof contact !== 'object') throw new ValidationError('contact is required');
     const email = normalizeEmail(contact.email);
     if (!EMAIL_RE.test(email) || email.length > 254) throw new ValidationError('contact.email must be a valid email');
     const firstName = String(contact.firstName || '').trim();
     const lastName = String(contact.lastName || '').trim();
-    if (!firstName || firstName.length > 80) throw new ValidationError('contact.firstName is required (max 80)');
-    if (!lastName || lastName.length > 80) throw new ValidationError('contact.lastName is required (max 80)');
+    if ((name && !firstName) || firstName.length > 80) throw new ValidationError('contact.firstName is required (max 80)');
+    if ((name && !lastName) || lastName.length > 80) throw new ValidationError('contact.lastName is required (max 80)');
     return { email, firstName, lastName };
   }
 
@@ -2501,9 +2485,6 @@ class ApplicationService {
       ];
     }
     if (query.tag) where.tags = { has: String(query.tag) };
-    // Spec 050 §6.4 (050-S): the shift roster — anyone who picked the shift or is assigned
-    // to it; `shiftMode=assigned` keeps only the volunteers assigned to it on approval.
-    if (query.shift) where.shifts = { some: { shiftId: String(query.shift), ...(query.shiftMode === 'assigned' && { assigned: true }) } };
     if (query.status) {
       const list = String(query.status).split(',').filter((s) => STATUSES.has(s) && s !== 'DRAFT');
       if (list.length) where.status = { in: list };
@@ -2681,7 +2662,6 @@ class ApplicationService {
       mapBound: a.tierMapBound === true,
       selectionHeldUntil: a.selectionHeldUntil ?? null,
       tags: a.tags ?? [],
-      shifts: (a.shifts || []).map((p) => ({ id: p.shift.id, name: p.shift.name, assigned: p.assigned })),
       checkedInAt: a.checkedInAt ?? null,
       checkedOutAt: a.checkedOutAt ?? null,
       pinnedAnswers: (a.answers || []).map((ans) => ({ questionId: ans.question.id, label: ans.question.label, type: ans.question.type, value: this._answerText(ans) })),
@@ -2700,8 +2680,7 @@ class ApplicationService {
   _serializeAdmin(a) {
     const m = moneyOf(a);
     const refunded = m.refundedTotal;
-    const { tiers: formTiers = [], shifts: formShifts = [], ...form } = a.form || {};
-    const picks = new Map((a.shifts || []).map((p) => [p.shiftId, p]));
+    const { tiers: formTiers = [], ...form } = a.form || {};
     return {
       id: a.id,
       orderId: m.orderId,
@@ -2716,10 +2695,6 @@ class ApplicationService {
         remaining: Math.max(0, t.quantityTotal - t.quantityApproved - t.quantityReserved),
       })),
       event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
-      // Spec 050 §6.4: every shift of a VOLUNTEER form, flagged with this volunteer's picks.
-      shifts: form.purpose === 'VOLUNTEER'
-        ? formShifts.map((sh) => ({ ...volunteerShiftService.serialize(sh), picked: picks.has(sh.id), assignedToApplication: picks.get(sh.id)?.assigned === true }))
-        : [],
       // Spec 050 §7.6: the lineup row made from this application, if any.
       lineupGuestId: a.guests?.[0]?.id ?? null,
       status: a.status,

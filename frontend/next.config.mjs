@@ -14,6 +14,13 @@ const nextConfig = {
       // Settings › Applications became Settings › Notifications (every editable system email)
       { source: '/admin/settings/applications', destination: '/admin/settings/notifications', permanent: true },
       { source: '/admin/settings/payments/payouts', destination: '/admin/settings/payments/payout-bank-account', permanent: true },
+      // Customers became Contacts, the CRM hub; standing forms moved from Content into it
+      { source: '/admin/customers', destination: '/admin/contacts', permanent: true },
+      { source: '/admin/customers/:path*', destination: '/admin/contacts/:path*', permanent: true },
+      { source: '/admin/content/forms', destination: '/admin/contacts/forms', permanent: true },
+      { source: '/admin/content/forms/:path*', destination: '/admin/contacts/forms/:path*', permanent: true },
+      // Spec 056: application form templates are gone; old editor links land on the forms list.
+      { source: '/admin/events/templates/:path*', destination: '/admin/contacts/forms', permanent: true },
       // Legacy legal paths (spec 023 LR-03). The targets are dark until
       // NEXT_PUBLIC_LEGAL_PAGES_ENABLED and counsel's text ship together.
       { source: '/terms', destination: '/legal/terms', permanent: true },

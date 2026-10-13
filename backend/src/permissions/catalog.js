@@ -29,7 +29,7 @@ export const FEATURES = [
     adminPaths: ['/admin/events', '/admin/create-event'],
     actions: [
       { key: 'events.cancel', label: 'Cancel a published event (and refund its orders)' },
-      { key: 'applications.forms', label: 'Build event application forms, categories, questions and templates', organizer: true },
+      { key: 'applications.forms', label: 'Build event application forms, categories and questions', organizer: true },
       { key: 'applications.money', label: 'Refund, waive or record an offline payment on an application' },
       { key: 'addOns.manage', label: 'Create and edit add-ons and saved add-ons', organizer: true },
     ],
@@ -46,12 +46,16 @@ export const FEATURES = [
   },
   {
     key: 'customers',
-    label: 'Customers',
-    adminPaths: ['/admin/customers'],
+    label: 'Contacts',
+    adminPaths: ['/admin/contacts'],
     actions: [
-      { key: 'customers.email', label: "Change a customer's email address" },
+      { key: 'customers.email', label: "Change a contact's email address" },
       { key: 'customers.comments', label: "Delete other staff members' timeline comments" },
-      { key: 'customers.privacy', label: "Export, erase or anonymize a customer's data" },
+      { key: 'customers.privacy', label: "Export, erase or anonymize a contact's data" },
+      { key: 'customers.lists', label: 'Create, edit and delete contact lists', organizer: true },
+      { key: 'customers.import', label: 'Import contacts into a list from a CSV file' },
+      { key: 'customers.export', label: 'Export contacts and lists as CSV' },
+      { key: 'applications.standingForms', label: 'Build standing application forms (Contacts › Forms)' },
     ],
   },
   {
@@ -72,7 +76,7 @@ export const FEATURES = [
     key: 'content',
     label: 'Content',
     adminPaths: ['/admin/content'],
-    actions: [{ key: 'applications.standingForms', label: 'Build standing application forms (Content › Forms)' }],
+    actions: [],
   },
   {
     key: 'developer',

@@ -54,12 +54,13 @@ export const MODEL_FEATURES = {
   Contact: { feature: 'Customers', label: 'email' },
   ContactComment: { feature: 'Customers' },
   ErasureSuppression: { feature: 'Customers' },
+  ContactList: { feature: 'Customers', label: 'name' }, // spec 055
+  ContactListMember: { feature: 'Customers', org: 'list' },
 
   // Applications and maps
   ApplicationForm: { feature: 'Applications', label: 'name' },
   ApplicationTier: { feature: 'Applications', label: 'name', org: 'form', event: 'form' },
   ApplicationQuestion: { feature: 'Applications', label: 'label', org: 'form', event: 'form' },
-  ApplicationFormTemplate: { feature: 'Applications', label: 'name' },
   NotificationTemplate: { feature: 'Settings › Notifications', label: 'key' },
   EventCancellation: { feature: 'Events', org: 'event.venue' }, // spec 054
   EventCancellationItem: { feature: 'Events', org: 'order', event: 'order' },
@@ -68,8 +69,6 @@ export const MODEL_FEATURES = {
   ApplicationDecision: { feature: 'Applications', org: 'application', event: 'application' },
   ApplicantProfile: { feature: 'Applications' },
   ApplicantProfileImage: { feature: 'Applications', org: 'profile' },
-  VolunteerShift: { feature: 'Applications', label: 'name', org: 'form', event: 'form' },
-  ApplicationShift: { feature: 'Applications', org: 'application', event: 'application' },
   FloorMap: { feature: 'Floor maps', label: 'name' },
   FloorMapTemplate: { feature: 'Floor maps', label: 'name' },
   Booth: { feature: 'Floor maps', label: 'label', org: 'map', event: 'map' },

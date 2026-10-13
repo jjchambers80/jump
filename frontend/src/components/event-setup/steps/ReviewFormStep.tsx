@@ -2,17 +2,13 @@
 
 // Review and open, the last step of an application flow (spec 051): what the
 // form is, each part with a link back to its step, then its status (saved by
-// the footer's "Save and finish"). Save as template, View public form, and
-// Delete (no applications yet) or Close (it has some) live here, from the
-// spec 050 form row.
+// the footer's "Save and finish"). View public form, and Delete (no applications yet) or Close (it
+// has some) live here, from the spec 050 form row.
 
-import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { ExternalLink, Inbox, Pencil, Trash2, XCircle } from 'lucide-react';
-import type { AdminForm, FormTemplateSummary } from '@/lib/applications';
-import type { useApplicationsApi } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
+import type { AdminForm } from '@/lib/applications';
 import { SettingsCard } from '@/components/applications/FormEditorCards';
-import { SaveAsTemplateDialog } from '@/components/applications/TemplateDialogs';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { PURPOSE_LABEL } from '../applicationSteps';
 import type { FlowStep, FlowStepKey } from '../formFlows';
@@ -27,9 +23,6 @@ interface Props {
   canEdit: boolean;
   /** The event is a DRAFT: nothing is public until it publishes. */
   eventDraft: boolean;
-  api: ReturnType<typeof useApplicationsApi>;
-  templates: FormTemplateSummary[];
-  onTemplatesChanged: () => void;
   onSaveStatus: (body: Record<string, unknown>) => Promise<void>;
   /** Delete or Close; resolves when the server answered. */
   onRemove: (action: 'delete' | 'close') => Promise<void>;
@@ -37,26 +30,20 @@ interface Props {
 
 const count = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 
-export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDraft, api, templates, onTemplatesChanged, onSaveStatus, onRemove }: Props) {
-  const [savingAs, setSavingAs] = useState(false);
-  const [notice, setNotice] = useState('');
-  const saveAsRef = useRef<HTMLButtonElement>(null);
+export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDraft, onSaveStatus, onRemove }: Props) {
   const zone = form.timezone ?? null;
   const dates = [form.opensAt && `Opens ${formatEventDateTime(form.opensAt, zone)}`, form.closesAt && `closes ${formatEventDateTime(form.closesAt, zone)}`]
     .filter(Boolean)
     .join(', ');
   const has = (key: FlowStepKey) => steps.some((s) => s.key === key);
   const submitted = form.applicationCount > 0;
-  const createdFrom = form.createdFromTemplateId ? templates.find((t) => t.id === form.createdFromTemplateId) : null;
-
+  const fields = ['Email', form.collectName !== false && 'name', form.collectBusiness !== false && 'business details', form.questions.length > 0 && count(form.questions.length, 'other field')].filter(Boolean).join(', ');
   const rows: { label: string; value: string; step: FlowStepKey }[] = [
     { label: 'Name', value: form.name, step: 'details' },
     { label: 'For', value: `${PURPOSE_LABEL[form.purpose ?? 'OTHER']} · ${form.kind === 'PAID' ? 'Paid' : 'Free'}`, step: 'details' },
     { label: 'Takes applications', value: dates || 'No open or close date', step: 'details' },
     ...(has('options') ? [{ label: 'Options', value: form.tiers.length ? `${count(form.tiers.length, 'option')} · ${form.tiers.map((t) => t.name).join(', ')}` : 'None yet', step: 'options' as const }] : []),
-    ...(has('payment') ? [{ label: 'Spaces', value: form.spaceSelection === 'MAP' ? 'Chosen on the floor map' : 'Chosen by option', step: 'payment' as const }] : []),
-    ...(has('shifts') ? [{ label: 'Shifts', value: form.shifts?.length ? count(form.shifts.length, 'shift') : 'No shifts', step: 'shifts' as const }] : []),
-    { label: 'Questions', value: count(form.questions.length, 'question'), step: 'questions' },
+    { label: 'Fields', value: fields, step: 'questions' },
   ];
 
   return (
@@ -88,22 +75,7 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
         </p>
       </div>
 
-      {createdFrom && (
-        <p className="text-sm text-gray-600 dark:text-slate-400">
-          Created from the{' '}
-          <Link href={`/admin/events/templates/${createdFrom.id}`} className="font-medium text-gray-900 underline underline-offset-2 dark:text-white">
-            {createdFrom.name}
-          </Link>{' '}
-          template.
-        </p>
-      )}
-
       <div className="flex flex-wrap gap-2">
-        {canEdit && (
-          <button ref={saveAsRef} type="button" onClick={() => setSavingAs(true)} className={secondaryButton}>
-            Save as template
-          </button>
-        )}
         {form.status !== 'DRAFT' && (
           <a href={`/events/${form.eventId}/apply/${form.slug}`} target="_blank" rel="noreferrer" className={secondaryButton}>
             View public form
@@ -141,22 +113,6 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
           {count(form.applicationCount, 'application')}, so this form can&apos;t be deleted.
           {form.status === 'CLOSED' ? ' It is closed to new ones.' : ' Close it to stop new ones.'}
         </p>
-      )}
-      <p role="status" className="sr-only">{notice}</p>
-
-      {savingAs && (
-        <SaveAsTemplateDialog
-          form={form}
-          templates={templates}
-          onSave={(body) => api.saveAsTemplate(form.id, body)}
-          onSaved={(t, replaced) => {
-            setSavingAs(false);
-            onTemplatesChanged();
-            setNotice(replaced ? `Template "${t.name}" replaced.` : `Saved as the "${t.name}" template.`);
-          }}
-          returnFocusRef={saveAsRef}
-          onClose={() => setSavingAs(false)}
-        />
       )}
     </div>
   );

@@ -9,7 +9,7 @@ import type { FormPurpose } from '@/lib/applications';
 import { isApplicationStep, stepForPurpose, type ApplicationStepKey } from './applicationSteps';
 
 export type FormFlowKey = ApplicationStepKey;
-export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'shifts' | 'questions' | 'review';
+export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
 export interface FlowForm {
@@ -28,6 +28,8 @@ export interface FlowStep {
   anchor: string;
   /** Steps that shape the form preview the form itself, scrolled to this id; null = the event page. */
   formAnchor: string | null;
+  /** `space`: the preview shows the vendor's choose-and-pay screen instead of the apply form. */
+  preview?: 'space';
 }
 
 const always = () => true;
@@ -39,7 +41,7 @@ const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowSte
 });
 
 const details = s('details', 'Form details', 'What applicants see first, and when the form takes applications.', { formAnchor: 'apply-top' });
-const questions = s('questions', 'Questions', 'What you ask everyone who applies.', { formAnchor: 'step-questions' });
+const questions = s('questions', 'Fields', 'Email is always asked. Add any other fields you need.', { formAnchor: 'step-questions' });
 const review = s('review', 'Review and open', 'Check the form, then decide when it takes applications.', { formAnchor: 'apply-top' });
 
 export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] }> = {
@@ -48,8 +50,8 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     steps: [
       s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.', { formAnchor: 'apply-top' }),
       details,
-      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary' }),
-      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary' }),
+      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
+      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
       s('floor-map', 'Floor map', 'Vendors pick their spot on this map.', { visible: onMap, anchor: 'floor-map' }),
       questions,
       review,
@@ -70,7 +72,6 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     steps: [
       s('start', 'Start a volunteer application', 'People sign up to help run your event.', { formAnchor: 'apply-top' }),
       details,
-      s('shifts', 'Shifts', 'Optional. The shifts volunteers can sign up for.', { formAnchor: 'step-shifts' }),
       questions,
       review,
     ],

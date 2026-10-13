@@ -1,20 +1,17 @@
 'use client';
 
-// Form editor cards (spec 011), shared since spec 019 by the per-event form
-// editor (each card saves on its own through the API) and the template
-// editor (cards edit local state; the page saves the whole definition).
-// `mode="template"` hides what belongs to an event: slug, status, window,
-// the fee preview columns, the add-on picker, and the per-card Save button.
+// Form editor cards (spec 011), shared by the setup flows and the
+// standing-form page; each card saves on its own through the API.
 // A standing form (spec 044, `eventId: null`) adds the storefront button label
 // and the thank-you message; it is FREE, so it never shows tiers or money.
 
 import Link from 'next/link';
+import { Lock } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 // The event setup wizard's floor-map and collect-more steps (spec 050-L).
 import { wizardLink } from '@/components/event-setup/applicationSteps';
-import { useCan } from '@/components/OrgContext';
 import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -26,18 +23,17 @@ const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300'
 
 const CHOICE = new Set<QuestionType>(['SINGLE_CHOICE', 'MULTI_CHOICE']);
 
-export type EditorMode = 'form' | 'template';
 
-
-/** A tier as the cards need it; `AdminTier` satisfies it, a template tier carries only the base fields. */
+/** A tier as the cards need it; `AdminTier` satisfies it. */
 export type EditorTier = Pick<AdminTier, 'id' | 'name' | 'description' | 'price' | 'quantityTotal' | 'isActive'> & Partial<Pick<AdminTier, 'amounts' | 'quantityApproved' | 'quantityReserved' | 'addOns'>>;
 
-/** What the cards read; `AdminForm` satisfies it, the template editor builds one from a definition. */
+/** What the cards read; `AdminForm` satisfies it. */
 export interface EditorForm {
   id: string;
-  /** Null on a standing form (spec 044); absent in the template editor. */
+  /** Null on a standing form (spec 044). */
   eventId?: string | null;
   collectBusiness?: boolean;
+  collectName?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: AdminForm['kind'];
@@ -122,7 +118,6 @@ export function SettingsCard({
   form,
   canEdit,
   onSave,
-  mode = 'form',
   onChange,
   section,
   formId,
@@ -130,13 +125,11 @@ export function SettingsCard({
 }: {
   form: EditorForm;
   canEdit: boolean;
-  /** Form mode: PATCH the form. */
   onSave?: (body: Record<string, unknown>) => Promise<void>;
-  mode?: EditorMode;
-  /** Every change, as the settings half of a definition (template mode) or the live preview (setup flows). */
+  /** Every change, for the setup flows' live preview. */
   onChange?: (settings: Record<string, unknown>) => void;
   /**
-   * Spec 051 setup flows: one step's part of the card (details = name, slug,
+   * Spec 051 setup flows: one step's part of the card (details = name,
    * intro and window; payment = how a PAID form sells; status). Absent = all.
    * Every save still sends the whole card, unchanged parts included.
    */
@@ -147,15 +140,12 @@ export function SettingsCard({
   hideSubmit?: boolean;
 }) {
   const show = (part: 'details' | 'payment' | 'status') => !section || section === part;
-  const template = mode === 'template';
-  const standing = !template && form.eventId === null;
-  const maps = useCan('maps');
+  const standing = form.eventId === null;
   const [state, setState] = useState({
     name: form.name,
     buttonLabel: form.buttonLabel ?? '',
     successMessage: form.successMessage ?? '',
-    slug: form.slug ?? '',
-    intro: form.intro ?? '',
+        intro: form.intro ?? '',
     status: form.status ?? 'DRAFT',
     opensAt: toLocalInput(form.opensAt, form.timezone),
     closesAt: toLocalInput(form.closesAt, form.timezone),
@@ -174,8 +164,7 @@ export function SettingsCard({
       name: form.name,
       buttonLabel: form.buttonLabel ?? '',
       successMessage: form.successMessage ?? '',
-      slug: form.slug ?? '',
-      intro: form.intro ?? '',
+            intro: form.intro ?? '',
       status: form.status ?? 'DRAFT',
       opensAt: toLocalInput(form.opensAt, form.timezone),
       closesAt: toLocalInput(form.closesAt, form.timezone),
@@ -192,22 +181,22 @@ export function SettingsCard({
   const paidSettings = (s: typeof state) =>
     form.kind === 'PAID'
       ? // chargeTiming is legacy (spec 037 phase 5): not shown, sent back unchanged.
+        // spaceSelection is no longer chosen here (TIERS for new forms): sent back unchanged.
         { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy, reserveOnApproval: s.reserveOnApproval, spaceSelection: s.spaceSelection }
       : {};
   const update = (patch: Partial<typeof state>) => {
     const next = { ...state, ...patch };
     setState(next);
-    // Template mode builds its definition from this; the setup flows (spec 051) feed the live preview.
+    // The setup flows (spec 051) feed the live preview.
     onChange?.({ name: next.name, intro: next.intro || null, ...paidSettings(next) });
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (saving || template || !onSave) return;
+    if (saving || !onSave) return;
     setSaving(true);
     const body: Record<string, unknown> = {
       name: state.name,
-      slug: state.slug,
       intro: state.intro || null,
       status: state.status,
       opensAt: fromLocalInput(state.opensAt, form.timezone),
@@ -219,7 +208,7 @@ export function SettingsCard({
     setSaving(false);
   };
 
-  const paidBlocked = !template && form.kind === 'PAID' && !form.paymentsEnabled;
+  const paidBlocked = form.kind === 'PAID' && !form.paymentsEnabled;
 
   return (
     <form id={formId} onSubmit={submit} className={section ? undefined : card} data-testid="form-settings">
@@ -236,19 +225,12 @@ export function SettingsCard({
           <label htmlFor="f-name" className={labelClass}>Name</label>
           <input id="f-name" value={state.name} disabled={!canEdit} onChange={(e) => update({ name: e.target.value })} className={field} />
         </div>
-        {!template && (
-        <div>
-          <label htmlFor="f-slug" className={labelClass}>URL slug</label>
-          <input id="f-slug" value={state.slug} disabled={!canEdit} onChange={(e) => update({ slug: e.target.value })} className={field} />
-        </div>
-        )}
         <div className="sm:col-span-2">
           <label htmlFor="f-intro" className={labelClass}>Intro shown to applicants</label>
           <textarea id="f-intro" rows={3} value={state.intro} disabled={!canEdit} onChange={(e) => update({ intro: e.target.value })} className={field} />
         </div>
         </>
         )}
-        {!template && (
         <>
         {show('status') && (
         <div className={section === 'status' ? 'sm:col-span-2' : undefined}>
@@ -278,7 +260,6 @@ export function SettingsCard({
         </div>
         )}
         </>
-        )}
         {standing && show('details') && (
           <>
             <div>
@@ -298,30 +279,6 @@ export function SettingsCard({
             {!section && (
               <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
                 Vendors apply without paying. After you approve one, they choose their space and pay.
-              </p>
-            )}
-            <ChoiceGroup
-              legend="How vendors choose their space"
-              name="f-space"
-              value={state.spaceSelection}
-              disabled={!canEdit}
-              onChange={(value) => update({ spaceSelection: value })}
-              options={[
-                { value: 'TIERS', title: 'Pick an option', detail: 'They pay for one of your options. You place them on the floor later.', testId: 'form-space-tiers' },
-                { value: 'MAP', title: 'Pick a spot on the floor map', detail: 'They choose a spot in the category you approve. Spots can have their own price.', testId: 'form-space-map' },
-              ]}
-            />
-            {state.spaceSelection === 'MAP' && (
-              <p className="-mt-2 text-xs text-gray-600 dark:text-slate-400 sm:col-span-2" data-testid="form-space-map-hint">
-                Publish the floor map with a spot for every option before this form opens.
-                {!template && form.eventId && (
-                  <>
-                    {' '}
-                    <Link href={wizardLink(form.eventId, 'floor-map', form.id).href} className="font-medium text-accent-600 underline dark:text-accent-400">
-                      {wizardLink(form.eventId, 'floor-map', form.id).label}
-                    </Link>
-                  </>
-                )}
               </p>
             )}
             <ChoiceGroup
@@ -360,7 +317,7 @@ export function SettingsCard({
           </>
         )}
       </div>
-      {canEdit && !template && !hideSubmit && (
+      {canEdit && !hideSubmit && (
         <button type="submit" disabled={saving} className={`${primary} mt-4`}>
           {saving ? 'Saving…' : 'Save settings'}
         </button>
@@ -378,7 +335,6 @@ export function TiersCard({
   onUpdate,
   onDelete,
   onSetAddOns,
-  mode = 'form',
   embedded = false,
 }: {
   form: EditorForm;
@@ -388,11 +344,9 @@ export function TiersCard({
   onAdd: (body: Record<string, unknown>) => Promise<void>;
   onUpdate: (tierId: string, body: Record<string, unknown>) => Promise<void>;
   onDelete: (tierId: string) => Promise<void>;
-  /** Omitted (template mode): the add-on picker is hidden. */
+  /** Omitted: the add-on picker is hidden. */
   onSetAddOns?: (tierId: string, addOnIds: string[]) => Promise<void>;
-  mode?: EditorMode;
 }) {
-  const template = mode === 'template';
   const [draft, setDraft] = useState({ name: '', price: '', quantityTotal: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState({ name: '', description: '', price: '', quantityTotal: '', isActive: true });
@@ -415,7 +369,7 @@ export function TiersCard({
       <h2 className={embedded ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Options and pricing</h2>
       <p className={`${embedded ? '' : 'mt-1 '}text-sm text-gray-600 dark:text-slate-400`}>
         Applicants pick one. Capacity is taken when you approve, so more people can apply than there are spots.
-        {!template && eventAddOns.length === 0 && (
+        {eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
             <Link href={wizardLink(form.eventId!, 'add-ons').href} className="text-accent-600 underline dark:text-accent-300">{wizardLink(form.eventId!, 'add-ons').label}</Link>.
@@ -427,8 +381,8 @@ export function TiersCard({
           <tr>
             <th className="py-1 pr-3">Name</th>
             <th className="py-1 pr-3">Price</th>
-            {!template && <th className="py-1 pr-3">Applicant pays</th>}
-            {!template && <th className="py-1 pr-3">You receive</th>}
+            <th className="py-1 pr-3">Applicant pays</th>
+            <th className="py-1 pr-3">You receive</th>
             <th className="py-1 pr-3">Spots</th>
             <th className="py-1">
               <span className="sr-only">Actions</span>
@@ -439,7 +393,7 @@ export function TiersCard({
           {form.tiers.map((t) =>
             editing === t.id ? (
               <tr key={t.id}>
-                <td colSpan={template ? 4 : 6} className="py-2">
+                <td colSpan={6} className="py-2">
                   <form
                     className="grid gap-2 sm:grid-cols-5 sm:items-end"
                     onSubmit={async (e) => {
@@ -500,10 +454,10 @@ export function TiersCard({
                   )}
                 </td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{money(t.price)}</td>
-                {!template && <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.applicantPays) : '—'}</td>}
-                {!template && <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.orgReceives) : '—'}</td>}
+                <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.applicantPays) : '—'}</td>
+                <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.orgReceives) : '—'}</td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">
-                  {template ? t.quantityTotal : `${(t.quantityApproved ?? 0) + (t.quantityReserved ?? 0)} / ${t.quantityTotal}`}
+                  {`${(t.quantityApproved ?? 0) + (t.quantityReserved ?? 0)} / ${t.quantityTotal}`}
                 </td>
                 <td className="py-2 text-right">
                   {canEdit && (
@@ -571,6 +525,15 @@ function questionBody(d: QuestionDraft) {
   };
 }
 
+type BuiltInKey = 'collectName' | 'collectBusiness';
+export type BuiltInPatch = Partial<Record<BuiltInKey, boolean>>;
+
+/** Fields every form can add with one click; Email is always asked. */
+const BUILT_IN_FIELDS: { key: BuiltInKey; label: string; detail: string }[] = [
+  { key: 'collectName', label: 'Name', detail: 'First and last name' },
+  { key: 'collectBusiness', label: 'Business details', detail: 'Business name, description, website, social links and photos' },
+];
+
 export function QuestionsCard({
   form,
   canEdit,
@@ -578,7 +541,7 @@ export function QuestionsCard({
   onUpdate,
   onRemove,
   onReorder,
-  mode = 'form',
+  onToggleBuiltIn,
 }: {
   form: EditorForm;
   canEdit: boolean;
@@ -586,9 +549,25 @@ export function QuestionsCard({
   onUpdate: (id: string, body: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
-  mode?: EditorMode;
+  /** Adds or removes the built-in fields (Name, Business details); without it they are read-only. */
+  onToggleBuiltIn?: (patch: BuiltInPatch) => Promise<void>;
 }) {
-  const template = mode === 'template';
+  // A change shows at once; it settles on the saved value when the save resolves.
+  const [pending, setPending] = useState<BuiltInPatch | null>(null);
+  const on: Record<BuiltInKey, boolean> = {
+    collectName: pending?.collectName ?? form.collectName !== false,
+    collectBusiness: pending?.collectBusiness ?? form.collectBusiness !== false,
+  };
+  const toggle = async (key: BuiltInKey, value: boolean) => {
+    if (!onToggleBuiltIn || pending !== null) return;
+    setPending({ [key]: value });
+    try {
+      await onToggleBuiltIn({ [key]: value });
+    } finally {
+      setPending(null);
+    }
+  };
+  const editBuiltIns = canEdit && !!onToggleBuiltIn;
   const [draft, setDraft] = useState<QuestionDraft>(emptyQuestion);
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState<QuestionDraft>(emptyQuestion);
@@ -644,10 +623,30 @@ export function QuestionsCard({
 
   return (
     <div className={card} data-testid="form-questions">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Questions</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-        {form.collectBusiness === false ? 'Name and email are always asked.' : 'Name, email and business profile are always asked.'} Add anything else you need to decide.
-      </p>
+      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Fields</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Email is always asked. Add any other fields you need.</p>
+      <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700" data-testid="form-builtin-fields">
+        <li className="flex items-center justify-between gap-3 py-3">
+          <span className="font-medium text-gray-900 dark:text-white">Email</span>
+          <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-slate-400">
+            <Lock className="h-3 w-3" aria-hidden />
+            Always asked
+          </span>
+        </li>
+        {BUILT_IN_FIELDS.filter((b) => on[b.key]).map((b) => (
+          <li key={b.key} className="flex items-start justify-between gap-3 py-3" data-testid={`builtin-${b.key}`}>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">{b.label}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400">{b.detail}</p>
+            </div>
+            {editBuiltIns && (
+              <button type="button" className={danger} disabled={pending !== null} onClick={() => void toggle(b.key, false)} aria-label={`Remove ${b.label}`}>
+                Remove
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
       <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700">
         {form.questions.map((q, i) => (
           <li key={q.id} className="py-3" data-testid={`question-row-${q.id}`}>
@@ -689,7 +688,7 @@ export function QuestionsCard({
                     <button type="button" aria-label="Move up" className={btn} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
                     <button type="button" aria-label="Move down" className={btn} disabled={i === form.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
                     <button type="button" className="font-medium text-accent-600 hover:underline dark:text-accent-300" onClick={() => startEdit(q)}>Edit</button>
-                    <button type="button" className={danger} onClick={() => window.confirm(template ? `Remove "${q.label}"?` : `Remove "${q.label}"? Existing answers are kept.`) && onRemove(q.id)}>Remove</button>
+                    <button type="button" className={danger} onClick={() => window.confirm(`Remove "${q.label}"? Existing answers are kept.`) && onRemove(q.id)}>Remove</button>
                   </div>
                 )}
               </div>
@@ -707,9 +706,18 @@ export function QuestionsCard({
             setDraft(emptyQuestion);
           }}
         >
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Add a question</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Add a field</p>
+          {editBuiltIns && BUILT_IN_FIELDS.some((b) => !on[b.key]) && (
+            <div className="flex flex-wrap gap-2" data-testid="builtin-add">
+              {BUILT_IN_FIELDS.filter((b) => !on[b.key]).map((b) => (
+                <button key={b.key} type="button" className={btn} disabled={pending !== null} onClick={() => void toggle(b.key, true)}>
+                  + {b.label}
+                </button>
+              ))}
+            </div>
+          )}
           {editor(draft, setDraft, 'qn')}
-          <button type="submit" className={btn}>Add question</button>
+          <button type="submit" className={btn}>Add field</button>
         </form>
       )}
     </div>

@@ -13,8 +13,7 @@
 import { FormEvent, RefObject, useEffect, useRef, useState } from 'react';
 import SettingsDialog from '@/app/admin/settings/SettingsDialog';
 import { errorClass, fieldClass, formAlertClass, hintClass, labelClass } from '@/app/admin/settings/formShared';
-import { CircleSlash } from 'lucide-react';
-import { applicantName, DECISION_LABEL, money, shiftWhen, type AdminApplication, type Decision } from '@/lib/applications';
+import { applicantName, DECISION_LABEL, money, personName, type AdminApplication, type Decision } from '@/lib/applications';
 
 /** Select value for "Let the vendor choose" (spec 039 D6). */
 const VENDOR_CHOOSES = '__vendor';
@@ -63,11 +62,6 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
   const tierIdToSend = vendorChooses ? null : tierId;
   const reserves = application.form.reserveOnApproval !== false;
   const chosen = categories.find((c) => c.id === tierId) ?? null;
-  // Spec 050 §6.4: approving a volunteer assigns shifts, starting from their picks that still have room.
-  const shifts = decision === 'APPROVE' ? application.shifts ?? [] : [];
-  const [shiftIds, setShiftIds] = useState<string[]>(() =>
-    shifts.filter((sh) => sh.assignedToApplication || (sh.picked && sh.remaining !== 0)).map((sh) => sh.id)
-  );
   const full = assignsCategory && reserves && chosen !== null && chosen.remaining <= 0 && application.capacitySlot === 'NONE';
 
   useEffect(() => {
@@ -104,7 +98,6 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
       const next = await api.decide(application.id, {
         decision,
         ...(assignsCategory && { tierId: tierIdToSend }),
-        ...(shifts.length > 0 && { shiftIds }),
         note: note.trim() || undefined,
         sendEmail,
         message: sendEmail && edited ? { subject: subject.trim(), body: body.trim() } : null,
@@ -115,8 +108,6 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
       setError(
         e.details?.suggestion === 'WAITLIST'
           ? `${e.message} Use Waitlist instead.`
-          : e.code === 'SHIFT_FULL'
-            ? `${e.message}`
           : e.code === 'NO_SPOTS_IN_CATEGORY'
             ? `${e.message}. Add spots for it on the floor map, publish the map, or pick another category.`
             : describeError(err, 'Could not save the decision')
@@ -147,7 +138,7 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
           </div>
         )}
         <p className="text-sm text-gray-700 dark:text-slate-300">
-          <strong>{applicantName(application)}</strong> · {application.contact.firstName} {application.contact.lastName} · {application.form.name}
+          <strong>{applicantName(application)}</strong> · {[personName(application.contact), application.form.name].filter(Boolean).join(' · ')}
           {application.tier ? ` · ${application.tier.name}` : ''}
         </p>
         {assignsCategory && (
@@ -181,46 +172,6 @@ export default function DecisionDialog({ eventId, standingFormId, application, d
               </p>
             )}
           </div>
-        )}
-
-        {shifts.length > 0 && (
-          <fieldset data-testid="decision-shifts">
-            <legend className={labelClass}>Assign shifts</legend>
-            <div className="mt-1 space-y-1">
-              {shifts.map((sh) => {
-                const isFull = sh.remaining === 0 && !sh.assignedToApplication;
-                const when = shiftWhen(sh, application.event?.timezone);
-                return (
-                  <label key={sh.id} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md px-2 py-2 text-sm text-gray-800 hover:bg-gray-50 dark:text-slate-200 dark:hover:bg-slate-700/50">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4"
-                      checked={shiftIds.includes(sh.id)}
-                      onChange={(e) => setShiftIds(e.target.checked ? [...shiftIds, sh.id] : shiftIds.filter((x) => x !== sh.id))}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                        <span className="font-medium">
-                          {sh.name}
-                          {sh.picked && <span className="ml-2 text-xs font-normal text-gray-600 dark:text-slate-400">Picked</span>}
-                        </span>
-                        {isFull ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
-                            <CircleSlash className="h-3.5 w-3.5" aria-hidden />
-                            Full
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-600 dark:text-slate-400">{sh.remaining == null ? 'No limit' : `${sh.remaining} left`}</span>
-                        )}
-                      </span>
-                      {when && <span className="block text-xs text-gray-600 dark:text-slate-400">{when}</span>}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className={hintClass}>Approving confirms the ticked shifts. A full shift is refused until someone else is moved off it.</p>
-          </fieldset>
         )}
 
         <div>

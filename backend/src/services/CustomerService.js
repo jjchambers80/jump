@@ -9,37 +9,14 @@ import { NotFoundError, ConflictError } from '../middleware/errorHandler.js';
 import { PAID_ORDER_STATUSES } from './paidStatuses.js';
 import contactOptInService from './ContactOptInService.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
+import { csvLine } from '../utils/csv.js';
+import { CONTACT_SOURCES, PAYING_WHERE, sourceWhere } from './contactListFilters.js';
+import contactListService from './ContactListService.js';
 
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const sum = (rows, pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0);
 const latest = (dates) =>
   dates.filter(Boolean).reduce((max, d) => (!max || d > max ? d : max), null);
-
-export const CUSTOMER_SEGMENTS = ['Prospect', 'New', 'Repeat', 'Lapsed'];
-
-function segmentCutoff(now) {
-  const cutoff = new Date(now);
-  const day = cutoff.getUTCDate();
-  // Move to the 1st to avoid end-of-month rollover, subtract 18 months,
-  // then clamp the day to the last valid day of the target month.
-  cutoff.setUTCDate(1);
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - 18);
-  const targetMonth = cutoff.getUTCMonth();
-  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
-  cutoff.setUTCDate(Math.min(day, lastDay));
-  return cutoff;
-}
-
-/**
- * Segment precedence is Prospect, then Lapsed, then order-count buckets.
- * Orders passed here are already restricted to PAID_ORDER_STATUSES.
- */
-export function customerSegment(orders, now = new Date()) {
-  if (orders.length === 0) return 'Prospect';
-  const lastPaidAt = latest(orders.map((o) => o.paidAt || o.createdAt));
-  if (lastPaidAt && lastPaidAt < segmentCutoff(now)) return 'Lapsed';
-  return orders.length === 1 ? 'New' : 'Repeat';
-}
 
 const ORDER_SELECT = {
   where: { status: { in: PAID_ORDER_STATUSES } },
@@ -54,9 +31,27 @@ const ORDER_SELECT = {
   },
 };
 
+/** What a list row needs: paid orders, GOING RSVPs and standing-form submissions. */
+const ROW_INCLUDE = {
+  orders: ORDER_SELECT,
+  rsvps: { where: { status: 'GOING' }, select: { status: true } },
+  applications: {
+    where: { status: { not: 'DRAFT' }, form: { eventId: null } },
+    select: {
+      id: true,
+      status: true,
+      form: { select: { id: true, name: true, eventId: true } },
+    },
+  },
+};
+
+const SOURCE_LABELS = { tickets: 'Tickets', rsvp: 'RSVP', subscribed: 'Subscribed' };
+const EXPORT_HEADERS = ['First name', 'Last name', 'Email', 'Phone', 'Tags', 'Subscribed', 'Sources', 'Total spent', 'Last activity', 'Created'];
+const isoDay = (date) => (date ? new Date(date).toISOString().slice(0, 10) : '');
+
 /** By default a customer is a contact with money collected; `all` also returns prospects (spec 032 phase 3). */
 function customerPredicate(scope = 'customers') {
-  return scope === 'all' ? {} : { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } };
+  return scope === 'all' ? {} : PAYING_WHERE;
 }
 
 /**
@@ -64,7 +59,7 @@ function customerPredicate(scope = 'customers') {
  * `totalRefunded` is reported beside it so the numbers reconcile with
  * Stripe's gross and refunded totals.
  */
-function aggregates(orders, now = new Date()) {
+function aggregates(orders) {
   const tickets = orders.filter((o) => o.kind !== 'APPLICATION');
   const applications = orders.filter((o) => o.kind === 'APPLICATION');
   const totalSpent = round(sum(orders, (o) => o.totalAmount));
@@ -80,11 +75,10 @@ function aggregates(orders, now = new Date()) {
     totalRefunded,
     lastOrderDate: lastActivityAt, // alias kept for existing consumers
     lastActivityAt,
-    segment: customerSegment(orders, now),
   };
 }
 
-function customerRow(contact, now = new Date()) {
+function customerRow(contact) {
   // Source chips for the customer list (spec 044C)
   const sources = [];
   if (contact.orders?.some((o) => PAID_ORDER_STATUSES.includes(o.status))) sources.push('tickets');
@@ -105,13 +99,10 @@ function customerRow(contact, now = new Date()) {
     tags: contact.tags,
     sources,
     formSources,
-    ...aggregates(contact.orders, now),
+    ...aggregates(contact.orders),
     createdAt: contact.createdAt,
   };
 }
-
-const normalizedSegment = (segment) =>
-  CUSTOMER_SEGMENTS.find((candidate) => candidate.toLowerCase() === String(segment || '').toLowerCase());
 
 function compareNullableDates(a, b) {
   const left = a ? new Date(a).getTime() : 0;
@@ -121,10 +112,8 @@ function compareNullableDates(a, b) {
 
 /** Compute filters and aggregate-aware ordering before pagination/navigation. */
 export function filterAndSortCustomers(contacts, options = {}) {
-  const { segment, sort = 'createdAt', direction = 'desc', now = new Date() } = options;
-  const wantedSegment = normalizedSegment(segment);
-  const rows = contacts.map((contact) => customerRow(contact, now));
-  const filtered = wantedSegment ? rows.filter((row) => row.segment === wantedSegment) : rows;
+  const { sort = 'createdAt', direction = 'desc' } = options;
+  const rows = contacts.map((contact) => customerRow(contact));
   const multiplier = direction === 'asc' ? 1 : -1;
 
   const compare = (a, b) => {
@@ -151,7 +140,7 @@ export function filterAndSortCustomers(contacts, options = {}) {
     return result === 0 ? a.id.localeCompare(b.id) : result * multiplier;
   };
 
-  return filtered.sort(compare);
+  return rows.sort(compare);
 }
 
 export function customerNavigation(contacts, contactId, options = {}) {
@@ -164,75 +153,129 @@ export function customerNavigation(contacts, contactId, options = {}) {
   };
 }
 
-const CUSTOMER_SOURCES = ['tickets', 'rsvp', 'subscribed', 'form'];
-
 function normalizedSource(source) {
-  return CUSTOMER_SOURCES.find((candidate) => candidate.toLowerCase() === String(source || '').toLowerCase());
+  return CONTACT_SOURCES.find((candidate) => candidate.toLowerCase() === String(source || '').toLowerCase());
 }
 
-function customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId } = {}) {
+function customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId } = {}, listWhere = null) {
   const validatedSource = normalizedSource(source);
   // rsvp=going is kept as an alias for source=rsvp (backward compat)
   const effectiveRsvp = validatedSource === 'rsvp' ? 'going' : rsvp;
 
-  return {
-    ...(organizationId && { organizationId }),
-    ...(validatedSource === 'tickets'
-      ? { orders: { some: { status: { in: PAID_ORDER_STATUSES } } } }
-      : validatedSource === 'rsvp'
-      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
-      : validatedSource === 'subscribed'
-      ? { emailSubscribed: true }
-      : validatedSource === 'form'
-      ? {
-          applications: {
-            some: {
-              status: { not: 'DRAFT' },
-              form: { eventId: null, ...(formId && { id: formId }) },
-            },
-          },
-        }
-      : effectiveRsvp === 'going'
-      ? { rsvps: { some: { status: 'GOING', ...(eventId && { eventId }) } } }
-      : customerPredicate(scope)),
-    ...(tag && { tags: { has: tag } }),
-    ...(search && {
-      AND: [
+  const and = [];
+  if (search) {
+    and.push({
+      OR: [
+        { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
         {
-          OR: [
-            { email: { contains: search.toLowerCase(), mode: 'insensitive' } },
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            {
-              applicantProfiles: {
-                some: { businessName: { contains: search, mode: 'insensitive' } },
-              },
-            },
-          ],
+          applicantProfiles: {
+            some: { businessName: { contains: search, mode: 'insensitive' } },
+          },
         },
       ],
-    }),
+    });
+  }
+  // Spec 055: the contacts on a list (its filters or its members)
+  if (listWhere) and.push(listWhere);
+
+  return {
+    ...(organizationId && { organizationId }),
+    ...(validatedSource && validatedSource !== 'rsvp'
+      ? sourceWhere(validatedSource, { formId })
+      : effectiveRsvp === 'going'
+      ? sourceWhere('rsvp', { eventId })
+      : customerPredicate(scope)),
+    ...(tag && { tags: { has: tag } }),
+    ...(and.length && { AND: and }),
   };
+}
+
+/** `list` (spec 055) narrows any Contacts query to one list's contacts. */
+async function listWhereFor(organizationId, list) {
+  if (!list) return null;
+  if (typeof list !== 'string' || list.length > 64 || !organizationId) throw new NotFoundError('List not found');
+  return contactListService.whereFor(organizationId, list);
 }
 
 class CustomerService {
   /**
+   * Every contact the Contacts list shows for these filters (or a list's, with
+   * `list`), as CSV (spec 055-E), written in pages of 1,000 through `write`.
+   * Cells go through the formula-safe csvCell.
+   */
+  async exportCsv(organizationId, options, write) {
+    const where = await this.whereFor(organizationId, options);
+    write(`${csvLine(EXPORT_HEADERS)}\r\n`);
+    let cursor = null;
+    for (;;) {
+      const page = await prisma.contact.findMany({
+        where,
+        include: ROW_INCLUDE,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 1000,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+      });
+      if (!page.length) break;
+      const lines = page.map((contact) => {
+        const row = customerRow(contact);
+        const sources = [
+          ...row.sources.map((source) => SOURCE_LABELS[source] ?? source),
+          ...row.formSources.map((form) => `Form: ${form.name}`),
+        ];
+        return csvLine([
+          row.firstName,
+          row.lastName,
+          row.email,
+          contact.phone,
+          (row.tags ?? []).join('; '),
+          row.emailSubscribed ? 'Yes' : 'No',
+          sources.join('; '),
+          row.totalSpent.toFixed(2),
+          isoDay(row.lastActivityAt),
+          isoDay(row.createdAt),
+        ]);
+      });
+      write(`${lines.join('\r\n')}\r\n`);
+      cursor = page[page.length - 1].id;
+      if (page.length < 1000) break;
+    }
+  }
+
+  /**
+   * Prisma where for the Contacts list with these filters (spec 055: "select
+   * all N matching" adds exactly what the list shows).
+   */
+  async whereFor(organizationId, { search, tag, scope, rsvp, eventId, source, formId, list } = {}) {
+    return customerWhere(
+      organizationId,
+      { search, tag, scope, rsvp, eventId, source, formId },
+      await listWhereFor(organizationId, list)
+    );
+  }
+
+  /**
    * List customers for an organization.
    *
    * @param {string|null} organizationId - null for system admins (unscoped)
-   * @param {Object} options - { page, limit, search, tag, scope, segment, rsvp, eventId, source, formId, sort, direction }
+   * @param {Object} options - { page, limit, search, tag, scope, rsvp, eventId, source, formId, list, sort, direction }
    * @returns {Promise<{ data: Customer[], pagination }>}
    */
   async getCustomersByOrganization(
     organizationId,
-    { page = 1, limit = 20, search, tag, scope, segment, rsvp, eventId, source, formId, sort = 'createdAt', direction = 'desc' } = {}
+    { page = 1, limit = 20, search, tag, scope, rsvp, eventId, source, formId, list, sort = 'createdAt', direction = 'desc' } = {}
   ) {
     page = Math.max(1, parseInt(page) || 1);
     limit = Math.max(1, parseInt(limit) || 20);
 
-    // Segment and aggregate sorts are derived from paid orders, so filtering and
+    // Aggregate sorts are derived from paid orders, so filtering and
     // ordering happen before pagination. The same helper powers detail navigation.
-    const where = customerWhere(organizationId, { search, tag, scope, rsvp, eventId, source, formId });
+    const where = customerWhere(
+      organizationId,
+      { search, tag, scope, rsvp, eventId, source, formId },
+      await listWhereFor(organizationId, list)
+    );
     const normalizedDirection = direction === 'asc' ? 'asc' : 'desc';
     const databaseOrder =
       sort === 'name'
@@ -240,25 +283,13 @@ class CustomerService {
         : sort === 'email'
           ? [{ email: normalizedDirection }, { id: 'asc' }]
           : [{ createdAt: normalizedDirection }, { id: 'asc' }];
-    const needsDerivedRows = Boolean(normalizedSegment(segment)) ||
-      ['transactionCount', 'totalSpent', 'lastActivityAt'].includes(sort);
+    const needsDerivedRows = ['transactionCount', 'totalSpent', 'lastActivityAt'].includes(sort);
 
     if (!needsDerivedRows) {
       const [contacts, total] = await Promise.all([
         prisma.contact.findMany({
           where,
-          include: {
-            orders: ORDER_SELECT,
-            rsvps: { where: { status: 'GOING' }, select: { status: true } },
-            applications: {
-              where: { status: { not: 'DRAFT' }, form: { eventId: null } },
-              select: {
-                id: true,
-                status: true,
-                form: { select: { id: true, name: true, eventId: true } },
-              },
-            },
-          },
+          include: ROW_INCLUDE,
           orderBy: databaseOrder,
           skip: (page - 1) * limit,
           take: limit,
@@ -275,20 +306,9 @@ class CustomerService {
     // query; compute them before slicing so pagination totals stay correct.
     const contacts = await prisma.contact.findMany({
       where,
-      include: {
-        orders: ORDER_SELECT,
-        rsvps: { where: { status: 'GOING' }, select: { status: true } },
-        applications: {
-          where: { status: { not: 'DRAFT' }, form: { eventId: null } },
-          select: {
-            id: true,
-            status: true,
-            form: { select: { id: true, name: true, eventId: true } },
-          },
-        },
-      },
+      include: ROW_INCLUDE,
     });
-    const ordered = filterAndSortCustomers(contacts, { segment, sort, direction });
+    const ordered = filterAndSortCustomers(contacts, { sort, direction });
     const total = ordered.length;
     const data = ordered.slice((page - 1) * limit, page * limit);
 
@@ -429,7 +449,7 @@ class CustomerService {
         event: a.event,
         // Standing forms: link to Content › Forms submission detail
         detailUrl: isStanding
-          ? `/admin/content/forms/${a.formId}/submissions/${a.id}`
+          ? `/admin/contacts/forms/${a.formId}/submissions/${a.id}`
           : `/admin/events/${a.eventId}/applications/${a.id}`,
       };
     });
@@ -455,7 +475,7 @@ class CustomerService {
       })));
 
     const navigationContacts = await prisma.contact.findMany({
-      where: customerWhere(organizationId, listOptions),
+      where: customerWhere(organizationId, listOptions, await listWhereFor(organizationId, listOptions.list)),
       include: { orders: ORDER_SELECT },
     });
     const navigation = customerNavigation(navigationContacts, contactId, listOptions);

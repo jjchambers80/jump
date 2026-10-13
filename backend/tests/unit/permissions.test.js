@@ -33,9 +33,9 @@ describe('permission defaults', () => {
     expect([...granted].sort()).toEqual([...FEATURE_KEYS, ...ACTION_KEYS].sort());
   });
 
-  test('ORGANIZER has every feature and only the event-configuration actions (050-E)', async () => {
+  test('ORGANIZER has every feature, the event-configuration actions (050-E) and contact lists (055)', async () => {
     const { granted } = await permissionService.effective('ORGANIZER');
-    expect([...granted].sort()).toEqual([...FEATURE_KEYS, 'addOns.manage', 'applications.forms'].sort());
+    expect([...granted].sort()).toEqual([...FEATURE_KEYS, 'addOns.manage', 'applications.forms', 'customers.lists'].sort());
   });
 
   test('a non-member gets nothing; SYSTEM_ADMIN gets everything', async () => {

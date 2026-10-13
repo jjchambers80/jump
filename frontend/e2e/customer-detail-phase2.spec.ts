@@ -29,11 +29,11 @@ const baseCustomer = {
   totalSpent: 42,
   totalRefunded: 0,
   lastActivityAt: '2026-09-10T12:00:00.000Z',
-  segment: 'Repeat',
   prevId: 'customer-prev',
   nextId: 'customer-next',
   orders: [],
   applications: [],
+  rsvps: [],
   upcomingTickets: [
     { id: 'ticket-1', ticketNumber: 1, priceTierName: 'Weekend', status: 'VALID', redeemedAt: null, event: { id: 'event-a', name: 'Autumn Expo', date: '2099-10-01T16:00:00.000Z' } },
     { id: 'ticket-2', ticketNumber: 2, priceTierName: 'Weekend', status: 'REDEEMED', redeemedAt: '2099-09-30T17:00:00.000Z', event: { id: 'event-a', name: 'Autumn Expo', date: '2099-10-01T16:00:00.000Z' } },
@@ -83,7 +83,7 @@ async function setup(page: Page, baseURL: string, user: StaffUser, timeline: unk
   await mockTimeline(page, timeline);
 }
 
-test('renders newest-first timeline, segment, grouped upcoming tickets, and stable navigation links', async ({ page, baseURL }) => {
+test('renders newest-first timeline, grouped upcoming tickets, and stable navigation links', async ({ page, baseURL }) => {
   await setup(page, baseURL!, { id: 'admin-1', email: 'admin@test.com', role: 'ADMIN' }, {
     items: [
       { id: 'event-new', kind: 'EVENT', type: 'ORDER_PAID', text: 'Order #JMP-9 was paid', createdAt: '2026-09-12T12:00:00.000Z' },
@@ -93,9 +93,8 @@ test('renders newest-first timeline, segment, grouped upcoming tickets, and stab
     nextCursor: null,
   });
 
-  await page.goto(`/admin/customers/${CUSTOMER_ID}?search=ada&sort=spent&direction=desc&segment=Repeat`);
+  await page.goto(`/admin/contacts/${CUSTOMER_ID}?search=ada&sort=spent&direction=desc&scope=customers`);
 
-  await expect(page.getByTestId('customer-segment')).toHaveText('Repeat');
   const timeline = page.getByTestId('customer-timeline');
   await expect(timeline).toContainText('Order #JMP-9 was paid');
   await expect(timeline).toContainText('Customer requested aisle seating.');
@@ -112,9 +111,9 @@ test('renders newest-first timeline, segment, grouped upcoming tickets, and stab
   await expect(tickets).toContainText('1 voided');
   await expect(tickets).toContainText('Checked in Sep 30, 2099');
 
-  await expect(page.getByRole('link', { name: 'Previous customer' })).toHaveAttribute('href', '/admin/customers/customer-prev?search=ada&sort=spent&direction=desc&segment=Repeat');
-  await expect(page.getByRole('link', { name: 'Next customer' })).toHaveAttribute('href', '/admin/customers/customer-next?search=ada&sort=spent&direction=desc&segment=Repeat');
-  await expect(page.locator('a[href*="search=ada"]', { hasText: 'Customers' })).toHaveAttribute('href', '/admin/customers?search=ada&sort=spent&direction=desc&segment=Repeat');
+  await expect(page.getByRole('link', { name: 'Previous contact' })).toHaveAttribute('href', '/admin/contacts/customer-prev?search=ada&sort=spent&direction=desc&scope=customers');
+  await expect(page.getByRole('link', { name: 'Next contact' })).toHaveAttribute('href', '/admin/contacts/customer-next?search=ada&sort=spent&direction=desc&scope=customers');
+  await expect(page.locator('a[href*="search=ada"]', { hasText: 'Contacts' })).toHaveAttribute('href', '/admin/contacts?search=ada&sort=spent&direction=desc&scope=customers');
 });
 
 test('renders disabled previous and next controls at navigation boundaries', async ({ page, baseURL }) => {
@@ -126,13 +125,13 @@ test('renders disabled previous and next controls at navigation boundaries', asy
     { ...baseCustomer, prevId: null, nextId: null }
   );
 
-  await page.goto(`/admin/customers/${CUSTOMER_ID}?segment=Repeat&sort=name&direction=asc`);
+  await page.goto(`/admin/contacts/${CUSTOMER_ID}?scope=customers&sort=name&direction=asc`);
 
-  const navigation = page.getByRole('navigation', { name: 'Customer navigation' });
+  const navigation = page.getByRole('navigation', { name: 'Contact navigation' });
   await expect(navigation.getByText('Previous', { exact: true })).toHaveAttribute('aria-disabled', 'true');
   await expect(navigation.getByText('Next', { exact: true })).toHaveAttribute('aria-disabled', 'true');
-  await expect(navigation.getByRole('link', { name: 'Previous customer' })).toHaveCount(0);
-  await expect(navigation.getByRole('link', { name: 'Next customer' })).toHaveCount(0);
+  await expect(navigation.getByRole('link', { name: 'Previous contact' })).toHaveCount(0);
+  await expect(navigation.getByRole('link', { name: 'Next contact' })).toHaveCount(0);
 });
 
 test('creates a plain-text comment and allows its author to delete it', async ({ page, baseURL }) => {
@@ -150,7 +149,7 @@ test('creates a plain-text comment and allows its author to delete it', async ({
     await route.fulfill({ status: 204 });
   });
 
-  await page.goto(`/admin/customers/${CUSTOMER_ID}`);
+  await page.goto(`/admin/contacts/${CUSTOMER_ID}`);
   const submit = page.getByRole('button', { name: 'Add comment' });
   await expect(submit).toBeDisabled();
   await page.getByLabel('Add a comment').fill('Called customer about pickup.');
@@ -177,7 +176,7 @@ test('shows comment errors, hides unauthorized delete, and loads the next cursor
   });
   await page.route(`${API}/admin/customers/${CUSTOMER_ID}/comments`, (route) => route.fulfill(json({ message: 'Comment could not be saved' }, 500)));
 
-  await page.goto(`/admin/customers/${CUSTOMER_ID}`);
+  await page.goto(`/admin/contacts/${CUSTOMER_ID}`);
   await expect(page.getByRole('button', { name: 'Delete comment' })).toHaveCount(0);
   await page.getByLabel('Add a comment').fill('This save will fail');
   await page.getByRole('button', { name: 'Add comment' }).click();

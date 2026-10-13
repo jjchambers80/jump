@@ -3,6 +3,8 @@
 **Status**: Implemented — all three phases 2026-09-18 (organization-wide submissions list and shared table; Applications tab with forms across events and form templates; tags and on-site check-in). Spec: `specs/019-participants/`.
 **Last Updated**: 2026-10-11
 
+> **Spec 056 (2026-10-13) removed form templates entirely** (UI, routes, `ApplicationFormTemplate`, `createdFromTemplateId`). Everything below about templates is history.
+
 > **Spec 037 (2026-09-26) changed this.** There is no Participants page any more: `/admin/participants*` 308 to `/admin/events`, and each event's **Applications** tab (inside the event workspace) is the only review list. An applicant's history across events lives on their Customer detail page. Templates are picked, edited and deleted from a form's **New form › Start from** picker; the template editor moved to `/admin/events/templates/:templateId`. The org-wide API routes (`/admin/applications*`, `/admin/application-forms`, `/admin/application-templates*`) stay — admin search and the template picker use them. The rest of this page describes the shared table and templates as built in spec 019; read "`/admin/participants`" below as history.
 
 ## Overview
@@ -96,7 +98,7 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,shift,shiftMode,q,sort,page,pageSize`) | organizer+ |
+| GET | `/admin/applications` (`event,form,status,payment,tier,addOn,q,sort,page,pageSize`) | organizer+ |
 | GET | `/admin/applications/summary`, `/admin/applications/export.csv` | organizer+ |
 | POST | `/admin/applications/bulk` `{ ids, decision, note? }` | organizer+ |
 | GET | `/admin/application-forms` | organizer+ |
@@ -110,14 +112,13 @@ The organizer daily digest (spec 011 phase 3) links here: per event `/admin/part
 
 `applications.forms` = ADMIN + ORGANIZER by default (spec 050-E); standing forms use `applications.standingForms` (ADMIN). See [Roles & permissions](rbac.md).
 
-**Shift roster (spec 050-S):** `shift=<id>` matches applications that picked or were assigned the shift; `shiftMode=assigned` only assigned picks (the day-of roster). Rows carry `shifts: [{ id, name, assigned }]`; the table gets a Shift filter (options from the forms' shifts, narrowed by Form; `listFormsInScope` returns VOLUNTEER shifts so the org-wide mount fills too) and a Shifts column; the CSV honours the filter. Extends the one `SubmissionsTable`, never a fork (gotcha 18).
 
 ## Testing
 
 - `backend/tests/contract/participants.test.js` — scope matrix, `q` per field + id tail, every sort, `event` filter 404, filters compose, paging, bulk across two events with a PAID approve refused, CSV columns for member and SYSTEM_ADMIN, route ordering, index (`EXPLAIN` with `enable_seqscan = off`).
 - `frontend/e2e/participants.spec.ts` — sidebar entry, list with two events, status header sort, event filter narrowing the Form options, search by short id, `⋯` → Waitlist round-trip (row + chips updated, no reload), bulk to the org route, saved views under `jump.participants.views.org`, per-event mount without Event filter, Applications tab; axe on both mounts.
 - `backend/tests/contract/applicationTemplates.test.js` — save-as (snapshot shape, 409, replace), RBAC matrix incl. other org / no membership / SYSTEM_ADMIN with X-Jump-Org, validation parity (one bad value per rule), create-from (settings, tiers, questions, back-reference, body override, kind mismatch, other org, missing), template edits and deletion leave created forms alone, `copyForms` through `_materialise`.
-- `frontend/e2e/participants-templates.spec.ts` — Templates section, New application (event filtering, same-kind templates, create-from lands in the editor with the copied questions), Save as template (conflict, new, replace), template editor (settings / question / tier edits kept local until Save, PUT payload, unsaved guard), ORGANIZER edits too (050-E), New template + Delete.
+- `frontend/e2e/participants-templates.spec.ts` — Templates section, New application (event filtering, same-kind templates, create-from lands in the editor with the copied questions), Save as template checkbox on Review (name clash, then new), template editor (settings / question / tier edits kept local until Save, PUT payload, unsaved guard), ORGANIZER edits too (050-E), New template + Delete.
 - `backend/tests/contract/participantsTags.test.js` — normalisation, limits, unknown fields, `tag` filter, `q` on a tag, distinct tags per scope (org / event / other org / SYSTEM_ADMIN / no membership), check-in stamp / keep / clear, 409 on non-approved, CSV columns.
 - `frontend/e2e/participants.spec.ts` (phase 3 tests) — Edit tags with suggestions from ⋯, Tag filter, search a tag, check-in ticks only on approved rows, optimistic tick persists on reload; detail page tags + check-in.
 - `backend/tests/contract/participantsPinned.test.js` — rows carry pinned answers only, cap on add / update, unpin frees, archive frees, `pinnedQuestions`, template round-trip + cap + create-from. `frontend/e2e/participants.spec.ts` (pinned test) and `participants-templates.spec.ts` (editor toggle / cap).
