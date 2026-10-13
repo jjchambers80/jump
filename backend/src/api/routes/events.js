@@ -28,6 +28,7 @@ import applicationFormService from '../../services/ApplicationFormService.js';
 import eventGuestService from '../../services/EventGuestService.js';
 import { findByPublicIdentifier } from '../../utils/publicIdentifier.js';
 import { publicOrganizationIdentity } from './organizations.js';
+import eventCancellationService from '../../services/EventCancellationService.js';
 
 // ── Public routes (mounted at /events) ──
 const publicRouter = express.Router();
@@ -286,6 +287,23 @@ const lifecycle = (run) => async (req, res, next) => {
     next(error);
   }
 };
+
+// Spec 054-C: the cancel dialog's counts and email preview (events.cancel),
+// the progress panel (any staff), and Retry / Mark handled on a failed refund.
+orgRouter.get('/:eventId/cancellation-preview', ...staffEvent, requirePermission('events.cancel'), lifecycle((orgId, eventId) => eventCancellationService.preview(orgId, eventId)));
+orgRouter.post('/:eventId/cancellation-preview/email', ...staffEvent, requirePermission('events.cancel'), validateCancelEvent, lifecycle((orgId, eventId, req) =>
+  eventCancellationService.previewEmail(orgId, eventId, { mode: req.body?.mode, message: req.body?.message })
+));
+orgRouter.get('/:eventId/cancellation', ...staffEvent, lifecycle(async (orgId, eventId) => ({ cancellation: await eventCancellationService.status(orgId, eventId) })));
+orgRouter.post('/:eventId/cancellation/items/:itemId/retry', ...staffEvent, requirePermission('events.cancel'), requirePermission('orders.refund'), requireRecentAuth, lifecycle(async (orgId, eventId, req) => {
+  await eventCancellationService.retry(orgId, eventId, req.params.itemId);
+  eventService._wakeCancellationSweep();
+  return { cancellation: await eventCancellationService.status(orgId, eventId) };
+}));
+orgRouter.post('/:eventId/cancellation/items/:itemId/handled', ...staffEvent, requirePermission('events.cancel'), lifecycle(async (orgId, eventId, req) => {
+  await eventCancellationService.markHandled(orgId, eventId, req.params.itemId);
+  return { cancellation: await eventCancellationService.status(orgId, eventId) };
+}));
 
 /** POST .../events/:eventId/unpublish: PUBLISHED → DRAFT; 409 UNPUBLISH_BLOCKED + details.reasons */
 orgRouter.post('/:eventId/unpublish', ...staffEvent, lifecycle((orgId, eventId) => eventService.unpublishEvent(orgId, eventId)));

@@ -42,6 +42,8 @@ const { prisma } = await import('@jump/db');
 const { default: paymentService } = await import('../../src/services/PaymentService.js');
 const { default: refundService } = await import('../../src/services/RefundService.js');
 const { default: eventCancellationService } = await import('../../src/services/EventCancellationService.js');
+const { default: orderService } = await import('../../src/services/OrderService.js');
+const orderServiceRows = async (contactId) => (await orderService.getOrdersForContact(contactId)).data;
 
 const TAG = `evt-sweep-${Date.now()}`;
 const contact = (n) => ({ email: `buyer${n}@${TAG}.test`, firstName: `Buyer${n}`, lastName: 'Test' });
@@ -104,6 +106,23 @@ describe('Refund sweep of a cancelled paid event (spec 054-B)', () => {
     await prisma.venue.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: org.id } }).catch(() => {});
     await cleanupStaff(emails);
+  });
+
+  const api = (method, path) => request(app)[method](`/organizations/${org.id}/events/${event.id}${path}`).set('Authorization', `Bearer ${adminToken}`);
+
+  it('before cancelling: the dialog counts paid orders, tickets and money, and previews the buyer email (054-C)', async () => {
+    const res = await api('get', '/cancellation-preview');
+    expect(res.status).toBe(200);
+    const paid = [orders.ok, orders.disputed, orders.crashed, orders.broke];
+    expect(res.body).toMatchObject({ status: 'PUBLISHED', admissionMode: 'TICKETED', orders: 4, tickets: 4, openCheckouts: 0, vendorsPaid: 0 });
+    expect(res.body.collected).toBeCloseTo(paid.reduce((sum, o) => sum + Number(o.totalAmount), 0), 2);
+    const email = await api('post', '/cancellation-preview/email').send({ mode: 'REFUND_ALL', message: 'Flood <b>news</b>' });
+    expect(email.status).toBe(200);
+    expect(email.body.subject).toBe(`Event Cancelled — ${event.name} (ORD-SAMPLE)`);
+    expect(email.body.html).toContain('Refunded $52.50');
+    expect(email.body.html).toContain('Flood &lt;b&gt;news&lt;/b&gt;');
+    expect((await api('post', '/cancellation-preview/email').send({ mode: 'MANUAL' })).body.html).toContain('will contact you');
+    expect((await api('get', '/cancellation')).body).toEqual({ cancellation: null });
   });
 
   it('cancels with REFUND_ALL: one PENDING item per paid order, the cancellation open', async () => {
@@ -190,5 +209,46 @@ describe('Refund sweep of a cancelled paid event (spec 054-B)', () => {
     await eventCancellationService.sweep({ now: minutesFromNow(30) });
     expect(refundsFor('broke')).toHaveLength(3);
     expect(sentEmails).toHaveLength(0);
+  });
+
+  it('the panel shows the progress and the failed refund; Retry needs a step-up and requeues it; Mark handled settles it and tells the buyer (054-C)', async () => {
+    const status = (await api('get', '/cancellation')).body.cancellation;
+    expect(status).toMatchObject({ mode: 'REFUND_ALL', total: 4, counts: { pending: 0, refunded: 2, skipped: 1, failed: 1 } });
+    expect(status.refundedTotal).toBeCloseTo(Number(orders.ok.totalAmount) + Number(orders.crashed.totalAmount), 2);
+    expect(status.failed).toEqual([expect.objectContaining({ orderId: orders.broke.id, orderRef: orders.broke.orderRef, error: expect.stringContaining('Insufficient funds') })]);
+    const failedId = status.failed[0].id;
+
+    const noProof = await api('post', `/cancellation/items/${failedId}/retry`).send({});
+    expect(noProof.status).toBe(401);
+    const retried = await api('post', `/cancellation/items/${failedId}/retry`).set(...(await reauthHeader(adminToken))).send({});
+    expect(retried.status).toBe(200);
+    expect(retried.body.cancellation).toMatchObject({ completedAt: null, counts: { pending: 1, failed: 0 } });
+    expect(await item('broke')).toMatchObject({ status: 'PENDING', attempts: 0, error: null });
+
+    // Still broke: three more tries and it is FAILED again.
+    await eventCancellationService.sweep();
+    await eventCancellationService.sweep({ now: minutesFromNow(2) });
+    await eventCancellationService.sweep({ now: minutesFromNow(5) });
+    expect(await item('broke')).toMatchObject({ status: 'FAILED', attempts: 3 });
+    expect(refundsFor('broke')).toHaveLength(6);
+    // Only a failed item can be retried or marked handled.
+    expect((await api('post', `/cancellation/items/${(await item('ok')).id}/handled`).send({})).status).toBe(409);
+
+    sentEmails.length = 0;
+    const handled = await api('post', `/cancellation/items/${failedId}/handled`).send({});
+    expect(handled.status).toBe(200);
+    expect(handled.body.cancellation.counts).toMatchObject({ failed: 0, skipped: 2 });
+    expect(handled.body.cancellation.completedAt).not.toBeNull();
+    expect(await item('broke')).toMatchObject({ status: 'SKIPPED', skippedReason: 'HANDLED_BY_STAFF' });
+    const told = mailTo(5);
+    expect(told).toHaveLength(1);
+    expect(told[0].text).toContain('will contact you about your order');
+    // The summary went out when the retried refund failed again; handling it later sends no second one.
+    expect(sentEmails.filter((m) => m.to.includes(emails[0]))).toHaveLength(0);
+  });
+
+  it('the buyer account labels the cancelled order with what went back', async () => {
+    const rows = await orderServiceRows(orders.ok.contactId);
+    expect(rows.find((r) => r.id === orders.ok.id)).toMatchObject({ eventCancelled: true, refunded: Number(orders.ok.totalAmount) });
   });
 });

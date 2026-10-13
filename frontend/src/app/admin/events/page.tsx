@@ -11,7 +11,7 @@ import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
-import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
+import { ReauthProvider } from '@/app/admin/account/useReauth';
 import EventsPageHeader from '@/components/events/EventsPageHeader';
 import EventListCard, { type AdminEvent } from '@/components/events/EventListCard';
 import EventsPagination from '@/components/events/EventsPagination';
@@ -49,7 +49,6 @@ function EventsListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedOrgId } = useOrg();
-  const { withReauth } = useReauth();
   const { status: statusFilter, q: searchQ, category, sort, page } = readUrlParams(searchParams);
 
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -63,8 +62,6 @@ function EventsListContent() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<{ id: string; name: string } | null>(null);
   const [cancelling, setCancelling] = useState<{ id: string; name: string } | null>(null);
-  const [cancelBusy, setCancelBusy] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Build the URL-preserving params for API calls and router updates.
@@ -195,22 +192,6 @@ function EventsListContent() {
     }
   };
 
-  const handleCancelConfirm = async () => {
-    if (!selectedOrgId || !cancelling) return;
-    try {
-      setCancelBusy(true);
-      setCancelError(null);
-      await withReauth(() => api.post(`/organizations/${selectedOrgId}/events/${cancelling.id}/cancel`, {}));
-      setCancelling(null);
-      setCancelBusy(false);
-      await fetchEvents();
-      await fetchSummary();
-    } catch (err: any) {
-      if (!isReauthCancelled(err)) setCancelError(err.message || 'Failed to cancel event');
-      setCancelBusy(false);
-    }
-  };
-
   const toggleExpand = (eventId: string) => {
     setExpandedEventId(expandedEventId === eventId ? null : eventId);
   };
@@ -300,11 +281,15 @@ function EventsListContent() {
 
       {cancelling && (
         <CancelEventDialog
+          orgId={selectedOrgId!}
+          eventId={cancelling.id}
           eventName={cancelling.name}
-          busy={cancelBusy}
-          error={cancelError}
-          onConfirm={handleCancelConfirm}
-          onClose={() => { setCancelling(null); setCancelError(null); }}
+          onCancelled={() => {
+            setCancelling(null);
+            void fetchEvents();
+            void fetchSummary();
+          }}
+          onClose={() => setCancelling(null)}
         />
       )}
 

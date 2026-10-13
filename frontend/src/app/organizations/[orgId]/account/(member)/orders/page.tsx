@@ -27,6 +27,9 @@ interface OrderSummary {
   totalAmount: number;
   status: string;
   statusDetail?: { label: string } | null;
+  /** Spec 054-C: the order's event was cancelled; `refunded` is what went back. */
+  eventCancelled?: boolean;
+  refunded?: number;
   createdAt: string;
 }
 
@@ -82,6 +85,12 @@ export default function AccountOrdersPage() {
                     <span className="mt-1 block text-xs text-gray-500 dark:text-slate-400">
                       <span className="font-mono">{o.orderRef}</span>
                       {o.statusDetail ? ` · ${o.statusDetail.label}` : ''}
+                      {o.eventCancelled && (
+                        <span className="font-semibold text-red-700 dark:text-red-300">
+                          {' · Cancelled'}
+                          {o.refunded ? ` · Refunded $${o.refunded.toFixed(2)}` : ''}
+                        </span>
+                      )}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">

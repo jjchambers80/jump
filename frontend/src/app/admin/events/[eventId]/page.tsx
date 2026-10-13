@@ -12,12 +12,13 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, ExternalLink, Lock, MapPin, Pencil, CalendarDays } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg } from '@/components/OrgContext';
-import { ReauthProvider, isReauthCancelled, useReauth } from '@/app/admin/account/useReauth';
+import { ReauthProvider } from '@/app/admin/account/useReauth';
 import { imageVariantUrl } from '@/lib/assets';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
 import { EventStatusPill, Perforation } from '@/components/events/EventEditSummary';
 import EventActionsMenu from '@/components/events/EventActionsMenu';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
+import CancellationPanel from '@/components/events/CancellationPanel';
 import PublishBlockers from '@/components/events/PublishBlockers';
 import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
@@ -49,7 +50,6 @@ function EventDetailsContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const { withReauth } = useReauth();
   const eventId = params.eventId as string;
   const { selectedOrgId, loading: orgLoading } = useOrg();
   const orgId = selectedOrgId || searchParams.get('orgId');
@@ -63,8 +63,6 @@ function EventDetailsContent() {
   const [blockers, setBlockers] = useState<ReadinessItem[]>([]);
   const [duplicating, setDuplicating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [cancelBusy, setCancelBusy] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
   // Spec 050-P: the special guest lineup, for its summary card ('error' when it failed to load).
   const [guests, setGuests] = useState<AdminEventGuest[] | 'error' | null>(null);
 
@@ -129,22 +127,6 @@ function EventDetailsContent() {
       else setError(err?.message || 'Failed to publish the event');
     } finally {
       setPublishing(false);
-    }
-  };
-
-  const cancelEvent = async () => {
-    if (!orgId) return;
-    setCancelBusy(true);
-    setCancelError(null);
-    try {
-      await withReauth(() => api.post(`/organizations/${orgId}/events/${eventId}/cancel`, {}));
-      setCancelling(false);
-      setNotice('Event cancelled.');
-      await load();
-    } catch (err: any) {
-      if (!isReauthCancelled(err)) setCancelError(err?.message || 'Failed to cancel the event');
-    } finally {
-      setCancelBusy(false);
     }
   };
 
@@ -275,6 +257,8 @@ function EventDetailsContent() {
         />
       )}
 
+      {cancelled && ticketed && <CancellationPanel key={event.status} orgId={orgId} eventId={eventId} />}
+
       {/* Always mounted, so a notice set on arrival (back from the wizard) is announced. */}
       <div role="status">
         {(notice || error) && (
@@ -344,11 +328,15 @@ function EventDetailsContent() {
       )}
       {cancelling && (
         <CancelEventDialog
+          orgId={orgId}
+          eventId={eventId}
           eventName={event.name}
-          busy={cancelBusy}
-          error={cancelError}
-          onConfirm={cancelEvent}
-          onClose={() => { setCancelling(false); setCancelError(null); }}
+          onCancelled={(mode) => {
+            setCancelling(false);
+            setNotice(mode === 'REFUND_ALL' ? 'Event cancelled. Refunds have started.' : 'Event cancelled.');
+            void load();
+          }}
+          onClose={() => setCancelling(false)}
         />
       )}
     </PageFrame>

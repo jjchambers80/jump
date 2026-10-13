@@ -361,6 +361,9 @@ test('cancel requires dialog confirm (not window.confirm)', async ({ page }) => 
     cancelCalled = true;
     return route.fulfill(json({ status: 'CANCELLED' }));
   });
+  await page.route(`${API}/organizations/${ORG_ID}/events/evt-1/cancellation-preview`, (route) =>
+    route.fulfill(json({ status: 'PUBLISHED', admissionMode: 'TICKETED', orders: 0, tickets: 0, collected: 0, openCheckouts: 0, vendorsPaid: 0, rsvps: 0 }))
+  );
 
   // Open the ... menu on the PUBLISHED event (evt-1) and click Cancel event...
   const card = page.getByRole('article', { name: 'Summer Music Festival' });
@@ -368,10 +371,11 @@ test('cancel requires dialog confirm (not window.confirm)', async ({ page }) => 
   await page.getByRole('menuitem', { name: /Cancel event/ }).click();
 
   // Dialog should appear (not window.confirm)
-  const dialog = page.getByRole('dialog', { name: 'Cancel event' });
+  const dialog = page.getByRole('dialog', { name: 'Cancel Summer Music Festival?' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText(/Are you sure/)).toBeVisible();
-  await expect(dialog).toContainText('Summer Music Festival');
+  await expect(dialog.getByText('No paid orders yet.')).toBeVisible();
+  // Nothing happens until the event name is typed.
+  await expect(dialog.getByRole('button', { name: 'Cancel event' })).toBeDisabled();
 
   // Click "Keep event" to dismiss
   await dialog.getByRole('button', { name: 'Keep event' }).click();
@@ -386,11 +390,15 @@ test('a refused cancel shows its message inside the dialog', async ({ page }) =>
   await page.route(`${API}/organizations/${ORG_ID}/events/evt-1/cancel`, (route) =>
     route.fulfill(json({ message: 'Cannot cancel event with status CANCELLED.' }, 409))
   );
+  await page.route(`${API}/organizations/${ORG_ID}/events/evt-1/cancellation-preview`, (route) =>
+    route.fulfill(json({ status: 'PUBLISHED', admissionMode: 'TICKETED', orders: 0, tickets: 0, collected: 0, openCheckouts: 0, vendorsPaid: 0, rsvps: 0 }))
+  );
 
   const card = page.getByRole('article', { name: 'Summer Music Festival' });
   await card.getByRole('button', { name: /More actions for Summer Music Festival/ }).click();
   await page.getByRole('menuitem', { name: /Cancel event/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Cancel event' });
+  const dialog = page.getByRole('dialog', { name: 'Cancel Summer Music Festival?' });
+  await dialog.getByLabel('Type Summer Music Festival to confirm').fill('Summer Music Festival');
   await dialog.getByRole('button', { name: 'Cancel event' }).click();
   await expect(dialog.getByRole('alert')).toContainText(/Cannot cancel/);
 });

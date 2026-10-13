@@ -12,6 +12,8 @@ import { formatEventTime } from '@/lib/eventTime';
 
 export interface BuyerTicket {
   id: string;
+  /** Spec 054-C: the event was cancelled. */
+  eventCancelled?: boolean;
   ticketNumber: number;
   eventId: string;
   eventName: string;
@@ -116,7 +118,9 @@ export default function TicketStubs({
           const tile = dateTile(t.eventDate, t.eventTimezone);
           const time = formatEventTime(t.eventDate, t.eventTimezone);
           const terms = refundTerms(t);
-          const canRefund = t.refundPolicy ? t.refundPolicy.eligible : Boolean(t.isRefundable) && t.status === 'VALID';
+          const canRefund = !t.eventCancelled && (t.refundPolicy ? t.refundPolicy.eligible : Boolean(t.isRefundable) && t.status === 'VALID');
+          // Spec 054-C: a refund voids the ticket, so a void ticket of a cancelled event was refunded.
+          const label = t.eventCancelled ? (t.status === 'VOIDED' ? 'Cancelled · Refunded' : 'Cancelled') : STATUS_LABEL[t.status] ?? t.status;
           const faded = muted || t.status !== 'VALID';
           return (
             <li key={t.id} className="event-stub-shadow" data-testid="account-ticket">
@@ -173,15 +177,17 @@ export default function TicketStubs({
                       </button>
                     )}
                     {/* An unused ticket to an event that is over is not "Valid" in any useful sense. */}
-                    {!(muted && t.status === 'VALID') && (
+                    {(t.eventCancelled || !(muted && t.status === 'VALID')) && (
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        t.status === 'VALID'
+                        t.eventCancelled
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                          : t.status === 'VALID'
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                           : 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
                       }`}
                     >
-                      {STATUS_LABEL[t.status] ?? t.status}
+                      {label}
                     </span>
                     )}
                   </div>

@@ -251,6 +251,8 @@ class TicketService {
           timezone: ticket.event.venue?.timezone ?? null,
           venue: venueStr,
         },
+        // Spec 054-C: the buyer account shows "Cancelled" on a ticket to a cancelled event.
+        eventCancelled: ticket.event.status === 'CANCELLED',
       };
     });
   }
