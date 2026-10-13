@@ -75,6 +75,29 @@ export const NOTIFICATIONS = [
     },
   },
   {
+    key: 'order.event_cancelled',
+    group: 'orders',
+    label: 'Event cancelled',
+    when: 'Sent to every buyer when you cancel a paid event: after the refund when you refund every order, at once when you handle refunds yourself.',
+    mergeFields: [
+      ['buyer.firstName', 'Buyer first name ("there" when unknown)'],
+      ['buyer.lastName', 'Buyer last name'],
+      ['event.name', 'Event name'],
+      ['event.date', 'Event date and time in the venue time zone'],
+      ['order.ref', 'Order reference'],
+      ['refund.amount', 'Amount refunded, e.g. $52.50 (empty when you handle refunds yourself)'],
+      ['refund.issued', 'Section: shown when the order was refunded, e.g. {{#refund.issued}}…{{/refund.issued}}'],
+      ['refund.manual', 'Section: shown when you handle refunds yourself, e.g. {{#refund.manual}}…{{/refund.manual}}'],
+      ['organization.name', 'Your store name'],
+    ],
+    blocks: ['Your note from the cancel dialog, when you write one', 'Order summary: tickets and total', 'Refund amount and when it reaches the card, when the order was refunded'],
+    defaults: {
+      subject: 'Event Cancelled — {{event.name}} ({{order.ref}})',
+      body:
+        "Hi {{buyer.firstName}},\n\nWe're sorry: {{event.name}} on {{event.date}} has been cancelled.\n\n{{#refund.issued}}We've refunded {{refund.amount}} for your order {{order.ref}}. Your tickets no longer work.{{/refund.issued}}{{#refund.manual}}{{organization.name}} will contact you about your order {{order.ref}}.{{/refund.manual}}\n\nIf you have questions, reply to this email.",
+    },
+  },
+  {
     key: 'rsvp.confirmation',
     group: 'rsvps',
     label: 'RSVP confirmation',

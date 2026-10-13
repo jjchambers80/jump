@@ -122,6 +122,12 @@ See `docs/wiki/features/application-orders.md` (and `application-payments-report
 
 See `docs/wiki/features/venue-time-zones.md`.
 
+## Cancelling a paid event (spec 054)
+
+- `EventService.cancelEvent` (ADMIN `events.cancel` + step-up; `REFUND_ALL` also needs `orders.refund`) locks the event, sets `CANCELLED` and creates one `EventCancellationItem` (`PENDING`) per paid ticket order, then expires open Checkout sessions and wakes the sweep.
+- `EventCancellationService.sweep` (timer `EVENT_CANCELLATION_SWEEP_INTERVAL_MS`, default 1 min, through `runAsSystem`) is the only thing that settles items. It claims each with a conditional update on `updatedAt` (safe across instances), refunds through `RefundService.refundOrder` (`REFUND_ALL`; idempotency key `order:<id>:full`), skips free orders, open disputes and orders staff already refunded, and retries a Stripe failure twice with backoff before leaving it `FAILED`. Each buyer gets `order.event_cancelled` once (`notifiedAt`); when nothing is `PENDING` it sets `completedAt` and emails staff one summary.
+- A payment completed after the cancel goes through `settleLatePayment`: always refunded, never retried (`FAILED` for staff), buyer told.
+
 ## Disputes / chargebacks (spec 037)
 
 `DisputeService` is the only writer. Every `charge.dispute.*` event

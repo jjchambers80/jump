@@ -154,7 +154,7 @@ describe('Settings › Notifications (spec 053)', () => {
     const res = await request(app).get('/admin/settings/notifications').set(...auth(adminToken));
     const byGroup = Object.fromEntries(res.body.groups.map((g) => [g.key, g.notifications.map((n) => n.key)]));
     expect(byGroup).toEqual({
-      orders: ['order.confirmation'],
+      orders: ['order.confirmation', 'order.event_cancelled'],
       rsvps: ['rsvp.confirmation', 'rsvp.reminder', 'rsvp.cancelled'],
       applicationPayments: ['application.receipt'],
       applications: ['RECEIVED', 'APPROVED', 'CHOOSE_SPACE', 'REJECTED', 'WAITLISTED', 'WITHDRAWN', 'PAYMENT_DUE', 'ADD_ONS_CHANGED', 'TIER_CHANGED', 'WAIVED', 'OFFLINE_PAID'].map((a) => `application.event.${a}`),

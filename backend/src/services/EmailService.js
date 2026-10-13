@@ -137,6 +137,22 @@ function orderContext(order) {
   };
 }
 
+/**
+ * Merge context for "Event cancelled" (spec 054 `order.event_cancelled`).
+ * `refund`: `issued` (refunded now), `manual` (the store handles it) or
+ * `none` (nothing to refund: a free order, one already refunded, a dispute).
+ */
+function cancelledContext(order, refund, refundAmount) {
+  return {
+    ...orderContext(order),
+    refund: {
+      amount: refund === 'issued' ? `$${Number(refundAmount || 0).toFixed(2)}` : '',
+      issued: refund === 'issued',
+      manual: refund === 'manual',
+    },
+  };
+}
+
 /** Merge context for the RSVP emails (spec 053 `rsvp.*`). */
 function rsvpContext(event, contact, partySize = null) {
   const organization = event.venue?.organization || {};
@@ -208,6 +224,19 @@ const SAMPLES = {
       },
       [{ priceTier: { name: 'General admission' } }, { priceTier: { name: 'General admission' } }],
       { manageTicketsUrl: null, template }
+    ),
+  'order.event_cancelled': (svc, organization, template) =>
+    svc.buildEventCancelled(
+      {
+        id: 'sample',
+        orderRef: 'ORD-SAMPLE',
+        totalAmount: 52.5,
+        quantity: 2,
+        contact: { firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.com' },
+        event: { name: 'Sample event', date: sampleDate(), venue: { timezone: 'America/New_York' } },
+        organization,
+      },
+      { refund: 'issued', refundAmount: 52.5, message: null, template }
     ),
   'rsvp.confirmation': (svc, organization, template) => svc.buildRsvpConfirmation(sampleRsvp(organization), { cancelUrl: SAMPLE_URL, template }),
   'rsvp.reminder': (svc, organization, template) => svc.buildRsvpReminder(sampleRsvp(organization), { cancelUrl: SAMPLE_URL, template }),
@@ -313,6 +342,67 @@ ${manageTicketsHtml}
       `,
     };
     return msg;
+  }
+
+  /**
+   * "Event cancelled" to the buyer of one order (spec 054 `order.event_cancelled`):
+   * the store's wording, then its note from the cancel dialog (escaped plain
+   * text), then the order card and, when refunded, the amount and timing.
+   * @param {{ refund: 'issued'|'manual'|'none', refundAmount?: number|null, message?: string|null, template: { subject: string, body: string } }} options
+   */
+  buildEventCancelled(order, { refund, refundAmount = null, message = null, template }) {
+    const org = order.organization || {};
+    const b = emailBrand(org.brandColor);
+    const context = cancelledContext(order, refund, refundAmount);
+    const textBody = renderTemplate(template.body, context);
+    const note = String(message || '').trim();
+    const refundLine =
+      refund !== 'issued'
+        ? null
+        : `Refunded ${context.refund.amount} to the card you paid with. It usually reaches your account in 5–10 business days.`;
+    const text = [
+      textBody,
+      ...(note ? ['', `A note from ${org.name || 'the organizer'}:`, note] : []),
+      '',
+      `Order ${order.orderRef} · ${context.event.name}${context.event.date ? ` · ${context.event.date}` : ''}`,
+      `Total paid: $${Number(order.totalAmount || 0).toFixed(2)}`,
+      ...(refundLine ? [refundLine] : []),
+    ].join('\n');
+    return {
+      to: [order.contact?.email],
+      from: fromAs(org.name),
+      subject: renderTemplate(template.subject, context),
+      text,
+      ...(org.email && { reply_to: org.email }),
+      html: `
+        <html>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background-color: #fee2e2; padding: 20px; text-align: center;">
+              ${orgLogoHtml(org.logoUrl, org.name)}
+              <h1 style="color: #991b1b;">Event Cancelled</h1>
+            </div>
+            <div style="padding: 20px;">
+              ${textToHtml(textBody, b)}
+              ${note ? `<div style="border-left: 3px solid #e5e7eb; padding: 4px 0 4px 14px; margin: 0 0 16px;"><p style="margin: 0 0 6px; color: #666; font-size: 13px;">A note from ${escapeHtml(org.name || 'the organizer')}</p>${textToHtml(note, b)}</div>` : ''}
+              <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 24px 0;">
+                <h3 style="margin: 0 0 12px;">${escapeHtml(context.event.name)}</h3>
+                ${context.event.date ? `<p style="margin: 4px 0; color: #666; font-size: 14px;">${escapeHtml(context.event.date)}</p>` : ''}
+                ${order.quantity ? `<p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Tickets:</strong> ${Number(order.quantity)}</p>` : ''}
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Total paid:</strong> $${Number(order.totalAmount || 0).toFixed(2)}</p>
+                <p style="margin: 4px 0; color: #666; font-size: 14px;"><strong>Order Ref:</strong> ${escapeHtml(order.orderRef || '')}</p>
+                ${refundLine ? `<p style="margin: 12px 0 0; color: #065f46; font-size: 14px;"><strong>${escapeHtml(refundLine)}</strong></p>` : ''}
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    };
+  }
+
+  /** Sends the buyer's "Event cancelled" email (spec 054); throws so the sweep can retry. */
+  async sendEventCancelled(order, { refund, refundAmount = null, message = null }) {
+    const template = await notificationTemplateService.resolve(order.organization?.id || null, 'order.event_cancelled');
+    await deliver(this.buildEventCancelled(order, { refund, refundAmount, message, template }));
   }
 
   /**
