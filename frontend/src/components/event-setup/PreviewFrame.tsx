@@ -12,6 +12,7 @@ import EventPageView from '@/app/events/[eventId]/EventPageView';
 import { orgFromEvent, type EventPageEvent } from '@/app/events/[eventId]/eventPage';
 import { useOrg } from '@/components/OrgContext';
 import ApplyFormPreview from './ApplyFormPreview';
+import SpacePreview from './SpacePreview';
 import {
   PREVIEW_READY,
   applyOverlay,
@@ -107,6 +108,7 @@ export default function PreviewFrame() {
   const event = applyOverlay(base, stale ? { ...carried, ...message.overlay } : message.overlay);
 
   // Spec 051: an application flow previews the form being built.
+  if (message.form && message.view === 'space') return <SpacePreview event={event} form={message.form} />;
   if (message.form) return <ApplyFormPreview event={event} form={message.form} />;
   return <EventPageView event={event} org={orgFromEvent(event)} preview />;
 }

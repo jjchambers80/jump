@@ -167,6 +167,9 @@ test.describe('desktop', () => {
     // Spec 051: options and pricing are a step of their own, then how vendors choose and pay.
     await expect(heading(page, 'Options and pricing')).toBeFocused();
     await expect(main(page).getByTestId('form-tiers')).toBeVisible();
+    // The preview is what an approved vendor sees when choosing a space, not the form's fields.
+    await expect(formPreview(page).getByText('Add an option to see what vendors choose from.')).toBeVisible(COLD);
+    await expect(formPreview(page).getByRole('button', { name: 'Submit application' })).toHaveCount(0);
     await expect(main(page).getByTestId('form-space-tiers')).toHaveCount(0);
     await next(page).click();
     await expect(heading(page, 'How vendors choose and pay')).toBeFocused();
@@ -254,10 +257,14 @@ test.describe('desktop', () => {
     expect(calls.create).toHaveLength(0);
   });
 
-  test('Options and pricing links to the Collect more step for extras', async ({ page }) => {
-    await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths' })]);
+  test('Options and pricing: the preview is the vendor choosing a space; extras link to Collect more', async ({ page }) => {
+    const tier = { id: 'tier-corner', name: 'Corner booth', description: 'Two sides open', price: 150, quantityTotal: 4, quantityApproved: 0, quantityReserved: 0, remaining: 4, displayOrder: 0, isActive: true, amounts: {}, addOns: [] };
+    await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths', tiers: [tier] })]);
     await page.goto(flowUrl('vendors', 'step=options&form=form-paid'));
     await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`, COLD);
+    await expect(formPreview(page).getByTestId('choose-space')).toBeVisible(COLD);
+    await expect(formPreview(page).getByText('Corner booth').first()).toBeVisible();
+    await expect(formPreview(page).getByLabel('Email')).toHaveCount(0);
   });
 
   test('a volunteer form is always free, then questions', async ({ page }) => {
