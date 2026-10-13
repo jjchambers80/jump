@@ -4,7 +4,7 @@ Admin › **Contacts** (`/admin/contacts`, formerly Customers) is the organizati
 
 - **Contacts**: the list (`app/admin/contacts/page.tsx` → `ContactsList.tsx`) and each contact's detail page (`app/admin/contacts/[contactId]/`).
 - **Lists**: saved groups of contacts (spec 055, §Lists below).
-- **Forms**: standing application forms (spec 044), moved here from Content (`app/admin/contacts/forms/*`).
+- **Forms**: standing application forms (spec 044), moved here from Content (`app/admin/contacts/forms/*`), and below them the organization's application form **Templates** (saved from an event form's Review step; Edit opens `/admin/events/templates/:id`, Delete needs `applications.forms`). See [Application Setup Flows](application-setup-flows.md).
 
 Old URLs 308 in `frontend/next.config.mjs`: `/admin/customers*` → `/admin/contacts*`, `/admin/content/forms*` → `/admin/contacts/forms*`.
 
