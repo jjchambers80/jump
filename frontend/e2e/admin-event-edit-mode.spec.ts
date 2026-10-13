@@ -207,18 +207,12 @@ test.describe('Details links into the wizard', () => {
 });
 
 test.describe('edit mode', () => {
-  test('a form\'s Review step: save-as-template checkbox, View public form', async ({ page }) => {
+  test('a form\'s Review step: View public form, and no template checkbox', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
     await expect(heading(page, 'Review and open')).toBeFocused(COLD);
     await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
-    await expect(main(page).getByLabel('Template name')).toHaveCount(0);
-    await main(page).getByRole('checkbox', { name: /Save this form as a template/ }).check();
-    // Made from a template: updating it is the default, a new one asks for a name.
-    await expect(main(page).getByRole('radio', { name: /Update the/ })).toBeChecked();
-    await expect(main(page).getByLabel('Template name')).toHaveCount(0);
-    await main(page).getByRole('radio', { name: 'Save as a new template' }).check();
-    await expect(main(page).getByLabel('Template name')).toBeVisible();
+    await expect(main(page).getByRole('checkbox', { name: /template/ })).toHaveCount(0);
   });
 
   test('a failed save then "Leave anyway" never says "Saved."; focus returns to the exact control', async ({ page }) => {
@@ -271,11 +265,10 @@ test.describe('edit mode', () => {
     await expect(main(page).getByText('The event is live. Links already shared with the old address stop working.')).toBeVisible();
   });
 
-  test('a form shows its template, its applications and its window in the venue zone', async ({ page }) => {
+  test('a form shows its applications and its window in the venue zone', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
     await expect(heading(page, 'Review and open')).toBeFocused(COLD);
-    await expect(main(page).getByRole('link', { name: 'Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
     await expect(main(page).getByRole('link', { name: 'View applications' })).toHaveAttribute(
       'href',
       `/admin/events/${EVENT_ID}/applications?form=f-volunteers`
@@ -285,23 +278,6 @@ test.describe('edit mode', () => {
     // 14:00 UTC is 10:00 on the venue's clock (New York, EDT).
     await expect(main(page).getByLabel('Opens')).toHaveValue('2031-05-01T10:00');
     await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
-  });
-
-  test('templates stay manageable from Start with: edit, delete, other kinds of forms', async ({ page }) => {
-    const calls = await mockApi(page);
-    await page.goto(flowUrl('volunteers'));
-    await expect(heading(page, 'Start a volunteer application')).toBeFocused(COLD);
-    const dialog = main(page);
-    await expect(dialog.getByRole('link', { name: 'Edit template Crew sign-up' })).toHaveAttribute('href', '/admin/events/templates/tpl-crew');
-    // Other purposes' templates appear on request; a PAID one is another kind and never fits a free-only step.
-    await expect(dialog.getByText('Press desk')).toHaveCount(0);
-    await dialog.getByLabel('Also show templates from other kinds of forms (1)').check();
-    await expect(dialog.getByText('Press desk')).toBeVisible();
-    await expect(dialog.getByText('Makers market')).toHaveCount(0);
-    page.once('dialog', (d) => void d.accept());
-    await dialog.getByRole('button', { name: 'Delete template Crew sign-up' }).click();
-    await expect.poll(() => calls.templateDelete.length).toBe(1);
-    await expect(dialog.getByRole('radio', { name: /Crew sign-up/ })).toHaveCount(0);
   });
 
   test('the progress is the bar alone: no step line, no saved line, no step menu', async ({ page }) => {
@@ -377,7 +353,8 @@ test.describe('redirects to the wizard', () => {
     [`${DETAILS}/edit/details`, '?step=name'],
     [`${DETAILS}/edit/sales#event-admission`, '?step=tickets'],
     [`${DETAILS}/edit/sales`, '?step=tickets'],
-    [`${DETAILS}/applications/forms`, '/vendors?step=start'],
+    // The event already has a live vendor form, so Start opens it (one per purpose).
+    [`${DETAILS}/applications/forms`, '/vendors?step=details&form=f-vendors'],
     [`${DETAILS}/applications/forms/f-volunteers`, '/volunteers?step=details&form=f-volunteers'],
   ];
   for (const [from, path] of cases) {

@@ -30,7 +30,7 @@ describe('createForm starts blank', () => {
 
   afterAll(async () => {
     await prisma.applicationForm.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
-    await prisma.event.deleteMany({ where: { id: eventId } }).catch(() => {});
+    await prisma.event.deleteMany({ where: { venue: { organizationId: org.id } } }).catch(() => {});
     await prisma.venue.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: org.id } }).catch(() => {});
     await cleanupStaff(emails);
@@ -75,5 +75,26 @@ describe('createForm starts blank', () => {
     expect(patched.body.purpose).toBe('PRESS');
     const del = await request(app).delete(`${forms()}/${res.body.id}`).set('Authorization', `Bearer ${token}`);
     expect(del.status).toBeLessThan(300);
+  });
+
+  it('the setup flows keep one live form per purpose on an event', async () => {
+    // A fresh event: the cases above already made a form of every purpose.
+    const venueId = (await prisma.venue.findFirst({ where: { organizationId: org.id }, select: { id: true } })).id;
+    const fresh = await prisma.event.create({ data: { venueId, name: `${TAG} Fair`, date: new Date('2027-10-18T15:00:00Z'), status: 'DRAFT', capacity: 100 } });
+    const create = (body) => request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send(body);
+    const first = await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels', setup: true });
+    expect(first.status).toBe(201);
+    const second = await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels again', setup: true });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('FORM_EXISTS');
+    // Another purpose is fine, and so is the same one once the first is closed.
+    expect((await create({ kind: 'FREE', purpose: 'SPONSOR', name: 'Sponsors', setup: true })).status).toBe(201);
+    await prisma.applicationForm.update({ where: { id: first.body.id }, data: { status: 'CLOSED' } });
+    expect((await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels 2028', setup: true })).status).toBe(201);
+  });
+
+  it('setup is accepted on create only', async () => {
+    const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'Bad flag', setup: 'yes' });
+    expect(res.status).toBe(400);
   });
 });
