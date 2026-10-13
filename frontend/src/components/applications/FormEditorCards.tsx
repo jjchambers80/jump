@@ -15,7 +15,6 @@ import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 // The event setup wizard's floor-map and collect-more steps (spec 050-L).
 import { wizardLink } from '@/components/event-setup/applicationSteps';
-import { useCan } from '@/components/OrgContext';
 import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -137,7 +136,7 @@ export function SettingsCard({
   /** Every change, as the settings half of a definition (template mode) or the live preview (setup flows). */
   onChange?: (settings: Record<string, unknown>) => void;
   /**
-   * Spec 051 setup flows: one step's part of the card (details = name, slug,
+   * Spec 051 setup flows: one step's part of the card (details = name,
    * intro and window; payment = how a PAID form sells; status). Absent = all.
    * Every save still sends the whole card, unchanged parts included.
    */
@@ -150,13 +149,11 @@ export function SettingsCard({
   const show = (part: 'details' | 'payment' | 'status') => !section || section === part;
   const template = mode === 'template';
   const standing = !template && form.eventId === null;
-  const maps = useCan('maps');
   const [state, setState] = useState({
     name: form.name,
     buttonLabel: form.buttonLabel ?? '',
     successMessage: form.successMessage ?? '',
-    slug: form.slug ?? '',
-    intro: form.intro ?? '',
+        intro: form.intro ?? '',
     status: form.status ?? 'DRAFT',
     opensAt: toLocalInput(form.opensAt, form.timezone),
     closesAt: toLocalInput(form.closesAt, form.timezone),
@@ -175,8 +172,7 @@ export function SettingsCard({
       name: form.name,
       buttonLabel: form.buttonLabel ?? '',
       successMessage: form.successMessage ?? '',
-      slug: form.slug ?? '',
-      intro: form.intro ?? '',
+            intro: form.intro ?? '',
       status: form.status ?? 'DRAFT',
       opensAt: toLocalInput(form.opensAt, form.timezone),
       closesAt: toLocalInput(form.closesAt, form.timezone),
@@ -193,6 +189,7 @@ export function SettingsCard({
   const paidSettings = (s: typeof state) =>
     form.kind === 'PAID'
       ? // chargeTiming is legacy (spec 037 phase 5): not shown, sent back unchanged.
+        // spaceSelection is no longer chosen here (TIERS for new forms): sent back unchanged.
         { chargeTiming: s.chargeTiming, feeMode: s.feeMode, taxable: s.taxable, paymentDueDays: Number(s.paymentDueDays), overduePolicy: s.overduePolicy, reserveOnApproval: s.reserveOnApproval, spaceSelection: s.spaceSelection }
       : {};
   const update = (patch: Partial<typeof state>) => {
@@ -208,7 +205,6 @@ export function SettingsCard({
     setSaving(true);
     const body: Record<string, unknown> = {
       name: state.name,
-      slug: state.slug,
       intro: state.intro || null,
       status: state.status,
       opensAt: fromLocalInput(state.opensAt, form.timezone),
@@ -237,12 +233,6 @@ export function SettingsCard({
           <label htmlFor="f-name" className={labelClass}>Name</label>
           <input id="f-name" value={state.name} disabled={!canEdit} onChange={(e) => update({ name: e.target.value })} className={field} />
         </div>
-        {!template && (
-        <div>
-          <label htmlFor="f-slug" className={labelClass}>URL slug</label>
-          <input id="f-slug" value={state.slug} disabled={!canEdit} onChange={(e) => update({ slug: e.target.value })} className={field} />
-        </div>
-        )}
         <div className="sm:col-span-2">
           <label htmlFor="f-intro" className={labelClass}>Intro shown to applicants</label>
           <textarea id="f-intro" rows={3} value={state.intro} disabled={!canEdit} onChange={(e) => update({ intro: e.target.value })} className={field} />
@@ -299,30 +289,6 @@ export function SettingsCard({
             {!section && (
               <p className="text-sm text-gray-600 dark:text-slate-400 sm:col-span-2">
                 Vendors apply without paying. After you approve one, they choose their space and pay.
-              </p>
-            )}
-            <ChoiceGroup
-              legend="How vendors choose their space"
-              name="f-space"
-              value={state.spaceSelection}
-              disabled={!canEdit}
-              onChange={(value) => update({ spaceSelection: value })}
-              options={[
-                { value: 'TIERS', title: 'Pick an option', detail: 'They pay for one of your options. You place them on the floor later.', testId: 'form-space-tiers' },
-                { value: 'MAP', title: 'Pick a spot on the floor map', detail: 'They choose a spot in the category you approve. Spots can have their own price.', testId: 'form-space-map' },
-              ]}
-            />
-            {state.spaceSelection === 'MAP' && (
-              <p className="-mt-2 text-xs text-gray-600 dark:text-slate-400 sm:col-span-2" data-testid="form-space-map-hint">
-                Publish the floor map with a spot for every option before this form opens.
-                {!template && form.eventId && (
-                  <>
-                    {' '}
-                    <Link href={wizardLink(form.eventId, 'floor-map', form.id).href} className="font-medium text-accent-600 underline dark:text-accent-400">
-                      {wizardLink(form.eventId, 'floor-map', form.id).label}
-                    </Link>
-                  </>
-                )}
               </p>
             )}
             <ChoiceGroup

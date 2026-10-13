@@ -231,7 +231,7 @@ class ApplicationFormService {
       if (template.kind !== body.kind) throw new ValidationError(`Template "${template.name}" is for ${template.kind} forms`);
       if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
     }
-    const { templateId: _templateId, ...fields } = body;
+    const { templateId: _templateId, setup, ...fields } = body;
     // No template and no questions (the wizard's blank form): it asks only name
     // and email. Business details are off unless the form charges (a PAID form
     // must collect them). A caller sending its own questions keeps the default.
@@ -243,6 +243,8 @@ class ApplicationFormService {
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     this._assertEventFormRules(data.purpose ?? 'OTHER', body.kind, data.collectBusiness ?? true);
+    // The setup flows (`setup: true`) keep one live form per purpose on an event.
+    if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -835,6 +837,15 @@ class ApplicationFormService {
   _assertEventFormRules(purpose, kind, collectBusiness) {
     this._assertPurposeKind(purpose, kind);
     if (kind === 'PAID' && collectBusiness === false) throw new ValidationError('PAID application forms must collect business details');
+  }
+
+  /** One live (not CLOSED) form per purpose per event: the setup flows edit that one. */
+  async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
+    const other = await prisma.applicationForm.findFirst({
+      where: { eventId, purpose, status: { not: 'CLOSED' }, ...(excludeId && { id: { not: excludeId } }) },
+      select: { id: true, name: true },
+    });
+    if (other) throw coded(new ConflictError(`This event already has a ${purpose.toLowerCase().replace('_', ' ')} form: ${other.name}. Close it first.`), 'FORM_EXISTS');
   }
 
   _assertPurposeKind(purpose, kind) {

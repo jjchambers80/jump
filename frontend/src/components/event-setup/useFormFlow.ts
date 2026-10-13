@@ -4,11 +4,13 @@
 // form this run edits (`?form=`), the visible steps and the current one
 // (`?step=`). A step that needs the form is unreachable until Start creates
 // it; anything invalid is replaced in the URL, so Back and reloads work.
+// An event has one live form per purpose: Start on a single-purpose flow that
+// already has one opens that form instead.
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCan, useOrg } from '@/components/OrgContext';
-import { stepForPurpose } from './applicationSteps';
+import { APPLICATION_STEPS, formsOnStep, stepForPurpose } from './applicationSteps';
 import { flowSteps, formEditHref, formFlowHref, type FlowStep, type FlowStepKey, type FormFlowKey } from './formFlows';
 import { useSetupData } from './useSetupData';
 import { useSetupForms } from './useSetupForms';
@@ -32,17 +34,23 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const step = requested && reachable(requested) ? requested : fallback;
   const at = list.indexOf(step);
   const ready = data.load.status === 'ready' && forms.load.status === 'ready';
+  const live =
+    !form && step.key === 'start' && APPLICATION_STEPS[flow].purposes.length === 1
+      ? formsOnStep(flow, forms.forms).find((f) => f.status !== 'CLOSED') ?? null
+      : null;
 
   const href = (key: FlowStepKey, id: string | null = form?.id ?? null) => formFlowHref(eventId, flow, { form: id, step: key, org });
 
   // Put the resolved step (and a form that exists) in the URL; a form of another type opens its own flow.
   const target = !ready
     ? null
-    : form && stepForPurpose(form.purpose) !== flow
-      ? formEditHref(eventId, form, org)
-      : step !== requested || (formId && !form)
-        ? href(step.key)
-        : null;
+    : live
+      ? formEditHref(eventId, live, org)
+      : form && stepForPurpose(form.purpose) !== flow
+        ? formEditHref(eventId, form, org)
+        : step !== requested || (formId && !form)
+          ? href(step.key)
+          : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);

@@ -4,7 +4,7 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import permissionService from '../../services/PermissionService.js';
 
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'purpose', 'collectBusiness', 'buttonLabel', 'successMessage']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'templateId', 'purpose', 'collectBusiness', 'buttonLabel', 'successMessage', 'setup']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);
@@ -29,6 +29,7 @@ export const validateFormBody = async (req, res, next) => {
     if (req.method === 'PATCH' && Object.keys(body).length === 0) throw new ValidationError('Nothing to update');
     if (body.templateId !== undefined && (typeof body.templateId !== 'string' || !body.templateId)) throw new ValidationError('templateId must be an id');
     if (req.method === 'PATCH' && body.templateId !== undefined) throw new ValidationError('templateId applies when creating a form');
+    if (body.setup !== undefined && (req.method !== 'POST' || typeof body.setup !== 'boolean')) throw new ValidationError('setup is a boolean, on create only');
     next();
   } catch (error) {
     next(error);
