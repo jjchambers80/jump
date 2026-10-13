@@ -13,7 +13,6 @@ import { slugify, uniqueSlug } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
-import applicationFormTemplateService from './ApplicationFormTemplateService.js';
 import logger from '../utils/logger.js';
 import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
@@ -216,34 +215,21 @@ class ApplicationFormService {
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
   }
 
-  /**
-   * Create a form. With `body.templateId` (spec 019 phase 2) the template's
-   * definition supplies settings, tiers and questions — `kind` must match
-   * and the template must be in the caller's scope; explicit body fields
-   * still win over the template's settings.
-   */
+  /** Create a form on an event, with optional `tiers` and `questions`. */
   async createForm(eventId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
     if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
-    let template = null;
-    if (body.templateId) {
-      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId ?? event.venue.organizationId);
-      if (template.kind !== body.kind) throw new ValidationError(`Template "${template.name}" is for ${template.kind} forms`);
-      if (body.tiers !== undefined || body.questions !== undefined) throw new ValidationError('tiers and questions come from the template');
-    }
-    const { templateId: _templateId, setup, ...fields } = body;
-    // No template and no questions: the setup flows' blank form (`setup: true`)
+    const { setup, ...fields } = body;
+    // No questions: the setup flows' blank form (`setup: true`)
     // asks for an email only, and the organizer adds name and business details
     // as fields. Other callers without questions keep the older blank form
     // (name and email, business details when it charges); callers sending
     // their own questions keep the column defaults.
-    const base = template
-      ? this._templateSettings(template.definition, body.kind)
-      : body.questions !== undefined
-        ? {}
-        : setup
-          ? { collectBusiness: false, collectName: false }
-          : { collectBusiness: body.kind === 'PAID' };
+    const base = body.questions !== undefined
+      ? {}
+      : setup
+        ? { collectBusiness: false, collectName: false }
+        : { collectBusiness: body.kind === 'PAID' };
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     this._assertPurposeKind(data.purpose ?? 'OTHER', body.kind);
@@ -261,35 +247,15 @@ class ApplicationFormService {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
       this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
     }
-    if (template) data.createdFromTemplateId = template.id;
-    const form = await prisma.$transaction(async (tx) => {
-      const created = await tx.applicationForm.create({ data, select: { id: true } });
-      if (template) await this._materialise(tx, created.id, template.definition);
-      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
-    });
-    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind, templateId: template?.id });
+    const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
+    logger.info('Application form created', { event: 'application_form_created', eventId, formId: form.id, kind: form.kind });
     return this._serializeForm(form, event, await this._addOnsForEvent(eventId));
-  }
-
-  /** The settings half of a template definition, shaped like a create body (PAID keys only on PAID). */
-  _templateSettings(definition, kind) {
-    const out = { intro: definition.intro ?? null };
-    // Old snapshots carry no purpose: the form falls back to OTHER unless the body names one.
-    if (definition.purpose) out.purpose = definition.purpose;
-    // Old snapshots carry no collectBusiness either: the column default (true) applies.
-    if (typeof definition.collectBusiness === 'boolean') out.collectBusiness = definition.collectBusiness;
-    if (kind === 'PAID') {
-      for (const key of ['chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection']) {
-        if (definition[key] !== undefined && definition[key] !== null) out[key] = definition[key];
-      }
-    }
-    return out;
   }
 
   /**
    * Create tiers and questions on `formId` from a plain definition
    * `{ tiers: [...], questions: [...] }` in list order, inside `tx`. Shared by
-   * `copyForms` (event duplication) and create-from-template. Returns the
+   * `copyForms` (event duplication). Returns the
    * created tiers in order.
    */
   async _materialise(tx, formId, definition) {
@@ -324,31 +290,6 @@ class ApplicationFormService {
       });
     }
     return tiers;
-  }
-
-  /**
-   * A form as a template definition (spec 019): settings, tiers without
-   * add-on attachments, non-archived questions in order. No status / window /
-   * slug — those belong to an event.
-   */
-  snapshotForm(form) {
-    // FREE forms carry the column defaults for the PAID settings; a template
-    // definition holds null there (and the validator refuses them on FREE).
-    const paid = form.kind === 'PAID';
-    return {
-      purpose: form.purpose ?? 'OTHER',
-      collectBusiness: form.collectBusiness !== false,
-      intro: form.intro ?? null,
-      chargeTiming: paid ? form.chargeTiming : null,
-      feeMode: paid ? form.feeMode : null,
-      taxable: paid ? form.taxable : null,
-      paymentDueDays: paid ? form.paymentDueDays : null,
-      overduePolicy: paid ? form.overduePolicy : null,
-      reserveOnApproval: paid ? form.reserveOnApproval !== false : null,
-      spaceSelection: paid ? form.spaceSelection ?? 'TIERS' : null,
-      tiers: (form.tiers || []).map((t) => ({ name: t.name, description: t.description ?? null, price: Number(t.price), quantityTotal: t.quantityTotal, isActive: t.isActive })),
-      questions: (form.questions || []).filter((q) => !q.archivedAt).map((q) => ({ label: q.label, helpText: q.helpText ?? null, type: q.type, required: q.required, options: q.options ?? [], pinned: q.pinned ?? false })),
-    };
   }
 
   /**
@@ -396,7 +337,6 @@ class ApplicationFormService {
           collectBusiness: f.collectBusiness,
           collectName: f.collectName,
           displayOrder: f.displayOrder,
-          createdFromTemplateId: f.createdFromTemplateId,
         },
         select: { id: true },
       });
@@ -465,26 +405,14 @@ class ApplicationFormService {
     const organization = await this.requireOrganization(organizationId);
     if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
     if (body.tiers?.length) throw new ValidationError('Standing forms cannot have tiers');
-    let template = null;
-    if (body.templateId) {
-      template = await applicationFormTemplateService.requireInScope(body.templateId, organizationId);
-      if (template.kind !== 'FREE') throw new ValidationError('Standing forms require a FREE template');
-      if (body.questions !== undefined) throw new ValidationError('questions come from the template');
-    }
-    const { templateId: _templateId, tiers: _tiers, ...fields } = body;
-    const settings = template ? { ...this._templateSettings(template.definition, 'FREE'), ...fields } : fields;
-    const data = { organizationId, eventId: null, kind: 'FREE', ...this._validateFormFields(settings, 'FREE', null) };
+    const { tiers: _tiers, ...fields } = body;
+    const data = { organizationId, eventId: null, kind: 'FREE', ...this._validateFormFields(fields, 'FREE', null) };
     data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug || data.name);
     if (body.questions !== undefined) {
       data.questions = { create: body.questions.map((q, i) => this._validateQuestion(q, i)) };
       this._assertPinnedCap(data.questions.create.filter((q) => q.pinned).length);
     }
-    if (template) data.createdFromTemplateId = template.id;
-    const form = await prisma.$transaction(async (tx) => {
-      const created = await tx.applicationForm.create({ data, select: { id: true } });
-      if (template) await this._materialise(tx, created.id, { ...template.definition, tiers: [] });
-      return tx.applicationForm.findUnique({ where: { id: created.id }, include: FORM_INCLUDE });
-    });
+    const form = await prisma.applicationForm.create({ data, include: FORM_INCLUDE });
     return this._serializeForm(form, null, [], organization);
   }
 
@@ -493,7 +421,7 @@ class ApplicationFormService {
     const existing = await prisma.applicationForm.findFirst({ where: { id: formId, organizationId, eventId: null }, include: { tiers: true } });
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== 'FREE') throw new ValidationError('Standing forms must be FREE');
-    if (body.tiers !== undefined || body.templateId !== undefined) throw new ValidationError('Standing forms cannot have tiers or change template');
+    if (body.tiers !== undefined) throw new ValidationError('Standing forms cannot have tiers');
     const data = this._validateFormFields(body, 'FREE', existing);
     if (body.slug !== undefined) data.slug = await this._uniqueSlug({ organizationId, eventId: null }, body.slug, formId);
     const form = await prisma.applicationForm.update({ where: { id: formId }, data, include: FORM_INCLUDE });
@@ -1001,7 +929,6 @@ class ApplicationFormService {
       reserveOnApproval: form.reserveOnApproval !== false,
       spaceSelection: form.kind === 'PAID' ? form.spaceSelection ?? 'TIERS' : null,
       displayOrder: form.displayOrder,
-      createdFromTemplateId: form.createdFromTemplateId ?? null,
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,

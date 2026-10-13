@@ -47,25 +47,20 @@ const adminForm = (f: ReturnType<typeof overviewForm>) => ({
   overduePolicy: 'WITHDRAW', reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null,
   acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.purpose !== 'VOLUNTEER',
   addOns: [], questions: [], timezone: VENUE.timezone,
-  ...(f.id === 'f-volunteers' && { applicationCount: 2, createdFromTemplateId: 'tpl-crew', opensAt: '2031-05-01T14:00:00.000Z' }),
+  ...(f.id === 'f-volunteers' && { applicationCount: 2, opensAt: '2031-05-01T14:00:00.000Z' }),
 });
 
-const TEMPLATES = [
-  { id: 'tpl-crew', name: 'Crew sign-up', kind: 'FREE', purpose: 'VOLUNTEER', tierCount: 0, questionCount: 2, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-  { id: 'tpl-press', name: 'Press desk', kind: 'FREE', purpose: 'PRESS', tierCount: 0, questionCount: 1, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-  { id: 'tpl-market', name: 'Makers market', kind: 'PAID', purpose: 'VENDOR', tierCount: 1, questionCount: 3, sourceFormId: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z' },
-];
 const OTHER_ORG = { id: 'org-other', name: 'Other Org', slug: 'other-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
 
 const FORMS = [overviewForm('f-vendors', 'Vendor booths', 'VENDOR', 'MAP'), overviewForm('f-volunteers', 'Volunteer crew', 'VOLUNTEER')];
 
-type Calls = { patch: Request[]; templateDelete: Request[] };
+type Calls = { patch: Request[] };
 type Options = { failPatch?: boolean; otherOrgFirst?: boolean };
 
 /** A stateful fake API: PATCH changes the event that later loads return. */
 async function mockApi(page: Page, initial = baseEvent(), options: Options = {}) {
   const event: Record<string, any> = structuredClone(initial);
-  const calls: Calls = { patch: [], templateDelete: [] };
+  const calls: Calls = { patch: [] };
   const org = { id: ORG_ID, name: 'Edit Org', slug: 'edit-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) => route.fulfill(json(options.otherOrgFirst ? [OTHER_ORG, org] : [org])));
@@ -100,14 +95,6 @@ async function mockApi(page: Page, initial = baseEvent(), options: Options = {})
     const id = route.request().url().split('/').pop();
     const found = FORMS.find((f) => f.id === id);
     route.fulfill(found ? json(adminForm(found)) : json({ message: 'Not found' }, 404));
-  });
-  let templates = structuredClone(TEMPLATES);
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: templates })));
-  await page.route(new RegExp(`${API}/admin/application-templates/[^/]+$`), (route) => {
-    calls.templateDelete.push(route.request());
-    const id = route.request().url().split('/').pop();
-    templates = templates.filter((t) => t.id !== id);
-    route.fulfill({ status: 204, body: '' });
   });
   return calls;
 }

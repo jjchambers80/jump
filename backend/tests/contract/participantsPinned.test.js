@@ -1,7 +1,6 @@
 // Contract tests for pinned answer columns (spec 019 follow-up)
 // Pin ≤ 2 live questions per form; list rows carry `pinnedAnswers` for those
-// questions only; the org-wide forms list exposes `pinnedQuestions`;
-// templates round-trip the flag under the same cap.
+// questions only; the org-wide forms list exposes `pinnedQuestions`.
 
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
@@ -73,7 +72,6 @@ describe('Pinned answer columns (spec 019 follow-up)', () => {
   });
 
   afterAll(async () => {
-    await prisma.applicationFormTemplate.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.application.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicantProfile.deleteMany({ where: { organizationId: org.id } }).catch(() => {});
     await prisma.applicationForm.deleteMany({ where: { eventId: event.id } }).catch(() => {});
@@ -136,30 +134,6 @@ describe('Pinned answer columns (spec 019 follow-up)', () => {
     expect(mine.pinnedQuestions).toEqual([
       { id: q.Outlet.id, label: 'Outlet', type: 'SHORT_TEXT' },
       { id: q.Coverage.id, label: 'Coverage', type: 'MULTI_CHOICE' },
-    ]);
-  });
-
-  it('templates round-trip pinned and enforce the same cap; create-from pins the copies', async () => {
-    const saved = await request(app).post(`/admin/events/${event.id}/application-forms/${form.id}/save-as-template`).set(...auth(adminToken)).send({ name: 'Press template' });
-    expect(saved.status).toBe(201);
-    expect(saved.body.definition.questions.map((x) => [x.label, x.pinned])).toEqual([
-      ['Outlet', true],
-      ['Coverage', true],
-      ['Notes', false],
-    ]);
-    const tooMany = await request(app)
-      .put(`/admin/application-templates/${saved.body.id}`)
-      .set(...auth(adminToken))
-      .send({ definition: { ...saved.body.definition, questions: saved.body.definition.questions.map((x) => ({ ...x, pinned: true })) } });
-    expect(tooMany.status).toBe(400);
-    expect(tooMany.body.message).toMatch(/At most 2 questions/);
-
-    const created = await request(app).post(`/admin/events/${event.id}/application-forms`).set(...auth(adminToken)).send({ kind: 'FREE', name: 'Press 2', templateId: saved.body.id });
-    expect(created.status).toBe(201);
-    expect(created.body.questions.map((x) => [x.label, x.pinned])).toEqual([
-      ['Outlet', true],
-      ['Coverage', true],
-      ['Notes', false],
     ]);
   });
 });

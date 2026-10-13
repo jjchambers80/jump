@@ -1,6 +1,6 @@
 # Application Setup Flows
 
-**Status**: Implemented (spec 051; blank start, Fields step and templates list: PR #466; volunteer shifts removed: PR #465)
+**Status**: Implemented (spec 051; blank start and Fields step: PR #466; volunteer shifts removed: PR #465; spec 056 simplification: PRs #468–#471, templates removed)
 **Last Updated**: 2026-10-12
 
 Plan: [`specs/051-application-setup-flows/plan.md`](../../../specs/051-application-setup-flows/plan.md). Builds on the [event setup wizard](event-setup-wizard.md) (spec 050).
@@ -9,7 +9,7 @@ Plan: [`specs/051-application-setup-flows/plan.md`](../../../specs/051-applicati
 
 Event setup and application setup are separate tasks. The event wizard covers the event itself (name, venue, date, description, image, tickets, add-ons, review): 8 steps for a new ticketed event, down from 12. Vendor applications, special guests, volunteers and other applications (sponsors, press, panels) are each set up in their own **flow**, one form per run, in the same wizard shell: header, progress bar, Back / Next footer, live preview.
 
-**Live form preview.** On every step that shapes the form (Start, Form details, Options and pricing, How vendors choose and pay, Fields, Review and open) the preview shows the application form itself, as applicants will see it: `previewForm(form, typed, orgName)` (`previewMessages.ts`) builds the public form from the saved one plus the name and intro being typed (`SettingsCard` `onChange`), and the frame renders `ApplyFormPreview` (the public `ApplyFrame` + `ApplyFormBody`, submit off, links inert), scrolled to that step's part (`formAnchor`). Start previews the form too, before it exists: `draftPreviewForm` from the name, purpose and paid choice as they are set (contact details only, plus business details when it charges, until a template fills it). Lineup and Floor map keep the event page (both show there). **Options and pricing** and **How vendors choose and pay** (`preview: 'space'` in `formFlows.ts`, sent as `view: 'space'`) preview what an approved vendor sees instead: `SpacePreview` renders the public `ChooseSpace` over `spacePreviewApplication(form)` (an APPROVED application on a TIERS form that lets the vendor pick, the form's options as space types). Picking works; Hold and Pay answer "This is a preview", so nothing is held or charged. With no options yet it says "Add an option to see what vendors choose from."
+**Live form preview.** On every step that shapes the form (Start, Form details, Options and pricing, How vendors choose and pay, Fields, Review and open) the preview shows the application form itself, as applicants will see it: `previewForm(form, typed, orgName)` (`previewMessages.ts`) builds the public form from the saved one plus the name and intro being typed (`SettingsCard` `onChange`), and the frame renders `ApplyFormPreview` (the public `ApplyFrame` + `ApplyFormBody`, submit off, links inert), scrolled to that step's part (`formAnchor`). Start previews the form too, before it exists: `draftPreviewForm` from the name, purpose and paid choice as they are set (an email only). Lineup and Floor map keep the event page (both show there). **Options and pricing** and **How vendors choose and pay** (`preview: 'space'` in `formFlows.ts`, sent as `view: 'space'`) preview what an approved vendor sees instead: `SpacePreview` renders the public `ChooseSpace` over `spacePreviewApplication(form)` (an APPROVED application on a TIERS form that lets the vendor pick, the form's options as space types). Picking works; Hold and Pay answer "This is a preview", so nothing is held or charged. With no options yet it says "Add an option to see what vendors choose from."
 
 **Device frames (both wizards).** `PreviewDevice` puts the page in a phone (390 × 844, status bar and island) or a laptop (1280 × 800, browser bar and base) on a dotted stage, scaled as one to fit. Both frames share one element tree, so switching never reloads the iframe.
 
@@ -39,12 +39,11 @@ Route: `/admin/events/<eventId>/setup/<flow>?step=<key>&form=<formId>&org=<orgId
 - **Special guests** starts at the Lineup, which needs no form; Start offers "Finish without a form".
 - A form opened in the wrong flow (`&form=` of another purpose) moves to the flow of its purpose.
 
-## Blank start, Fields and templates (PRs #465, #466)
+## Blank start and Fields (PRs #465, #466, spec 056)
 
 - **A new form asks for an email only (spec 056).** `createForm` with `setup: true` and no `questions` (the wizard's Create form) creates no questions and sets `collectName` and `collectBusiness` to false, paid or free. Email is the one fixed field: the decision email, payment link and Contact need it. Applicants of an email-only form get a Contact with empty names, and every name display falls back to the email (`applicantName`, `personName` in `lib/applications.ts`). Callers without `setup` (CLI, MCP, tests) keep the older blank form (name and email, business details when it charges); a caller that sends `questions` keeps the column defaults (`collectName` and `collectBusiness` true). A paid form no longer has to collect business details.
 - **Built-in fields.** The Fields step (`QuestionsCard`) lists Email (always asked) and, when on, **Name** and **Business details** as rows with Remove. **Add a field** offers them as one-click buttons beside the custom field editor (`onToggleBuiltIn`, a PATCH of `collectName` / `collectBusiness`). The same card serves the standing-form Fields tab. Never add a second switch.
-- **Save as template at finish.** Review's checkbox replaces the Save as template button and dialog in the flows. On "Save and finish" `ReviewFormStep.finish` calls `POST …/save-as-template` (`{ name }`, or `{ replaceTemplateId }` for Update) *before* the status save. A refusal (409 name clash, 400) shows an alert and stays on the step; a template already saved in this visit is updated on retry (`savedTemplateId`), never duplicated. The standing-form page keeps `SaveAsTemplateDialog`.
-- **Templates list.** Contacts › Forms (`/admin/contacts/forms`) lists the organization's templates under its standing forms (`GET /admin/application-templates`): name, purpose, Paid / Free, question count, updated date, with **Edit** (`/admin/events/templates/:id`) and **Delete** (`DELETE /admin/application-templates/:id`, confirm) for `applications.forms`. This is the one approved exception to "never add a library page" (spec 037 D2, AGENTS.md gotcha 18). Templates are still *used* from Start's Start with picker.
+- **No templates (spec 056).** Application form templates are gone: the Review checkbox, Contacts › Forms › Templates, the template editor (`/admin/events/templates/*` 308s to `/admin/contacts/forms`), the `/admin/application-templates*` and `save-as-template` routes, onboarding's seeded templates, `ApplicationFormTemplate` and `ApplicationForm.createdFromTemplateId` (migration `20261114120000_drop_application_form_templates`). Every form starts blank.
 - **Volunteer shifts removed.** `VolunteerShift` / `ApplicationShift`, the Shifts step, apply-form picker, approval assignment, roster filter / column, CSV column and data-rights entries are gone; migration `20261109120000_drop_volunteer_shifts` dropped the tables (shift rows were discarded). An old `?step=shifts` link falls back to Form details like any unknown step.
 
 ## Old links
@@ -59,7 +58,7 @@ The spec 050 application step keys still arrive from emails, bookmarks and readi
 
 ## Permissions
 
-No new catalog key: the flows are a sub-area of **`events`**, and the Templates list on Contacts › Forms is a sub-area of **`customers`** (its Edit / Delete need `applications.forms`, the same action as the template routes) (`/admin/events` in `adminPaths`) and use the existing actions. Add to this event, What's next and Add a form show only with **`applications.forms`** (ADMIN + ORGANIZER by default). Without it a flow is read-only and says so. The lineup keeps its own route guard. See [Roles & permissions](rbac.md).
+No new catalog key: the flows are a sub-area of **`events`** (`/admin/events` in `adminPaths`) and use the existing actions. Add to this event, What's next and Add a form show only with **`applications.forms`** (ADMIN + ORGANIZER by default). Without it a flow is read-only and says so. The lineup keeps its own route guard. See [Roles & permissions](rbac.md).
 
 ## Accessibility and layout
 
@@ -78,9 +77,7 @@ Mobile first: one column, 44 px targets, no horizontal scroll at 320 px. Each st
 | `frontend/src/components/events/AddToEvent.tsx` | `ADD_TO_EVENT` entries and the Overview card |
 | `frontend/src/app/admin/events/[eventId]/applications/ApplicationsHeader.tsx` | Add a form menu |
 | `frontend/src/components/applications/FormEditorCards.tsx` | `SettingsCard` `section` / `formId` / `hideSubmit`; `QuestionsCard` contact chips + `onToggleBusiness` (Fields) |
-| `frontend/src/app/admin/contacts/forms/page.tsx` (`TemplatesSection`) | Templates list under standing forms |
 | `backend/src/services/ApplicationFormService.js` (`createForm`), `applicationFormDefaults.js` | Blank start, purposes |
-| `backend/src/services/ApplicationFormTemplateService.js` (`saveFrom`) | Save / replace a template from a form |
 | `frontend/src/app/admin/AdminLayoutClient.tsx` | `FULL_SCREEN` covers `setup/<flow>` |
 
 ## Tests
@@ -88,14 +85,14 @@ Mobile first: one column, 44 px targets, no horizontal scroll at 320 px. Each st
 - Vitest: `tests/unit/formFlows.test.ts`, `previewForm.test.ts`, `eventSetupSteps.test.ts` (8 steps, former keys resume at Review), `eventWizard.test.ts`, `eventReadiness.test.ts`.
 - Jest: `tests/unit/eventReadiness.test.js` (map warning `formId`), `tests/contract/eventSetupDraft.test.js` (`setupStep: 'vendors'` → 400), the shared `eventSetupSteps.fixtures.json`.
 - Jest: `tests/contract/applicationFormDefaults.test.js` (every purpose starts blank, business only on PAID, explicit `collectBusiness` wins), `applicationFormPurpose.test.js`.
-- Playwright: `admin-event-application-flows` (each flow, Fields chips and business switch, MAP → Floor map, purpose lock, old links, axe light / dark, 390 and 320 px), `admin-event-details` (Add to this event), `admin-event-setup-floor-map`, `event-guest-lineup`, `admin-event-edit-mode`, `applications-add-ons`, `participants-templates` (checkbox at finish: name clash keeps you there, then saves), `content-forms` (Templates empty state), `admin-event-setup-entry` (What's next).
+- Playwright: `admin-event-application-flows` (each flow, built-in Name / Business details fields, one live form per purpose, the choose-space preview, purpose lock, old links, axe light / dark, 390 and 320 px), `admin-event-details` (Add to this event), `admin-event-setup-floor-map`, `event-guest-lineup`, `admin-event-edit-mode`, `applications-add-ons`, `form-pinned-questions` (pinned list columns on the Fields step), `content-forms` (no Templates section), `admin-event-setup-entry` (What's next).
 
 ## Gotchas
 
 - **One form per run.** Do not bring back a list of forms with inline editors; a second vendor form is a second run.
 - **Next decides from the saved form.** A step list computed before a save goes stale (MAP adds Floor map); `saveAndContinue` uses the PATCH response.
 - **Deleting ends the run.** Delete leaves for the Overview without reloading the forms, or the flow restarts without its form.
-- **Don't bring back default questions.** The wizard preview must show only what the organizer added; suggestions belong in templates.
+- **Don't bring back default questions.** The wizard preview must show only what the organizer added; the organizer adds every field.
 - **`getByLabel('Name')` is a substring match.** Start's Blank form hint and the business switch avoid the word "name" so Playwright's Name field stays unique.
 - **Stay full screen.** A new route under `setup/` needs `FULL_SCREEN` in `AdminLayoutClient.tsx`, or the shell renders inside the admin sidebar.
 

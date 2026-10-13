@@ -1,10 +1,7 @@
 'use client';
 
-// Form editor cards (spec 011), shared since spec 019 by the per-event form
-// editor (each card saves on its own through the API) and the template
-// editor (cards edit local state; the page saves the whole definition).
-// `mode="template"` hides what belongs to an event: slug, status, window,
-// the fee preview columns, the add-on picker, and the per-card Save button.
+// Form editor cards (spec 011), shared by the setup flows and the
+// standing-form page; each card saves on its own through the API.
 // A standing form (spec 044, `eventId: null`) adds the storefront button label
 // and the thank-you message; it is FREE, so it never shows tiers or money.
 
@@ -26,16 +23,14 @@ const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-300'
 
 const CHOICE = new Set<QuestionType>(['SINGLE_CHOICE', 'MULTI_CHOICE']);
 
-export type EditorMode = 'form' | 'template';
 
-
-/** A tier as the cards need it; `AdminTier` satisfies it, a template tier carries only the base fields. */
+/** A tier as the cards need it; `AdminTier` satisfies it. */
 export type EditorTier = Pick<AdminTier, 'id' | 'name' | 'description' | 'price' | 'quantityTotal' | 'isActive'> & Partial<Pick<AdminTier, 'amounts' | 'quantityApproved' | 'quantityReserved' | 'addOns'>>;
 
-/** What the cards read; `AdminForm` satisfies it, the template editor builds one from a definition. */
+/** What the cards read; `AdminForm` satisfies it. */
 export interface EditorForm {
   id: string;
-  /** Null on a standing form (spec 044); absent in the template editor. */
+  /** Null on a standing form (spec 044). */
   eventId?: string | null;
   collectBusiness?: boolean;
   collectName?: boolean;
@@ -123,7 +118,6 @@ export function SettingsCard({
   form,
   canEdit,
   onSave,
-  mode = 'form',
   onChange,
   section,
   formId,
@@ -131,10 +125,8 @@ export function SettingsCard({
 }: {
   form: EditorForm;
   canEdit: boolean;
-  /** Form mode: PATCH the form. */
   onSave?: (body: Record<string, unknown>) => Promise<void>;
-  mode?: EditorMode;
-  /** Every change, as the settings half of a definition (template mode) or the live preview (setup flows). */
+  /** Every change, for the setup flows' live preview. */
   onChange?: (settings: Record<string, unknown>) => void;
   /**
    * Spec 051 setup flows: one step's part of the card (details = name,
@@ -148,8 +140,7 @@ export function SettingsCard({
   hideSubmit?: boolean;
 }) {
   const show = (part: 'details' | 'payment' | 'status') => !section || section === part;
-  const template = mode === 'template';
-  const standing = !template && form.eventId === null;
+  const standing = form.eventId === null;
   const [state, setState] = useState({
     name: form.name,
     buttonLabel: form.buttonLabel ?? '',
@@ -196,13 +187,13 @@ export function SettingsCard({
   const update = (patch: Partial<typeof state>) => {
     const next = { ...state, ...patch };
     setState(next);
-    // Template mode builds its definition from this; the setup flows (spec 051) feed the live preview.
+    // The setup flows (spec 051) feed the live preview.
     onChange?.({ name: next.name, intro: next.intro || null, ...paidSettings(next) });
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (saving || template || !onSave) return;
+    if (saving || !onSave) return;
     setSaving(true);
     const body: Record<string, unknown> = {
       name: state.name,
@@ -217,7 +208,7 @@ export function SettingsCard({
     setSaving(false);
   };
 
-  const paidBlocked = !template && form.kind === 'PAID' && !form.paymentsEnabled;
+  const paidBlocked = form.kind === 'PAID' && !form.paymentsEnabled;
 
   return (
     <form id={formId} onSubmit={submit} className={section ? undefined : card} data-testid="form-settings">
@@ -240,7 +231,6 @@ export function SettingsCard({
         </div>
         </>
         )}
-        {!template && (
         <>
         {show('status') && (
         <div className={section === 'status' ? 'sm:col-span-2' : undefined}>
@@ -270,7 +260,6 @@ export function SettingsCard({
         </div>
         )}
         </>
-        )}
         {standing && show('details') && (
           <>
             <div>
@@ -328,7 +317,7 @@ export function SettingsCard({
           </>
         )}
       </div>
-      {canEdit && !template && !hideSubmit && (
+      {canEdit && !hideSubmit && (
         <button type="submit" disabled={saving} className={`${primary} mt-4`}>
           {saving ? 'Saving…' : 'Save settings'}
         </button>
@@ -346,7 +335,6 @@ export function TiersCard({
   onUpdate,
   onDelete,
   onSetAddOns,
-  mode = 'form',
   embedded = false,
 }: {
   form: EditorForm;
@@ -356,11 +344,9 @@ export function TiersCard({
   onAdd: (body: Record<string, unknown>) => Promise<void>;
   onUpdate: (tierId: string, body: Record<string, unknown>) => Promise<void>;
   onDelete: (tierId: string) => Promise<void>;
-  /** Omitted (template mode): the add-on picker is hidden. */
+  /** Omitted: the add-on picker is hidden. */
   onSetAddOns?: (tierId: string, addOnIds: string[]) => Promise<void>;
-  mode?: EditorMode;
 }) {
-  const template = mode === 'template';
   const [draft, setDraft] = useState({ name: '', price: '', quantityTotal: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState({ name: '', description: '', price: '', quantityTotal: '', isActive: true });
@@ -383,7 +369,7 @@ export function TiersCard({
       <h2 className={embedded ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Options and pricing</h2>
       <p className={`${embedded ? '' : 'mt-1 '}text-sm text-gray-600 dark:text-slate-400`}>
         Applicants pick one. Capacity is taken when you approve, so more people can apply than there are spots.
-        {!template && eventAddOns.length === 0 && (
+        {eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
             <Link href={wizardLink(form.eventId!, 'add-ons').href} className="text-accent-600 underline dark:text-accent-300">{wizardLink(form.eventId!, 'add-ons').label}</Link>.
@@ -395,8 +381,8 @@ export function TiersCard({
           <tr>
             <th className="py-1 pr-3">Name</th>
             <th className="py-1 pr-3">Price</th>
-            {!template && <th className="py-1 pr-3">Applicant pays</th>}
-            {!template && <th className="py-1 pr-3">You receive</th>}
+            <th className="py-1 pr-3">Applicant pays</th>
+            <th className="py-1 pr-3">You receive</th>
             <th className="py-1 pr-3">Spots</th>
             <th className="py-1">
               <span className="sr-only">Actions</span>
@@ -407,7 +393,7 @@ export function TiersCard({
           {form.tiers.map((t) =>
             editing === t.id ? (
               <tr key={t.id}>
-                <td colSpan={template ? 4 : 6} className="py-2">
+                <td colSpan={6} className="py-2">
                   <form
                     className="grid gap-2 sm:grid-cols-5 sm:items-end"
                     onSubmit={async (e) => {
@@ -468,10 +454,10 @@ export function TiersCard({
                   )}
                 </td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{money(t.price)}</td>
-                {!template && <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.applicantPays) : '—'}</td>}
-                {!template && <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.orgReceives) : '—'}</td>}
+                <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.applicantPays) : '—'}</td>
+                <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">{t.amounts ? money(t.amounts.orgReceives) : '—'}</td>
                 <td className="py-2 pr-3 text-gray-800 dark:text-slate-200">
-                  {template ? t.quantityTotal : `${(t.quantityApproved ?? 0) + (t.quantityReserved ?? 0)} / ${t.quantityTotal}`}
+                  {`${(t.quantityApproved ?? 0) + (t.quantityReserved ?? 0)} / ${t.quantityTotal}`}
                 </td>
                 <td className="py-2 text-right">
                   {canEdit && (
@@ -556,7 +542,6 @@ export function QuestionsCard({
   onRemove,
   onReorder,
   onToggleBuiltIn,
-  mode = 'form',
 }: {
   form: EditorForm;
   canEdit: boolean;
@@ -566,9 +551,7 @@ export function QuestionsCard({
   onReorder: (ids: string[]) => Promise<void>;
   /** Adds or removes the built-in fields (Name, Business details); without it they are read-only. */
   onToggleBuiltIn?: (patch: BuiltInPatch) => Promise<void>;
-  mode?: EditorMode;
 }) {
-  const template = mode === 'template';
   // A change shows at once; it settles on the saved value when the save resolves.
   const [pending, setPending] = useState<BuiltInPatch | null>(null);
   const on: Record<BuiltInKey, boolean> = {
@@ -705,7 +688,7 @@ export function QuestionsCard({
                     <button type="button" aria-label="Move up" className={btn} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
                     <button type="button" aria-label="Move down" className={btn} disabled={i === form.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
                     <button type="button" className="font-medium text-accent-600 hover:underline dark:text-accent-300" onClick={() => startEdit(q)}>Edit</button>
-                    <button type="button" className={danger} onClick={() => window.confirm(template ? `Remove "${q.label}"?` : `Remove "${q.label}"? Existing answers are kept.`) && onRemove(q.id)}>Remove</button>
+                    <button type="button" className={danger} onClick={() => window.confirm(`Remove "${q.label}"? Existing answers are kept.`) && onRemove(q.id)}>Remove</button>
                   </div>
                 )}
               </div>

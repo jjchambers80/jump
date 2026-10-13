@@ -105,7 +105,6 @@ async function mockWizard(page: Page, initial: Partial<Row>[] = []) {
     route.fulfill(json({ event: WIZARD_EVENT, applications: { forms: [] }, admissionLock: { locked: false, reason: null } }))
   );
   await page.route(`${API}/admin/events/${EVENT_ID}/application-forms`, (route) => route.fulfill(json({ data: [] })));
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) => {
     state.previews += 1;
     const visible = rows.filter((g) => g.isVisible).map(({ id, name, role, bio, imageUrl, links }) => ({ id, name, role, bio, imageUrl, links }));

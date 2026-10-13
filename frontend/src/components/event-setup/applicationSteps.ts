@@ -3,7 +3,7 @@
 //
 // Pure module.
 
-import type { FormKind, FormPurpose, FormTemplateSummary } from '@/lib/applications';
+import type { FormKind, FormPurpose } from '@/lib/applications';
 
 export type ApplicationStepKey = 'vendors' | 'special-guests' | 'volunteers' | 'other-applications';
 
@@ -76,13 +76,6 @@ export const formsOnStep = <F extends { purpose?: FormPurpose | null }>(key: App
 /** The step a form's purpose places it on (deep links: `setup?step=<key>&form=<id>`). */
 export const stepForPurpose = (purpose: FormPurpose | null | undefined): ApplicationStepKey =>
   (Object.keys(APPLICATION_STEPS) as ApplicationStepKey[]).find((key) => APPLICATION_STEPS[key].purposes.includes(purpose ?? 'OTHER'))!;
-
-/** Templates for this purpose and kind; else same-kind templates saved before purposes existed. */
-export function templatesFor(templates: FormTemplateSummary[], purpose: FormPurpose, kind: FormKind) {
-  const sameKind = templates.filter((t) => t.kind === kind);
-  const matching = sameKind.filter((t) => t.purpose === purpose);
-  return matching.length ? matching : sameKind.filter((t) => !t.purpose);
-}
 
 /** Where FormEditorCards link out to: the vendor flow's Floor map step (spec 051), the event wizard's Collect more. */
 export const wizardLink = (eventId: string, target: 'floor-map' | 'add-ons', formId?: string) =>

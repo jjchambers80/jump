@@ -55,7 +55,7 @@ Vendor / sponsor application charges use the same Stripe account, statement desc
 ## Participants (spec 019)
 
 - [x] **Migrations verified in prod 2026-09-18** (via `railway ssh --service backend`, deploy `27290567` = main `85472d0`): `_prisma_migrations` has `20260922000000_participants_list_index` (19:33Z), `20260923000000_application_form_templates` (19:51Z), `20260924000000_application_tags_checkin` (20:04Z), none rolled back. Indexes `Application_organizationId_submittedAt_idx`, `Application_tags_idx`, `ApplicationFormTemplate_organizationId_name_key`, `ApplicationFormTemplate_organizationId_updatedAt_idx` present; columns `Application.tags` (ARRAY), `checkedInAt`, `checkedOutAt`, `ApplicationForm.createdFromTemplateId` present. 0 templates, 4 applications at the time. `GET /admin/applications/summary` answers 401 unauthenticated (route live).
-- [ ] Sidebar **Participants** smoke in prod as a member: list shows the 4 applications, Edit tags round-trip, check-in tick on an approved row, Save as template → New application from it.
+- [ ] Sidebar **Participants** smoke in prod as a member: list shows the 4 applications, Edit tags round-trip, check-in tick on an approved row.
 
 ## Stripe Connect (spec 047 D0-S: direct charges)
 

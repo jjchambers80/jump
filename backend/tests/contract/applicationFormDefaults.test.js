@@ -102,6 +102,13 @@ describe('createForm starts blank', () => {
     expect((await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels 2028', setup: true })).status).toBe(201);
   });
 
+  it('form templates are gone (spec 056): no routes, and templateId is refused', async () => {
+    expect((await request(app).get('/admin/application-templates').set('Authorization', `Bearer ${token}`)).status).toBe(404);
+    const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'From a template', templateId: 'tpl-old' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Unknown form field\(s\): templateId/);
+  });
+
   it('setup is accepted on create only', async () => {
     const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'Bad flag', setup: 'yes' });
     expect(res.status).toBe(400);

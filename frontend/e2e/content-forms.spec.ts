@@ -126,7 +126,6 @@ async function mockApi(page: Page, baseURL: string) {
     const body = req.postData() ? JSON.parse(req.postData() as string) : undefined;
     calls.push({ method, path, body });
     if (path === '/organizations') return route.fulfill(json([ORG]));
-    if (path === '/admin/application-templates') return route.fulfill(json({ data: [] }));
     if (path === '/admin/standing-application-forms' && method === 'GET') return route.fulfill(json({ data: state.created ? [standingForm(state.questions)] : [] }));
     if (path === '/admin/standing-application-forms' && method === 'POST') {
       state.created = true;
@@ -162,7 +161,7 @@ for (const viewport of [
 
     await page.goto('/admin/contacts/forms');
     await expect(page.getByTestId('forms-empty-state')).toContainText('No forms yet');
-    await expect(page.getByTestId('templates-empty')).toContainText('No templates yet');
+    await expect(page.getByTestId('form-templates')).toHaveCount(0);
     expect((await new AxeBuilder({ page }).include('main').analyze()).violations).toEqual([]);
     await page.getByRole('link', { name: 'Create your first form' }).click();
 

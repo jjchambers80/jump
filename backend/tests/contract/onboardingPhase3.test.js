@@ -6,7 +6,6 @@ import app from '../../src/api/server.js';
 import { prisma } from '@jump/db';
 import { staffToken, cleanupStaff } from '../helpers/staff.js';
 import onboardingService from '../../src/services/OnboardingService.js';
-import { SEED_TEMPLATES } from '../../src/config/onboarding.js';
 
 const OWNER_EMAIL = 'owner@onboarding-p3-test.com';
 const SYS_EMAIL = 'sys@onboarding-p3-test.com';
@@ -38,54 +37,26 @@ describe('Onboarding phase 3 (spec 022)', () => {
   };
 
   describe('tailored setup', () => {
-    it('seeds the starter application templates when the survey chose applications', async () => {
+    it('shows the applications card when the survey chose applications', async () => {
       const id = await start('P3 Test Vendor Org', { goals: ['sell_online', 'vendor_applications'], eventTypes: ['convention_expo'] });
       const res = await request(app).post(`/signup/${id}/complete`).set(auth(ownerToken));
       expect(res.status).toBe(200);
-
-      const templates = await prisma.applicationFormTemplate.findMany({ where: { organizationId: id }, orderBy: { name: 'asc' } });
-      expect(templates.map((t) => [t.name, t.kind])).toEqual([
-        ['Press & media', 'FREE'],
-        ['Vendor booth', 'PAID'],
-      ]);
-      const vendor = templates.find((t) => t.name === 'Vendor booth');
-      expect(vendor.createdById).toBe(ownerId);
-      expect(vendor.definition.tiers).toHaveLength(2);
-      expect(vendor.definition.tiers[0]).toMatchObject({ name: 'Standard booth (10×10)', price: 275 });
-      expect(vendor.definition.questions.filter((q) => q.pinned)).toHaveLength(1);
-
-      // Templates are listed on the Participants › Applications tab
-      const list = await request(app).get('/admin/application-templates').set(auth(ownerToken)).set('X-Jump-Org', id);
-      expect(list.status).toBe(200);
-      expect(list.body.data.map((t) => t.name).sort()).toEqual(['Press & media', 'Vendor booth']);
-
-      // Re-seeding is a no-op (unique names)
-      const again = await onboardingService.seedTemplates(id, ownerId, ['press_applications']);
-      expect(again).toEqual([]);
-      expect(await prisma.applicationFormTemplate.count({ where: { organizationId: id } })).toBe(2);
-
-      // The applications card counts templates as not-yet-done (a form is the goal), but is shown
+      // Spec 056: nothing is seeded; a form is the goal and starts blank.
+      expect(await prisma.applicationForm.count({ where: { organizationId: id } })).toBe(0);
       const guide = await request(app).get('/admin/setup-guide').set(auth(ownerToken)).set('X-Jump-Org', id);
       expect(guide.body.tasks.find((t) => t.id === 'applications')).toMatchObject({ shown: true, done: false });
       expect(guide.body.tasks.find((t) => t.id === 'checkin')).toMatchObject({ shown: false, done: false });
     });
 
-    it('seeds nothing for organizations without an application goal', async () => {
+    it('hides the applications card for organizations without an application goal', async () => {
       const id = await start('P3 Test Ticket Org', { goals: ['sell_online', 'sell_at_door'] });
       await request(app).post(`/signup/${id}/complete`).set(auth(ownerToken));
-      expect(await prisma.applicationFormTemplate.count({ where: { organizationId: id } })).toBe(0);
 
       const guide = await request(app).get('/admin/setup-guide').set(auth(ownerToken)).set('X-Jump-Org', id);
       expect(guide.body.tasks.find((t) => t.id === 'applications').shown).toBe(false);
       expect(guide.body.tasks.find((t) => t.id === 'checkin')).toMatchObject({ shown: true, done: false });
     });
 
-    it('every seed definition passes the template validator', async () => {
-      const { default: templateService } = await import('../../src/services/ApplicationFormTemplateService.js');
-      for (const seed of SEED_TEMPLATES) {
-        expect(() => templateService.validateDefinition(seed.kind, seed.definition)).not.toThrow();
-      }
-    });
   });
 
   describe('abandoned-signup sweep', () => {

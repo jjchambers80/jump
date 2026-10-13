@@ -151,8 +151,6 @@ export interface AdminForm {
   /** Spec 039: how an approved vendor chooses — a tier, or a spot on the floor map (PAID forms; null on FREE). */
   spaceSelection?: 'TIERS' | 'MAP' | null;
   displayOrder: number;
-  /** Spec 019: the template this form was created from (informational). */
-  createdFromTemplateId: string | null;
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
@@ -408,61 +406,6 @@ export interface ApplicationRow {
   pinnedAnswers: PinnedAnswer[];
   /** The applicant's status-page link, for "Copy status link" (spec 019). */
   statusUrl: string | null;
-}
-
-/** Spec 019 phase 2: a form template definition — a snapshot, not a live form. */
-export interface TemplateTier {
-  name: string;
-  description: string | null;
-  price: number;
-  quantityTotal: number;
-  isActive: boolean;
-}
-export interface TemplateQuestion {
-  label: string;
-  helpText: string | null;
-  type: QuestionType;
-  required: boolean;
-  options: string[];
-  pinned: boolean;
-}
-export interface TemplateDefinition {
-  /** Null on older templates: the form's default (ask) applies. */
-  collectBusiness?: boolean | null;
-  collectName?: boolean | null;
-  intro: string | null;
-  chargeTiming: 'SUBMIT' | 'APPROVAL' | null;
-  feeMode: 'PASS' | 'ABSORB' | null;
-  taxable: boolean | null;
-  paymentDueDays: number | null;
-  overduePolicy: 'WITHDRAW' | 'HOLD' | null;
-  reserveOnApproval?: boolean | null;
-  spaceSelection?: 'TIERS' | 'MAP' | null;
-  tiers: TemplateTier[];
-  questions: TemplateQuestion[];
-}
-export interface FormTemplateSummary {
-  id: string;
-  name: string;
-  kind: FormKind;
-  /** Spec 050 §6.2: optional snapshot key; null on older templates. */
-  purpose?: FormPurpose | null;
-  tierCount: number;
-  questionCount: number;
-  sourceFormId: string | null;
-  organization?: { id: string; name: string };
-  createdAt: string;
-  updatedAt: string;
-}
-export interface FormTemplate {
-  id: string;
-  organizationId: string;
-  name: string;
-  kind: FormKind;
-  definition: TemplateDefinition;
-  sourceFormId: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 /** One form across events, from `GET /admin/application-forms` (spec 019). */

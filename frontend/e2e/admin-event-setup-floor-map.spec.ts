@@ -82,7 +82,6 @@ async function mockApi(page: Page, { forms: initial, map: initialMap = null, cre
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/preview-payload`, (route) =>
     route.fulfill(json({ event: EVENT, organization: { id: ORG_ID, name: 'Map Org' }, forms }))
   );
-  await page.route(`${API}/admin/application-templates`, (route) => route.fulfill(json({ data: [] })));
   await page.route(list, (route) => route.fulfill(json({ data: forms })));
   await page.route(new RegExp(`${list}/[^/]+$`), (route) => {
     calls.patch.push(route.request());
