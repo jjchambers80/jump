@@ -1,17 +1,17 @@
-// Contract test for createForm's per-purpose defaults (spec 050 §5.2, card
-// 050-L): what the wizard's "Blank form" gets for each purpose, created by an
-// ORGANIZER (050-E opened form configuration to them).
+// Contract test for what a new event form starts with, created by an
+// ORGANIZER (050-E opened form configuration to them): no questions (every
+// apply form asks first name, last name and email), and business details only
+// when the form charges.
 
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
-import { defaultsFor } from '../../src/services/applicationFormDefaults.js';
 
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 
 const TAG = 'form-defaults-ct';
 
-describe('createForm defaults per purpose (spec 050 §5.2)', () => {
+describe('createForm starts blank', () => {
   let token;
   let org;
   let eventId;
@@ -38,26 +38,26 @@ describe('createForm defaults per purpose (spec 050 §5.2)', () => {
 
   const cases = [
     { purpose: 'VENDOR', kind: 'PAID', collectBusiness: true },
-    { purpose: 'VENDOR', kind: 'FREE', collectBusiness: true },
-    { purpose: 'SPECIAL_GUEST', kind: 'FREE', collectBusiness: true },
+    { purpose: 'VENDOR', kind: 'FREE', collectBusiness: false },
+    { purpose: 'SPECIAL_GUEST', kind: 'FREE', collectBusiness: false },
     { purpose: 'VOLUNTEER', kind: 'FREE', collectBusiness: false },
     { purpose: 'SPONSOR', kind: 'PAID', collectBusiness: true },
-    { purpose: 'PRESS', kind: 'FREE', collectBusiness: true },
-    { purpose: 'PANEL', kind: 'FREE', collectBusiness: true },
-    { purpose: 'OTHER', kind: 'FREE', collectBusiness: true },
+    { purpose: 'PRESS', kind: 'FREE', collectBusiness: false },
+    { purpose: 'PANEL', kind: 'FREE', collectBusiness: false },
+    { purpose: 'OTHER', kind: 'FREE', collectBusiness: false },
   ];
 
-  it.each(cases)('$purpose ($kind) starts from its defaults', async ({ purpose, kind, collectBusiness }) => {
+  it.each(cases)('$purpose ($kind) starts with no questions', async ({ purpose, kind, collectBusiness }) => {
     const res = await create({ kind, purpose, name: `${purpose} ${kind}` });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness, purposeLocked: false });
-    const expected = (defaultsFor(purpose).questions ?? []).map((q) => ({ label: q.label, type: q.type, required: q.required }));
-    expect(res.body.questions.map((q) => ({ label: q.label, type: q.type, required: q.required }))).toEqual(expected);
+    expect(res.body.questions).toEqual([]);
   });
 
-  it('the vendor, guest and volunteer defaults are not empty', () => {
-    for (const purpose of ['VENDOR', 'SPECIAL_GUEST', 'VOLUNTEER']) expect(defaultsFor(purpose).questions.length).toBeGreaterThan(0);
-    for (const purpose of ['SPONSOR', 'PRESS', 'PANEL', 'OTHER']) expect(defaultsFor(purpose)).toEqual({});
+  it('an explicit collectBusiness on a FREE form wins', async () => {
+    const res = await create({ kind: 'FREE', purpose: 'VENDOR', name: 'Makers', collectBusiness: true });
+    expect(res.status).toBe(201);
+    expect(res.body.collectBusiness).toBe(true);
   });
 
   it('FREE-only purposes refuse PAID for an ORGANIZER too', async () => {

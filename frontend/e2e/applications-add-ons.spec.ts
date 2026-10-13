@@ -530,6 +530,6 @@ test('vendor flow How vendors choose and pay: how vendors choose their space (sp
 
   await page.getByTestId('form-space-tiers').check();
   await next.click();
-  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Questions' })).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Fields' })).toBeVisible({ timeout: 30000 });
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

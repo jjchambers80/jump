@@ -262,6 +262,9 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onUpdate={(id, b) => run('Question saved.', () => api.updateQuestion(form.id, id, b)).then(noop)}
               onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id)).then(noop)}
               onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids)).then(noop)}
+              onToggleBusiness={(collectBusiness) =>
+                run(collectBusiness ? 'Business details are asked.' : 'Business details are no longer asked.', async () => f.forms.upsert(await api.updateForm(form.id, { collectBusiness }))).then(noop)
+              }
             />
           )}
           {form && step.key === 'review' && (

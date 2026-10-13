@@ -25,12 +25,6 @@ const EVENT = {
   venue: { id: VENUE.id, name: VENUE.name, address: VENUE.address, timezone: VENUE.timezone }, priceTiers: [],
 };
 
-/** Mirrors backend applicationFormDefaults.js closely enough for the UI. */
-const DEFAULT_QUESTIONS: Record<string, string[]> = {
-  VENDOR: ['What do you sell?', 'Do you need power?', 'How many tables do you need?'],
-  VOLUNTEER: ['Which days are you available?', 'Which roles interest you?', 'T-shirt size', 'Emergency contact (name and phone)'],
-};
-
 let seq = 0;
 function form(patch: Record<string, any> = {}) {
   const id = patch.id ?? `form-${++seq}`;
@@ -40,8 +34,9 @@ function form(patch: Record<string, any> = {}) {
     id, eventId: EVENT_ID, kind: 'FREE', purpose, name: 'Form', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
     chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW', reserveOnApproval: true,
     spaceSelection: paid ? 'TIERS' : null, displayOrder: 0, createdFromTemplateId: null, acceptance: { accepting: true, reason: null },
-    paymentsEnabled: true, applicationCount: 0, collectBusiness: purpose !== 'VOLUNTEER', tiers: [], addOns: [],
-    questions: (DEFAULT_QUESTIONS[purpose] ?? []).map((label, i) => ({ id: `${id}-q${i}`, label, helpText: null, type: 'SHORT_TEXT', required: false, options: [], displayOrder: i, pinned: false })),
+    paymentsEnabled: true, applicationCount: 0, collectBusiness: paid, tiers: [], addOns: [],
+    // Like createForm: a new form starts blank (contact details only).
+    questions: [],
     ...patch,
   };
 }
@@ -184,15 +179,19 @@ test.describe('desktop', () => {
     await expect(main(page).getByTestId('form-tiers')).toHaveCount(0);
     await expect(main(page).getByRole('group', { name: 'How vendors choose their space' })).toBeVisible();
     await next(page).click();
-    await expect(heading(page, 'Questions')).toBeFocused();
-    await expect(main(page).getByText('What do you sell?')).toBeVisible();
+    await expect(heading(page, 'Fields')).toBeFocused();
+    const fields = main(page).getByTestId('form-contact-fields');
+    for (const name of ['First name', 'Last name', 'Email']) await expect(fields.getByText(name)).toBeVisible();
+    // A paid form always asks for the business.
+    await expect(main(page).getByTestId('form-collect-business')).toBeChecked();
+    await expect(main(page).getByTestId('form-collect-business')).toBeDisabled();
     await next(page).click();
 
     await expect(heading(page, 'Review and open')).toBeFocused();
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 6');
     const summary = main(page).getByRole('region', { name: 'Summary' });
-    await expect(summary.getByText('3 questions')).toBeVisible();
-    await expect(summary.getByRole('link', { name: 'Edit questions' })).toHaveAttribute('href', /step=questions&form=form-/);
+    await expect(summary.getByText('Contact details, business details')).toBeVisible();
+    await expect(summary.getByRole('link', { name: 'Edit fields' })).toHaveAttribute('href', /step=questions&form=form-/);
     await main(page).getByLabel('Status').selectOption('OPEN');
     await next(page, 'Save and finish').click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON().status)).toContain('OPEN');
@@ -233,16 +232,16 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Start a vendor application')).toBeVisible(COLD);
     await expect(main(page).getByRole('group', { name: 'Start with' })).toHaveCount(0);
     await expect(main(page).getByRole('radio')).toHaveCount(0);
-    await expect(main(page).getByText('Starts with suggested questions about what they sell, power and tables.', { exact: false })).toBeVisible();
+    await expect(main(page).getByText('Asks for contact details only. Add more on the Fields step.', { exact: false })).toBeVisible();
     await expect(page.locator('footer').getByRole('button', { name: 'Create form' })).toBeEnabled();
   });
 
-  test('with templates, Start with names the standard form and what each template holds', async ({ page }) => {
+  test('with templates, Start with offers a blank form and says what each template holds', async ({ page }) => {
     await mockApi(page);
     await page.goto(flowUrl('vendors'));
     const group = main(page).getByRole('group', { name: 'Start with' });
     await expect(group).toBeVisible(COLD);
-    await expect(group.getByRole('radio', { name: /Standard vendor form/ })).toBeChecked();
+    await expect(group.getByRole('radio', { name: /Blank form/ })).toBeChecked();
     await expect(group.getByText('Your template · 2 categories · 3 questions')).toBeVisible();
     // Only same-kind templates of other purposes would add the toggle; there are none here.
     await expect(group.getByLabel(/Also show templates from other kinds of forms/)).toHaveCount(0);
@@ -287,9 +286,15 @@ test.describe('desktop', () => {
     expect(calls.create[0].postDataJSON()).toMatchObject({ kind: 'FREE', purpose: 'VOLUNTEER' });
     await expect(heading(page, 'Form details')).toBeVisible();
     await next(page).click();
+    await expect(heading(page, 'Fields')).toBeVisible();
     const questions = main(page).getByTestId('form-questions');
-    await expect(questions.getByText('Name and email are always asked.')).toBeVisible();
-    await expect(questions.getByText('Emergency contact (name and phone)')).toBeVisible();
+    await expect(questions.getByText('Contact details are always asked.', { exact: false })).toBeVisible();
+    // Blank: contact details only, so the preview asks for nothing else.
+    await expect(questions.locator('li')).toHaveCount(0);
+    const business = main(page).getByTestId('form-collect-business');
+    await expect(business).not.toBeChecked();
+    await business.check();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectBusiness: true });
     const add = main(page).getByTestId('question-add');
     await add.getByLabel('Question').fill('Years volunteering');
     await add.getByLabel('Type').selectOption('NUMBER');

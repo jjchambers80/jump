@@ -263,7 +263,7 @@ test('Start a vendor application: Start from offers same-kind saved templates; c
   const a11y = await new AxeBuilder({ page }).include('main').analyze();
   expect(a11y.violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
 });
-test('Save as template from a form\'s Review step: a name clash is refused; replace overwrites', async ({ page, baseURL }) => {
+test('Save as template on finishing a form\'s Review step: a name clash keeps you there', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   const { calls, state } = await mockAdmin(page, baseURL!);
   await mockWizard(page, EXPO);
@@ -271,28 +271,17 @@ test('Save as template from a form\'s Review step: a name clash is refused; repl
   await page.goto(`/admin/events/${EXPO.id}/applications/forms/${vendorForm.id}`);
   await expect(page).toHaveURL(new RegExp(`/admin/events/${EXPO.id}/setup/other-applications\\?step=details&form=${vendorForm.id}`), COLD);
   await page.goto(`/admin/events/${EXPO.id}/setup/other-applications?step=review&form=${vendorForm.id}`);
-  const saveAs = main(page).getByRole('button', { name: 'Save as template' });
-  await saveAs.click(COLD);
-  const dialog = page.getByRole('dialog', { name: 'Save as template' });
-  await expect(dialog.getByLabel('Template name')).toHaveValue('Vendor Space');
-  await dialog.getByLabel('Template name').fill('Exhibitor booths');
-  await dialog.getByRole('button', { name: 'Save template' }).click();
-  await expect(dialog.getByRole('alert')).toContainText('already exists');
-  await dialog.getByLabel('Template name').fill('Vendor space 2028');
-  await dialog.getByRole('button', { name: 'Save template' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(status(page, 'Saved as the "Vendor space 2028" template.')).toHaveCount(1);
+  await main(page).getByRole('checkbox', { name: /Save this form as a template/ }).check(COLD);
+  const name = main(page).getByLabel('Template name');
+  await expect(name).toHaveValue('Vendor Space');
+  await name.fill('Exhibitor booths');
+  const finish = page.locator('footer').getByRole('button', { name: 'Save and finish' });
+  await finish.click();
+  await expect(main(page).getByRole('alert')).toContainText('already exists');
   expect(calls.find((c) => c.path.endsWith('/save-as-template'))?.body).toEqual({ name: 'Exhibitor booths' });
-  expect(state.templates.map((t) => t.name)).toContain('Vendor space 2028');
-
-  // Replace an existing one of the same kind.
-  await saveAs.click();
-  await dialog.getByRole('radio', { name: 'Replace an existing template' }).check();
-  await expect(dialog.getByLabel('Template', { exact: true }).locator('option')).toHaveText(['Exhibitor booths', 'Vendor space 2028']);
-  await dialog.getByLabel('Template', { exact: true }).selectOption('tpl-booths');
-  await dialog.getByRole('button', { name: 'Replace template' }).click();
-  await expect(status(page, 'Template "Exhibitor booths" replaced.')).toHaveCount(1);
-  expect(state.templates.find((t) => t.id === 'tpl-booths')?.definition.tiers).toHaveLength(1);
+  await name.fill('Vendor space 2028');
+  await finish.click();
+  await expect.poll(() => state.templates.map((t) => t.name)).toContain('Vendor space 2028');
 });
 test('template editor: edit settings, add a question, reorder, save; unsaved guard; ORGANIZER can edit too', async ({ page, baseURL }) => {
   const { calls, state } = await mockAdmin(page, baseURL!);

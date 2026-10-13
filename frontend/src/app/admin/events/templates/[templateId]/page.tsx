@@ -20,6 +20,7 @@ function toEditorForm(template: FormTemplate, name: string, definition: Template
     id: template.id,
     kind: template.kind,
     name,
+    collectBusiness: definition.collectBusiness !== false,
     intro: definition.intro,
     chargeTiming: definition.chargeTiming ?? 'APPROVAL',
     feeMode: definition.feeMode ?? 'PASS',
@@ -204,6 +205,7 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
             onUpdate={async (id, body) => patch((d) => ({ ...d, questions: d.questions.map((q, i) => (i === index(id) ? questionFromBody(body) : q)) }))}
             onRemove={async (id) => patch((d) => ({ ...d, questions: d.questions.filter((_, i) => i !== index(id)) }))}
             onReorder={async (ids) => patch((d) => ({ ...d, questions: ids.map((id) => d.questions[index(id)]) }))}
+            onToggleBusiness={async (collectBusiness) => patch((d) => ({ ...d, collectBusiness }))}
           />
         </div>
       )}

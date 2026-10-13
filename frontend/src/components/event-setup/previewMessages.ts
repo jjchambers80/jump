@@ -57,8 +57,8 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
     organizationName: organizationName ?? null,
     tiers: [],
     questions: [],
-    // Volunteers skip the business step (backend applicationFormDefaults.js).
-    collectBusiness: draft.purpose !== 'VOLUNTEER',
+    // A new form asks only contact details; a paid one must ask for the business (createForm).
+    collectBusiness: draft.kind === 'PAID',
   };
 }
 

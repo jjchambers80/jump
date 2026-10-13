@@ -4,13 +4,16 @@
 // always-on forms with no event (become a vendor, press, volunteers). Each row
 // opens the form's Submissions / Fields / Settings. Submitters land in
 // Contacts like every other contact; there is no second contact list here.
+// Below them, the form templates saved from an event form's Review step: edit
+// opens the template editor, and a new event form starts from one.
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, Search } from 'lucide-react';
+import { ClipboardList, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg, useCan } from '@/components/OrgContext';
-import { formatDate, type AdminForm } from '@/lib/applications';
+import { formatDate, type AdminForm, type FormTemplateSummary } from '@/lib/applications';
+import { PURPOSE_LABEL } from '@/components/event-setup/applicationSteps';
 import { FORM_STATUS_LABEL, FormStatusBadge } from './FormStatusBadge';
 import ContactsHeader from '../ContactsHeader';
 
@@ -152,6 +155,89 @@ export default function FormsPage() {
           )}
         </section>
       )}
+
+      {selectedOrgId && !orgLoading && <TemplatesSection orgId={selectedOrgId} />}
     </div>
+  );
+}
+
+function TemplatesSection({ orgId }: { orgId: string }) {
+  const canManage = useCan('applications.forms');
+  const [templates, setTemplates] = useState<FormTemplateSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setTemplates((await api.get<{ data: FormTemplateSummary[] }>('/admin/application-templates')).data);
+    } catch (err) {
+      setError((err as Error)?.message || 'Could not load templates');
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, orgId]);
+
+  const remove = async (t: FormTemplateSummary) => {
+    if (!window.confirm(`Delete the "${t.name}" template? Forms made from it are not changed.`)) return;
+    try {
+      await api.delete(`/admin/application-templates/${t.id}`);
+      setTemplates((list) => (list ?? []).filter((x) => x.id !== t.id));
+    } catch (err) {
+      setError((err as Error)?.message || 'Could not delete the template');
+    }
+  };
+
+  return (
+    <section aria-labelledby="templates-heading" className="mt-8" data-testid="form-templates">
+      <h2 id="templates-heading" className="text-base font-semibold text-gray-900 dark:text-white">
+        Templates
+      </h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Saved from an event form when you finish setting it up. Start a new event form from one.</p>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
+      <div className="mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        {templates === null && !error ? (
+          <div aria-busy="true" aria-label="Loading templates" className="p-4">
+            <div className="h-12 animate-pulse rounded-lg bg-gray-100 dark:bg-slate-700/60 motion-reduce:animate-none" />
+          </div>
+        ) : !templates?.length ? (
+          <p className="px-4 py-6 text-center text-sm text-gray-600 dark:text-slate-400" data-testid="templates-empty">
+            No templates yet. Tick &ldquo;Save this form as a template&rdquo; on the last step of an event form.
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-200 dark:divide-slate-700">
+            {templates.map((t) => (
+              <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3" data-testid={`template-row-${t.id}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-gray-900 dark:text-white">{t.name}</span>
+                  <span className="block text-xs text-gray-500 dark:text-slate-400">
+                    {[t.purpose ? PURPOSE_LABEL[t.purpose] : null, t.kind === 'PAID' ? 'Paid' : 'Free', `${t.questionCount} ${t.questionCount === 1 ? 'question' : 'questions'}`, `Updated ${formatDate(t.updatedAt)}`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                {canManage && (
+                  <span className="flex gap-1">
+                    <Link href={`/admin/events/templates/${t.id}`} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700">
+                      <Pencil className="h-4 w-4" aria-hidden />
+                      Edit<span className="sr-only"> {t.name}</span>
+                    </Link>
+                    <button type="button" onClick={() => void remove(t)} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
+                      <Trash2 className="h-4 w-4" aria-hidden />
+                      Delete<span className="sr-only"> {t.name}</span>
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
