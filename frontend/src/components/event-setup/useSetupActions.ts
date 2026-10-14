@@ -81,7 +81,7 @@ export function useSetupActions(flow: SetupFlow) {
   // An edit clears the server's verdict; the live checks keep running.
   useEffect(() => setApiErrors([]), [fields]);
 
-  const live = showErrors ? step.validate?.(ctx) ?? [] : [];
+  const live = showErrors ? [...(step.validate?.(ctx) ?? []), ...(step.gate?.(ctx) ?? [])] : [];
   // The summary lists every problem (links open other steps); inline messages
   // keep the server's verdict on its field after the summary closes.
   const summary = showErrors ? dedupe([...live, ...apiErrors]) : [];
@@ -129,7 +129,7 @@ export function useSetupActions(flow: SetupFlow) {
   }
 
   async function onNext() {
-    const failed = step.validate?.(ctx) ?? [];
+    const failed = [...(step.validate?.(ctx) ?? []), ...(step.gate?.(ctx) ?? [])];
     if (failed.length) return raise([]);
     // The create needs steps 1–2 as well, which the step menu lets one skip past.
     const earlier = !saved && current === 'date' ? clientErrors(ctx) : [];

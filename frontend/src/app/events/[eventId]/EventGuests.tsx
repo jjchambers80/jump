@@ -1,13 +1,12 @@
 // Special guest lineup on the event page (spec 050 §7.6, card 050-Q), anchor
 // #guests. Visible rows only, in the organizer's order; nothing renders when
-// there are none, except a placeholder in preview. Bios are plain text (never
+// there are none, in preview too. Bios are plain text (never
 // HTML, gotcha 20); links get an accessible name ("Mara Voss on Instagram").
 
 import { UserRound } from 'lucide-react';
 import SocialIcon, { SOCIAL_LABELS } from '@/components/storefront/SocialIcon';
 import { resolveAssetUrl } from '@/lib/assets';
 import { GUEST_LINK_KEYS, type EventGuest } from '@/lib/eventGuests';
-import Placeholder from './Placeholder';
 
 function GuestLinks({ guest }: { guest: EventGuest }) {
   const links = GUEST_LINK_KEYS.filter((key) => guest.links?.[key]);
@@ -52,24 +51,20 @@ function GuestCard({ guest }: { guest: EventGuest }) {
   );
 }
 
-export default function EventGuests({ guests, preview = false, className = '' }: { guests?: EventGuest[]; preview?: boolean; className?: string }) {
+export default function EventGuests({ guests, className = '' }: { guests?: EventGuest[]; className?: string }) {
   const list = guests ?? [];
-  if (list.length === 0 && !preview) return null;
+  if (list.length === 0) return null;
   return (
     <section id="guests" aria-labelledby="guests-heading" className={`scroll-mt-6 ${className}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">Lineup</p>
       <h2 id="guests-heading" className="mt-0.5 mb-5 text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
         Special guests
       </h2>
-      {list.length === 0 ? (
-        <Placeholder>Guests you add to the lineup show here</Placeholder>
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {list.map((g) => (
-            <GuestCard key={g.id} guest={g} />
-          ))}
-        </ul>
-      )}
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {list.map((g) => (
+          <GuestCard key={g.id} guest={g} />
+        ))}
+      </ul>
     </section>
   );
 }

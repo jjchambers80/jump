@@ -73,12 +73,11 @@ test.describe('storefront lineup', () => {
     await expect(page.locator('#guests')).toHaveCount(0);
   });
 
-  test('preview shows a placeholder when the lineup is empty', async ({ page }) => {
+  test('preview hides an empty lineup too', async ({ page }) => {
     await mockEvent(page, event('e2e-lineup-preview', { guests: [], status: 'DRAFT', preview: true }));
     await page.goto('/events/e2e-lineup-preview');
-    const section = page.locator('#guests');
-    await expect(section.getByText('Guests you add to the lineup show here')).toBeVisible({ timeout: 30000 });
-    expect(await serious(page)).toEqual([]);
+    await expect(page.getByRole('heading', { level: 1, name: 'Retro Con' }).filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('#guests')).toHaveCount(0);
   });
 });
 
