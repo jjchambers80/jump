@@ -1795,7 +1795,6 @@ model ApplicationForm {
   // nothing and approved vendors choose first-come.
   reserveOnApproval     Boolean               @default(true)
   displayOrder          Int                   @default(0)
-  collectBusiness       Boolean               @default(true) // unused since businessFields; drop in a follow-up migration
   businessFields        String[]              @default(["businessName", "description", "website", "socials", "photos"]) // which business-profile fields the form asks; [] = none
   collectName           Boolean               @default(true) // spec 056: false = the form asks for an email only
   buttonLabel           String?
