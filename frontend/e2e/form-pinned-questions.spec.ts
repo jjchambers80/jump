@@ -154,6 +154,7 @@ test('wizard form editor: pin a second question as a list column; the third togg
   await rowQ3.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByTestId('qe-q3-pinned')).toBeDisabled();
   await rowQ3.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByTestId('question-add-open').click();
   await expect(page.getByTestId('qn-pinned')).toBeDisabled();
 
   // Unpin q1 → q3 can be pinned.
