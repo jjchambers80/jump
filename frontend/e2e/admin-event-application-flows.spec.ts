@@ -180,19 +180,29 @@ test.describe('desktop', () => {
     await expect(main(page).getByTestId('form-tiers')).toHaveCount(0);
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeFocused();
-    // Email only, paid or not; Name and Business details are added like any field.
+    // Email only, paid or not; Name and each business field are added like any field.
     const builtIns = main(page).getByTestId('form-builtin-fields');
     await expect(builtIns.getByText('Email')).toBeVisible();
-    await expect(builtIns.getByText('Business details')).toHaveCount(0);
-    await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Business details' }).click();
-    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectBusiness: true });
-    await expect(main(page).getByTestId('builtin-collectBusiness')).toBeVisible();
+    await expect(builtIns.getByText('Business name')).toHaveCount(0);
+    // The add panel stays closed until asked for.
+    await expect(main(page).getByTestId('question-add')).toHaveCount(0);
+    await main(page).getByTestId('question-add-open').click();
+    await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Business name' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ businessFields: ['businessName'] });
+    await expect(main(page).getByTestId('builtin-businessName')).toBeVisible();
+    await expect(main(page).getByTestId('question-add')).toHaveCount(0);
+    await main(page).getByTestId('question-add-open').click();
+    await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Website' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ businessFields: ['businessName', 'website'] });
+    await main(page).getByRole('button', { name: 'Remove Website' }).click();
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ businessFields: ['businessName'] });
+    await expect(main(page).getByTestId('builtin-website')).toHaveCount(0);
     await next(page).click();
 
     await expect(heading(page, 'Review and open')).toBeFocused();
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 6');
     const summary = main(page).getByRole('region', { name: 'Summary' });
-    await expect(summary.getByText('Email, business details')).toBeVisible();
+    await expect(summary.getByText('Email, 1 business field')).toBeVisible();
     await expect(main(page).getByRole('checkbox', { name: /template/ })).toHaveCount(0);
     await expect(summary.getByRole('link', { name: 'Edit fields' })).toHaveAttribute('href', /step=questions&form=form-/);
     await main(page).getByLabel('Status').selectOption('OPEN');
@@ -283,10 +293,12 @@ test.describe('desktop', () => {
     await expect(questions.getByText('Email is always asked.', { exact: false })).toBeVisible();
     // Blank: an email only. Name is one click away, and can be removed again.
     await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
+    await main(page).getByTestId('question-add-open').click();
     await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Name' }).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectName: true });
     await main(page).getByRole('button', { name: 'Remove Name' }).click();
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toContainEqual({ collectName: false });
+    await main(page).getByTestId('question-add-open').click();
     const add = main(page).getByTestId('question-add');
     await add.getByLabel('Question').fill('Years volunteering');
     await add.getByLabel('Type').selectOption('NUMBER');

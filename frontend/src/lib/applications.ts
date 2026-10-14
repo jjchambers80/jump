@@ -123,12 +123,23 @@ export const PURPOSE_CTA: Record<FormPurpose, string> = {
   OTHER: 'Apply',
 };
 
+/** Business-profile fields a form can ask one by one (backend `BUSINESS_FIELDS`). */
+export const BUSINESS_FIELDS = ['businessName', 'description', 'website', 'socials', 'photos'] as const;
+export type BusinessField = (typeof BUSINESS_FIELDS)[number];
+
+/** The business fields a form asks; a payload without the list falls back to `collectBusiness`. */
+export function businessFieldsOf(form: { businessFields?: BusinessField[]; collectBusiness?: boolean }): BusinessField[] {
+  return form.businessFields ?? (form.collectBusiness !== false ? [...BUSINESS_FIELDS] : []);
+}
+
 export interface AdminForm {
   id: string;
   /** Null on a standing form (spec 044): organization-level, FREE, no tiers. */
   eventId: string | null;
   /** Spec 044 standing forms: ask for the business profile, the storefront button label, the thank-you text. */
   collectBusiness?: boolean;
+  /** The business-profile fields the form asks, one by one; read through `businessFieldsOf`. */
+  businessFields?: BusinessField[];
   /** Spec 056: false = the form asks for an email only. */
   collectName?: boolean;
   buttonLabel?: string | null;
@@ -195,6 +206,7 @@ export interface PublicForm {
   questions: Question[];
   /** Spec 044 / 050: standing forms and FREE event forms may skip the business step. */
   collectBusiness?: boolean;
+  businessFields?: BusinessField[];
   /** Spec 056: false = the form asks for an email only. */
   collectName?: boolean;
   /** Spec 044: standing forms' own button label and thank-you line. */

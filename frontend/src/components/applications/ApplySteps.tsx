@@ -8,7 +8,7 @@
 
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
-import { SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
+import { businessFieldsOf, SOCIAL_FIELDS, type PublicForm, type Question } from '@/lib/applications';
 import { acceptancesFor, applyConsentText, fetchLegalVersions, LEGAL_PAGES_ENABLED, LEGAL_PATHS, type LegalVersions } from '@/lib/legal';
 import { storefrontInput, storefrontLabel, storefrontTextarea } from '@/components/storefront/formStyles';
 
@@ -161,11 +161,15 @@ export function useApplyForm(form: PublicForm | null, { submitUrl, draftKey }: {
     setError(null);
     try {
       const versions = legalVersions ?? (await fetchLegalVersions());
-      const collectBusiness = form.collectBusiness !== false;
+      const asks = businessFieldsOf(form);
+      // Only the business fields this form asks; a draft may hold others from an earlier form.
+      const profile = Object.fromEntries(
+        Object.entries({ ...draft.profile, socials: draft.socials }).filter(([k]) => (asks as string[]).includes(k))
+      );
       const payload = {
         formSlug: form.slug,
         contact: draft.contact,
-        ...(collectBusiness && { profile: { ...draft.profile, socials: draft.socials } }),
+        ...(asks.length > 0 && { profile }),
         answers: draft.answers,
         optInAccount: draft.optInAccount,
         optInMarketing: draft.optInMarketing,
@@ -173,7 +177,7 @@ export function useApplyForm(form: PublicForm | null, { submitUrl, draftKey }: {
       };
       const body = new FormData();
       body.append('payload', JSON.stringify(payload));
-      if (collectBusiness) photos.forEach((p) => body.append('profilePhotos', p, p.name));
+      if (asks.includes('photos')) photos.forEach((p) => body.append('profilePhotos', p, p.name));
       Object.entries(answerPhotos).forEach(([qid, file]) => body.append(`answer:${qid}`, file, file.name));
       const res = await fetch(`${API_URL}${submitUrl}`, { method: 'POST', body });
       const data = await res.json().catch(() => ({}));
@@ -216,6 +220,7 @@ export type ApplyFormState = ReturnType<typeof useApplyForm>;
 export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; apply: ApplyFormState; idPrefix?: string }) {
   const { contact, profile, socials, answers, update } = apply;
   const orgName = form.organizationName || 'the organizer';
+  const asks = businessFieldsOf(form);
   const id = (name: string) => `${idPrefix}${name}`;
   let step = 0;
   const next = () => ++step;
@@ -249,20 +254,27 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
         </div>
       </Step>
 
-      {form.collectBusiness !== false && (
+      {asks.length > 0 && (
         <Step n={next()} id={id('step-business')} title="Your business" hint="This is what the organizer reviews. Show them your best.">
+          {asks.includes('businessName') && (
           <div>
             <label htmlFor={id('businessName')} className={label}>Business or outlet name</label>
             <input id={id('businessName')} required autoComplete="organization" className={input} value={profile.businessName} onChange={(e) => update({ profile: { ...profile, businessName: e.target.value } })} />
           </div>
+          )}
+          {asks.includes('description') && (
           <div>
             <label htmlFor={id('description')} className={label}>Tell us about it</label>
             <textarea id={id('description')} rows={4} className={textarea} value={profile.description} onChange={(e) => update({ profile: { ...profile, description: e.target.value } })} />
           </div>
+          )}
+          {asks.includes('website') && (
           <div>
             <label htmlFor={id('website')} className={label}>Website</label>
             <input id={id('website')} className={input} placeholder="example.com" value={profile.website} onChange={(e) => update({ profile: { ...profile, website: e.target.value } })} />
           </div>
+          )}
+          {asks.includes('socials') && (
           <div className="grid gap-4 sm:grid-cols-2">
             {SOCIAL_FIELDS.map((s) => (
               <div key={s.key}>
@@ -271,6 +283,8 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
               </div>
             ))}
           </div>
+          )}
+          {asks.includes('photos') && (
           <div>
             <p className={label} id={id('photos-label')}>
               Photos of your work or products <span className="font-normal text-gray-500 dark:text-slate-400">· up to {MAX_PHOTOS}</span>
@@ -303,6 +317,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
               )}
             </div>
           </div>
+          )}
         </Step>
       )}
 

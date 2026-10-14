@@ -172,8 +172,9 @@ for (const viewport of [
     expect(calls.find((c) => c.method === 'POST' && c.path === '/admin/standing-application-forms')?.body).toEqual({ name: 'Become a vendor' });
     await expect(page.getByTestId('form-tab-fields')).toHaveAttribute('aria-current', 'page');
 
+    await page.getByTestId('question-add-open').click();
     await page.getByLabel('Question', { exact: true }).fill('What do you sell?');
-    await page.getByRole('button', { name: 'Add field' }).click();
+    await page.getByRole('button', { name: 'Add field', exact: true }).click();
     await expect(page.getByText('Question added.')).toBeVisible();
     await expect(page.getByTestId('question-row-q-1')).toContainText('What do you sell?');
 

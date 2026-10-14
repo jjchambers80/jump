@@ -7,7 +7,7 @@
 
 import Link from 'next/link';
 import { ExternalLink, Inbox, Pencil, Trash2, XCircle } from 'lucide-react';
-import type { AdminForm } from '@/lib/applications';
+import { businessFieldsOf, type AdminForm } from '@/lib/applications';
 import { SettingsCard } from '@/components/applications/FormEditorCards';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { PURPOSE_LABEL } from '../applicationSteps';
@@ -37,7 +37,7 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
     .join(', ');
   const has = (key: FlowStepKey) => steps.some((s) => s.key === key);
   const submitted = form.applicationCount > 0;
-  const fields = ['Email', form.collectName !== false && 'name', form.collectBusiness !== false && 'business details', form.questions.length > 0 && count(form.questions.length, 'other field')].filter(Boolean).join(', ');
+  const fields = ['Email', form.collectName !== false && 'name', businessFieldsOf(form).length > 0 && count(businessFieldsOf(form).length, 'business field'), form.questions.length > 0 && count(form.questions.length, 'other field')].filter(Boolean).join(', ');
   const rows: { label: string; value: string; step: FlowStepKey }[] = [
     { label: 'Name', value: form.name, step: 'details' },
     { label: 'For', value: `${PURPOSE_LABEL[form.purpose ?? 'OTHER']} · ${form.kind === 'PAID' ? 'Paid' : 'Free'}`, step: 'details' },

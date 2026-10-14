@@ -362,8 +362,13 @@ class ApplicationService {
       if (Array.isArray(body.addOns) && body.addOns.length > 0) throw new ValidationError('This form has no add-ons');
     }
 
-    const profileData = form.collectBusiness ? applicantProfileService.validate(body.profile || {}) : null;
-    if (!form.collectBusiness && (files.profilePhotos || []).length) throw new ValidationError('This form does not collect business details');
+    // Only the business fields this form asks for are kept; the rest are ignored.
+    const asked = new Set(form.businessFields);
+    const rawProfile = body.profile && typeof body.profile === 'object' ? body.profile : {};
+    const profileData = asked.size
+      ? applicantProfileService.validate(Object.fromEntries(Object.entries(rawProfile).filter(([k]) => asked.has(k))))
+      : null;
+    if (!asked.has('photos') && (files.profilePhotos || []).length) throw new ValidationError('This form does not collect photos');
     if ((files.profilePhotos || []).length > MAX_PROFILE_PHOTOS) throw new ValidationError(`At most ${MAX_PROFILE_PHOTOS} profile photos`);
     const answers = this._validateAnswers(form.questions, body.answers || {}, files.answerPhotos || {});
 
@@ -419,8 +424,11 @@ class ApplicationService {
         );
       }
 
-      const profile = form.collectBusiness
-        ? await applicantProfileService.upsert(organizationId, contactRecord.id, profileData, tx)
+      // A form that skips the business name still needs one on a new profile
+      // (booths, check-in and maps show it): the applicant's name, else email.
+      const fallbackName = asked.has('businessName') ? undefined : [contact.firstName, contact.lastName].filter(Boolean).join(' ') || contact.email;
+      const profile = profileData
+        ? await applicantProfileService.upsert(organizationId, contactRecord.id, profileData, tx, { fallbackName })
         : null;
       if (profile) await applicantProfileService.addPhotos(profile.id, files.profilePhotos, tx);
 

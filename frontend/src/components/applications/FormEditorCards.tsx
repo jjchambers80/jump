@@ -12,7 +12,7 @@ import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 // The event setup wizard's floor-map and collect-more steps (spec 050-L).
 import { wizardLink } from '@/components/event-setup/applicationSteps';
-import { MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
+import { BUSINESS_FIELDS, businessFieldsOf, MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type BusinessField, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
 const btn = 'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
@@ -33,6 +33,7 @@ export interface EditorForm {
   /** Null on a standing form (spec 044). */
   eventId?: string | null;
   collectBusiness?: boolean;
+  businessFields?: AdminForm['businessFields'];
   collectName?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
@@ -525,13 +526,17 @@ function questionBody(d: QuestionDraft) {
   };
 }
 
-type BuiltInKey = 'collectName' | 'collectBusiness';
-export type BuiltInPatch = Partial<Record<BuiltInKey, boolean>>;
+type BuiltInKey = 'collectName' | BusinessField;
+export type BuiltInPatch = { collectName?: boolean; businessFields?: BusinessField[] };
 
 /** Fields every form can add with one click; Email is always asked. */
 const BUILT_IN_FIELDS: { key: BuiltInKey; label: string; detail: string }[] = [
   { key: 'collectName', label: 'Name', detail: 'First and last name' },
-  { key: 'collectBusiness', label: 'Business details', detail: 'Business name, description, website, social links and photos' },
+  { key: 'businessName', label: 'Business name', detail: 'Business or outlet name' },
+  { key: 'description', label: 'Business description', detail: 'A few lines about what they do' },
+  { key: 'website', label: 'Website', detail: 'Their website address' },
+  { key: 'socials', label: 'Social links', detail: 'Instagram, TikTok, Facebook, X, YouTube' },
+  { key: 'photos', label: 'Photos', detail: 'Photos of their work or products' },
 ];
 
 export function QuestionsCard({
@@ -549,24 +554,28 @@ export function QuestionsCard({
   onUpdate: (id: string, body: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
-  /** Adds or removes the built-in fields (Name, Business details); without it they are read-only. */
+  /** Adds or removes the built-in fields (Name, business fields); without it they are read-only. */
   onToggleBuiltIn?: (patch: BuiltInPatch) => Promise<void>;
 }) {
   // A change shows at once; it settles on the saved value when the save resolves.
   const [pending, setPending] = useState<BuiltInPatch | null>(null);
-  const on: Record<BuiltInKey, boolean> = {
-    collectName: pending?.collectName ?? form.collectName !== false,
-    collectBusiness: pending?.collectBusiness ?? form.collectBusiness !== false,
-  };
+  const business = pending?.businessFields ?? businessFieldsOf(form);
+  const asks = (key: BuiltInKey) => (key === 'collectName' ? pending?.collectName ?? form.collectName !== false : business.includes(key));
   const toggle = async (key: BuiltInKey, value: boolean) => {
     if (!onToggleBuiltIn || pending !== null) return;
-    setPending({ [key]: value });
+    const patch: BuiltInPatch =
+      key === 'collectName'
+        ? { collectName: value }
+        : { businessFields: BUSINESS_FIELDS.filter((f) => (f === key ? value : business.includes(f))) };
+    setPending(patch);
     try {
-      await onToggleBuiltIn({ [key]: value });
+      await onToggleBuiltIn(patch);
     } finally {
       setPending(null);
     }
   };
+  // The add panel stays closed until asked for, so the card shows only the fields in use.
+  const [adding, setAdding] = useState(false);
   const editBuiltIns = canEdit && !!onToggleBuiltIn;
   const [draft, setDraft] = useState<QuestionDraft>(emptyQuestion);
   const [editing, setEditing] = useState<string | null>(null);
@@ -633,7 +642,7 @@ export function QuestionsCard({
             Always asked
           </span>
         </li>
-        {BUILT_IN_FIELDS.filter((b) => on[b.key]).map((b) => (
+        {BUILT_IN_FIELDS.filter((b) => asks(b.key)).map((b) => (
           <li key={b.key} className="flex items-start justify-between gap-3 py-3" data-testid={`builtin-${b.key}`}>
             <div>
               <p className="font-medium text-gray-900 dark:text-white">{b.label}</p>
@@ -696,7 +705,12 @@ export function QuestionsCard({
           </li>
         ))}
       </ol>
-      {canEdit && (
+      {canEdit && !adding && (
+        <button type="button" className={`${btn} mt-4`} onClick={() => setAdding(true)} data-testid="question-add-open">
+          + Add field
+        </button>
+      )}
+      {canEdit && adding && (
         <form
           className="mt-4 space-y-2 rounded-lg border border-dashed border-gray-300 p-3 dark:border-slate-600"
           data-testid="question-add"
@@ -704,20 +718,43 @@ export function QuestionsCard({
             e.preventDefault();
             await onAdd(questionBody(draft));
             setDraft(emptyQuestion);
+            setAdding(false);
           }}
         >
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Add a field</p>
-          {editBuiltIns && BUILT_IN_FIELDS.some((b) => !on[b.key]) && (
+          {editBuiltIns && BUILT_IN_FIELDS.some((b) => !asks(b.key)) && (
             <div className="flex flex-wrap gap-2" data-testid="builtin-add">
-              {BUILT_IN_FIELDS.filter((b) => !on[b.key]).map((b) => (
-                <button key={b.key} type="button" className={btn} disabled={pending !== null} onClick={() => void toggle(b.key, true)}>
+              {BUILT_IN_FIELDS.filter((b) => !asks(b.key)).map((b) => (
+                <button
+                  key={b.key}
+                  type="button"
+                  className={btn}
+                  disabled={pending !== null}
+                  onClick={async () => {
+                    await toggle(b.key, true);
+                    setAdding(false);
+                  }}
+                >
                   + {b.label}
                 </button>
               ))}
             </div>
           )}
+          {editBuiltIns && BUILT_IN_FIELDS.some((b) => !asks(b.key)) && <p className="pt-1 text-xs text-gray-600 dark:text-slate-400">Or ask your own question:</p>}
           {editor(draft, setDraft, 'qn')}
-          <button type="submit" className={btn}>Add field</button>
+          <div className="flex gap-2">
+            <button type="submit" className={primary}>Add field</button>
+            <button
+              type="button"
+              className={btn}
+              onClick={() => {
+                setDraft(emptyQuestion);
+                setAdding(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
     </div>
