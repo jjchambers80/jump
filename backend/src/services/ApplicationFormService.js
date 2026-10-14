@@ -11,7 +11,7 @@
 import { prisma } from '@jump/db';
 import { slugify, uniqueSlug } from '../utils/slug.js';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
-import { CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
+import { BUSINESS_FIELDS, CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
 import logger from '../utils/logger.js';
 import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
@@ -334,7 +334,7 @@ class ApplicationFormService {
           // open until that map is published (see _assertCanOpen).
           spaceSelection: f.spaceSelection,
           purpose: f.purpose,
-          collectBusiness: f.collectBusiness,
+          businessFields: f.businessFields,
           collectName: f.collectName,
           displayOrder: f.displayOrder,
         },
@@ -711,9 +711,16 @@ class ApplicationFormService {
       if (typeof body.collectName !== 'boolean') throw new ValidationError('collectName must be a boolean');
       data.collectName = body.collectName;
     }
+    // `collectBusiness` is shorthand for every business field or none.
     if (body.collectBusiness !== undefined) {
       if (typeof body.collectBusiness !== 'boolean') throw new ValidationError('collectBusiness must be a boolean');
-      data.collectBusiness = body.collectBusiness;
+      data.businessFields = body.collectBusiness ? [...BUSINESS_FIELDS] : [];
+    }
+    if (body.businessFields !== undefined) {
+      if (!Array.isArray(body.businessFields) || body.businessFields.some((f) => !BUSINESS_FIELDS.includes(f))) {
+        throw new ValidationError(`businessFields must be a list of ${BUSINESS_FIELDS.join(', ')}`);
+      }
+      data.businessFields = BUSINESS_FIELDS.filter((f) => body.businessFields.includes(f));
     }
     if (body.purpose !== undefined) {
       if (!FORM_PURPOSES.has(body.purpose)) throw new ValidationError(`purpose must be one of ${[...FORM_PURPOSES].join(', ')}`);
@@ -914,7 +921,8 @@ class ApplicationFormService {
       name: form.name,
       slug: form.slug,
       intro: form.intro,
-      collectBusiness: form.collectBusiness,
+      businessFields: form.businessFields,
+      collectBusiness: form.businessFields.length > 0,
       collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
@@ -952,7 +960,8 @@ class ApplicationFormService {
       name: form.name,
       slug: form.slug,
       intro: form.intro,
-      collectBusiness: form.collectBusiness,
+      businessFields: form.businessFields,
+      collectBusiness: form.businessFields.length > 0,
       collectName: form.collectName,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,

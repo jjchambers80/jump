@@ -48,15 +48,17 @@ class ApplicantProfileService {
 
   /**
    * Create or update the profile from a submission / account edit. Runs inside
-   * the caller's transaction when `tx` is given.
+   * the caller's transaction when `tx` is given. `fallbackName` names a new
+   * profile when the form did not ask for a business name.
    */
-  async upsert(organizationId, contactId, body, tx = prisma) {
+  async upsert(organizationId, contactId, body, tx = prisma, { fallbackName } = {}) {
     const data = this.validate(body);
     const existing = await tx.applicantProfile.findUnique({ where: { organizationId_contactId: { organizationId, contactId } } });
     if (existing) {
       if (Object.keys(data).length === 0) return existing;
       return tx.applicantProfile.update({ where: { id: existing.id }, data });
     }
+    if (!data.businessName && fallbackName) data.businessName = fallbackName.slice(0, 120);
     if (!data.businessName) throw new ValidationError('businessName is required');
     return tx.applicantProfile.create({
       data: { organizationId, contactId, businessName: data.businessName, description: data.description ?? null, website: data.website ?? null, socials: data.socials ?? null },

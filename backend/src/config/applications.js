@@ -22,6 +22,9 @@ export const MAX_PINNED_QUESTIONS = 2;
 export const BOOTH_HOLD_MS = Number.parseInt(process.env.BOOTH_HOLD_MS || '900000', 10);
 export const BOOTH_SWEEP_INTERVAL_MS = Number.parseInt(process.env.BOOTH_SWEEP_INTERVAL_MS || '60000', 10);
 
+/** Business-profile fields a form can ask one by one (`ApplicationForm.businessFields`). */
+export const BUSINESS_FIELDS = ['businessName', 'description', 'website', 'socials', 'photos'];
+
 export const QUESTION_TYPES = new Set([
   'SHORT_TEXT',
   'LONG_TEXT',

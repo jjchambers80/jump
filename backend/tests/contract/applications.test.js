@@ -525,4 +525,34 @@ describe('Applications contract (spec 011 phase 1)', () => {
       expect(foreign.status).toBe(404);
     });
   });
+
+  // ─── Business fields one by one ─────────────────────────────────────────
+
+  describe('business fields', () => {
+    it('a form asks only the business fields it lists; an unasked business name falls back to the applicant', async () => {
+      const forms = `/admin/events/${eventId}/application-forms`;
+      const bad = await request(app).post(forms).set(...auth(adminToken)).send({ kind: 'FREE', name: 'Makers', questions: [], businessFields: ['website', 'fax'] });
+      expect(bad.status).toBe(400);
+      const created = await request(app).post(forms).set(...auth(adminToken)).send({ kind: 'FREE', name: 'Makers', questions: [], businessFields: ['website', 'description', 'website'] });
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({ businessFields: ['description', 'website'], collectBusiness: true });
+      const patched = await request(app).patch(`${forms}/${created.body.id}`).set(...auth(adminToken)).send({ businessFields: ['website'], status: 'OPEN' });
+      expect(patched.body.businessFields).toEqual(['website']);
+
+      const payload = {
+        formSlug: created.body.slug,
+        contact: { email: `maker@${TAG}.test`, firstName: 'Mae', lastName: 'Maker' },
+        acceptances: allAcceptances(),
+        profile: { businessName: 'Not asked', description: 'Not asked', website: 'mae.example' },
+        answers: {},
+      };
+      const withPhoto = await request(app).post(`/events/${eventId}/applications`).field('payload', JSON.stringify(payload)).attach('profilePhotos', await png(), 'p.png');
+      expect(withPhoto.status).toBe(400);
+      const res = await request(app).post(`/events/${eventId}/applications`).send(payload);
+      expect(res.status).toBe(201);
+      const contact = await prisma.contact.findUnique({ where: { organizationId_email: { organizationId: org.id, email: `maker@${TAG}.test` } } });
+      const profile = await prisma.applicantProfile.findUnique({ where: { organizationId_contactId: { organizationId: org.id, contactId: contact.id } } });
+      expect(profile).toMatchObject({ businessName: 'Mae Maker', description: null, website: 'https://mae.example' });
+    });
+  });
 });
