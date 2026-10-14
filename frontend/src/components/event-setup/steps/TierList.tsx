@@ -15,15 +15,17 @@ import TierPresetMenu, { type TierPreset } from '@/components/events/TierPresetM
 import { tierAccent } from '@/components/events/EventEditSummary';
 import { newTierForm, tierFromPreset, tierToForm, type TierFormInput } from '@/components/events/tierForm';
 import { computeTierAllInPrice, formatPrice } from '@/lib/fees';
-import { secondaryButton } from '../ui';
+import { SALES_FIELD_IDS } from '../contentSteps';
+import { errorText, secondaryButton } from '../ui';
 import { useTierActions } from './useTierActions';
 import type { SavedRowProps } from './types';
 
 const editId = (key: string) => `setup-tier-edit-${key}`;
-const ADD_ID = 'setup-tier-add';
+const ADD_ID = SALES_FIELD_IDS.tierAdd;
 
-export default function TierList(props: SavedRowProps & { readOnly?: boolean }) {
+export default function TierList(props: SavedRowProps & { readOnly?: boolean; errors?: Record<string, string> }) {
   const { orgId, saved, zone } = props;
+  const addError = props.errors?.[ADD_ID];
   const actions = useTierActions(props);
   const { tiers } = actions;
   const router = useRouter();
@@ -135,10 +137,21 @@ export default function TierList(props: SavedRowProps & { readOnly?: boolean }) 
         </ul>
       )}
 
-      <button id={ADD_ID} type="button" onClick={() => open(newTierForm(), tiers.length)} className={secondaryButton}>
+      <button
+        id={ADD_ID}
+        type="button"
+        onClick={() => open(newTierForm(), tiers.length)}
+        aria-describedby={addError ? `${ADD_ID}-error` : undefined}
+        className={secondaryButton}
+      >
         <Plus className="h-4 w-4" aria-hidden />
         Add tier
       </button>
+      {addError && (
+        <p id={`${ADD_ID}-error`} className={errorText}>
+          {addError}
+        </p>
+      )}
 
       <p role="status" className="sr-only">
         {actions.notice}

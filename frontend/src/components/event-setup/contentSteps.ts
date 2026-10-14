@@ -38,6 +38,7 @@ export interface SalesSaved {
 export const SALES_FIELD_IDS = {
   category: 'setup-category',
   capacity: 'setup-capacity',
+  tierAdd: 'setup-tier-add',
   // RsvpSettingsFields owns these ids (shared with the event editor).
   rsvpLimit: 'event-rsvp-limit',
   rsvpMaxPartySize: 'event-rsvp-party-size',
@@ -111,6 +112,11 @@ export const TICKETS_STEP: EventStep = {
   complete: (ctx) =>
     (ctx.saved?.admissionMode ?? 'TICKETED') === 'RSVP' || (!!ctx.saved?.capacity && (ctx.saved?.tierCount ?? 0) > 0),
   validate: ticketErrors,
+  // Tiers save on their own dialogs, so this only stops Next: capacity keeps autosaving.
+  gate: (ctx) =>
+    modeOf(ctx) === 'TICKETED' && (ctx.saved?.tierCount ?? 0) === 0
+      ? [{ field: SALES_FIELD_IDS.tierAdd, message: 'Add at least one ticket tier' }]
+      : [],
   payload: (ctx) => {
     const { saved, fields } = ctx;
     if (!saved || fields.admissionMode === undefined || ticketErrors(ctx).length) return null;

@@ -85,6 +85,8 @@ export interface EventStep {
   visible: (ctx: StepCtx) => boolean;
   complete: (ctx: StepCtx) => boolean;
   validate?: (ctx: StepCtx) => FieldError[];
+  /** Blocks Next only, never autosave (unlike validate, which feeds the invalid count). */
+  gate?: (ctx: StepCtx) => FieldError[];
   /** The PATCH body for what changed since the last save, or null when nothing did. */
   payload?: (ctx: StepCtx) => Record<string, unknown> | null;
   save?: (client: PatchClient, ids: { orgId: string; eventId: string }, body: Record<string, unknown>) => Promise<unknown>;

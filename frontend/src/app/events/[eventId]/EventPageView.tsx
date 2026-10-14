@@ -130,7 +130,7 @@ export default function EventPageView({
                 />
               </>
             )}
-            <EventGuests guests={event.guests} preview={preview} className="mt-10" />
+            <EventGuests guests={event.guests} className="mt-10" />
           </div>
         </div>
 

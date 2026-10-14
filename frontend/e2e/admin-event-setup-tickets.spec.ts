@@ -167,7 +167,13 @@ test.describe('desktop', () => {
     await main(page).getByLabel('Capacity').fill('100');
     await expect.poll(() => calls.patch.slice(before).map((r) => r.postDataJSON())).toContainEqual({ capacity: 100 });
 
+    // A ticketed event needs a tier to move on; capacity still saved above.
     const add = main(page).getByRole('button', { name: 'Add tier' });
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Tickets or RSVP')).toBeVisible();
+    await expect(main(page).locator('#setup-tier-add-error')).toHaveText('Add at least one ticket tier');
+    await expect(add).toHaveAttribute('aria-describedby', 'setup-tier-add-error');
+
     await add.click();
     const dialog = page.getByRole('dialog', { name: 'New Tier 1' });
     await expect(dialog).toBeVisible();
@@ -190,6 +196,8 @@ test.describe('desktop', () => {
     // All-in price from lib/fees.ts.
     await expect(card.getByText(/^Buyers pay \$\d+\.\d\d with fees$/)).toBeVisible();
     await expect(preview(page).getByText('Early Bird').first()).toBeVisible(COLD);
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Collect more')).toBeVisible(COLD);
   });
 
   test('tier over capacity warns inline and does not block Next', async ({ page }) => {
