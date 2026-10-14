@@ -3,14 +3,15 @@
 // "Add to this event" (spec 051): the four application flows, started from
 // the event's Overview (and the wizard's Done screen). Event setup stays
 // short; vendors, special guests, volunteers and other applications are each
-// their own task. Links, one per flow, with what is already there.
+// their own task. Links, one per flow. An event has one form per flow
+// (spec 056), so a tile never counts forms; Special guests says how many
+// guests are in the lineup.
 
 import Link from 'next/link';
 import { ChevronRight, FileText, HandHeart, Sparkles, Store, type LucideIcon } from 'lucide-react';
 import { useCan } from '@/components/OrgContext';
-import { APPLICATION_STEPS, formsOnStep } from '@/components/event-setup/applicationSteps';
+import { APPLICATION_STEPS } from '@/components/event-setup/applicationSteps';
 import type { FormFlowKey } from '@/components/event-setup/formFlows';
-import type { FormPurpose } from '@/lib/applications';
 import { OverviewSection } from './EventOverviewSections';
 
 export const ADD_TO_EVENT: { flow: FormFlowKey; title: string; icon: LucideIcon; detail: string }[] = [
@@ -23,24 +24,18 @@ export const ADD_TO_EVENT: { flow: FormFlowKey; title: string; icon: LucideIcon;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** What is already there, e.g. "2 forms" or "3 guests in the lineup · 1 form". */
-function summary(flow: FormFlowKey, forms: { purpose?: FormPurpose | null }[], guests: number | null) {
-  const count = formsOnStep(flow, forms).length;
-  const parts = [flow === 'special-guests' && guests ? `${plural(guests, 'guest')} in the lineup` : null, count ? plural(count, 'form') : null];
-  return parts.filter(Boolean).join(' · ');
-}
+/** What is already there: only the lineup size, on Special guests. */
+const summary = (flow: FormFlowKey, guests: number | null) => (flow === 'special-guests' && guests ? `${plural(guests, 'guest')} in the lineup` : '');
 
 export const addTile =
   'group flex h-full min-h-16 w-full items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-left hover:border-accent-300 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-accent-400/60 dark:hover:bg-slate-700/60 dark:focus-visible:ring-offset-slate-800';
 
 export function AddToEventCard({
   hrefFor,
-  forms,
   guests,
   delay,
 }: {
   hrefFor: (flow: FormFlowKey) => string;
-  forms: { purpose?: FormPurpose | null }[];
   /** Lineup size; null while loading or unknown. */
   guests: number | null;
   delay?: number;
@@ -53,7 +48,7 @@ export function AddToEventCard({
       <ul className="mt-3 grid gap-3 sm:grid-cols-2">
         {ADD_TO_EVENT.map(({ flow, title, icon: Icon, detail }) => {
           const id = `add-to-event-${flow}`;
-          const already = summary(flow, forms, guests);
+          const already = summary(flow, guests);
           return (
             <li key={flow}>
               <Link href={hrefFor(flow)} aria-describedby={`${id}-detail`} className={addTile} data-testid={id}>

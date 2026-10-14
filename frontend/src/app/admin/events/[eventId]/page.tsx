@@ -296,7 +296,7 @@ function EventDetailsContent() {
           ) : (
             <RsvpSection overview={overview} editHref={wizard.tickets} addOnsHref={wizard.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
           )}
-          <AddToEventCard hrefFor={wizard.addForm} forms={overview.applications.forms} guests={Array.isArray(guests) ? guests.length : null} delay={60} />
+          <AddToEventCard hrefFor={wizard.addForm} guests={Array.isArray(guests) ? guests.length : null} delay={60} />
           <ApplicationsSection overview={overview} base={`${base}/applications`} formHref={wizard.form} delay={80} />
           <GuestsCard guests={guests} editHref={wizard.guests} delay={100} />
           <DescriptionSection overview={overview} editHref={wizard.description} editLabel="Edit description" delay={120} />

@@ -234,7 +234,8 @@ test('Add to this event starts each application flow, with what is already there
     expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   await expect(card.getByTestId('add-to-event-special-guests')).toContainText('5 guests in the lineup');
-  await expect(card.getByTestId('add-to-event-other-applications')).toContainText('1 form');
+  // One form per flow (spec 056): tiles never count forms.
+  await expect(card.getByTestId('add-to-event-other-applications')).not.toContainText(/\d+ forms?/);
   expect(
     (await new AxeBuilder({ page }).include('#add-to-event').analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))
   ).toEqual([]);
