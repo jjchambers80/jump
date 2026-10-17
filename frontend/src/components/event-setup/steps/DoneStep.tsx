@@ -9,15 +9,13 @@
 
 import { forwardRef, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Check, ChevronRight, ClipboardList, ExternalLink, Link2, ScanLine } from 'lucide-react';
+import { ArrowRight, Check, ChevronRight, ClipboardList, ExternalLink, Link2, ScanLine, Sparkles } from 'lucide-react';
 import api from '@/services/api';
 import { eventPath } from '@/lib/publicPaths';
 import type { EventOverview } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { clearSetupFinished } from '../doneMarker';
 import FormResults from '../review/FormResults';
-import { ADD_TO_EVENT } from '@/components/events/AddToEvent';
-import { formFlowHref } from '../formFlows';
 import { useCan } from '@/components/OrgContext';
 import { primaryButton, textButton } from '../ui';
 
@@ -115,7 +113,9 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
       </h1>
       <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
         {live
-          ? `${event.name} is on sale. Share the link to start selling.`
+          ? event.type === 'REGISTRATION'
+            ? `${event.name} is live. Share the link so people can register.`
+            : `${event.name} is on sale. Share the link to start selling.`
           : `${event.name} is saved and only staff can see it. Publish it from the event page when you are ready.`}
       </p>
       {/* What Publish did with each form ticked on Review (050-N). */}
@@ -158,18 +158,24 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
       {canAdd && (
         <section aria-labelledby="done-whats-next" className="mt-8">
           <h2 id="done-whats-next" className="text-base font-semibold text-gray-900 dark:text-white">What&apos;s next</h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Add applications to this event, one at a time. You can also do this later from the event page.</p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Vendors, sponsors and volunteers register through a registration event for this one. You can also do this later from the event page.</p>
           <ul className="mt-3 space-y-3">
-            {ADD_TO_EVENT.map(({ flow, title, icon: Icon, detail }) => (
-              <li key={flow}>
-                <CardLink
-                  href={formFlowHref(event.id, flow, { step: flow === 'special-guests' ? 'lineup' : undefined, org: orgId })}
-                  icon={<Icon className="h-4 w-4" aria-hidden />}
-                  title={title}
-                  detail={detail}
-                />
-              </li>
-            ))}
+            <li>
+              <CardLink
+                href={`/admin/events/new?type=registration&linked=${encodeURIComponent(event.id)}`}
+                icon={<ClipboardList className="h-4 w-4" aria-hidden />}
+                title="Create a registration event"
+                detail="A form people register through, free or with a fee"
+              />
+            </li>
+            <li>
+              <CardLink
+                href={`/admin/events/${encodeURIComponent(event.id)}/setup/special-guests?step=lineup${orgId ? `&org=${encodeURIComponent(orgId)}` : ''}`}
+                icon={<Sparkles className="h-4 w-4" aria-hidden />}
+                title="Add special guests"
+                detail="Your lineup, shown on the event page"
+              />
+            </li>
           </ul>
         </section>
       )}

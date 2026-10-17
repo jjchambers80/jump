@@ -54,7 +54,9 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     }
   }
 
-  if (isBlank(event.description)) warnings.push(item('NO_DESCRIPTION', 'description', 'Add a description so buyers know what to expect.'));
+  if (isBlank(event.description)) {
+    warnings.push(item('NO_DESCRIPTION', 'description', `Add a description so ${registration ? 'registrants' : 'buyers'} know what to expect.`));
+  }
   if (!event.logoUrl && !event.imageId) warnings.push(item('NO_IMAGE', 'image', 'Add an event image.'));
 
   const forms = (event.applicationForms || []).filter((f) => f.status !== 'CLOSED');

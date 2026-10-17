@@ -35,7 +35,7 @@ export default function NameStep({ fields, onChange, errors, status, savedSlug }
           className={inputClass}
         />
         <p id={`${id}-hint`} className={hintClass}>
-          Buyers see this on the event page, tickets and emails.
+          {fields.type === 'REGISTRATION' ? 'Registrants see this on the event page and in emails.' : 'Buyers see this on the event page, tickets and emails.'}
         </p>
         {nameError && (
           <p id={`${id}-error`} className={errorText}>

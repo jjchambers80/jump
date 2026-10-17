@@ -1,6 +1,7 @@
-// Spec 057: a floor map belongs to a LIVE event, and the registration events
-// linked to it sell its spaces. These two lookups are the only place that
-// knows; map and booth code goes through them instead of comparing eventIds.
+// Spec 057: a floor map (and the special guest lineup) belongs to a LIVE event,
+// and the registration events linked to it sell its spaces and fill its lineup.
+// These two lookups are the only place that knows; map, booth and lineup code
+// goes through them instead of comparing eventIds.
 
 import { prisma } from '@jump/db';
 

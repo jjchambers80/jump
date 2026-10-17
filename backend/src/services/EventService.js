@@ -1206,7 +1206,7 @@ class EventService {
     const [ticketCountResult, rsvpResult] = await Promise.all([
       prisma.order.aggregate({
         where: {
-          event: { venue: { organizationId: orgId }, ...(category ? { category } : {}), ...(q ? { OR: baseWhere.OR } : {}) },
+          event: { venue: { organizationId: orgId }, ...(category ? { category } : {}), ...(type ? { type } : {}), ...(q ? { OR: baseWhere.OR } : {}) },
           kind: 'TICKET',
           status: { in: PAID_ORDER_STATUSES },
         },
@@ -1218,6 +1218,7 @@ class EventService {
           event: {
             venue: { organizationId: orgId },
             ...(category ? { category } : {}),
+            ...(type ? { type } : {}),
             ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
           },
         },
