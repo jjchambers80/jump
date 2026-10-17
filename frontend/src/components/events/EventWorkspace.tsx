@@ -13,6 +13,7 @@ import api from '@/services/api';
 import { useOrg, useCan } from '@/components/OrgContext';
 import { formatEventDateTime } from '@/lib/eventTime';
 import { EventStatusPill } from '@/components/events/EventEditSummary';
+import type { EventType, LinkedEventSummary, RegistrationSummary } from '@/lib/eventOverview';
 
 export interface EventWorkspaceFacts {
   id: string;
@@ -20,11 +21,16 @@ export interface EventWorkspaceFacts {
   slug: string;
   status: 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
   date: string;
+  /** Spec 057; older payloads omit it (LIVE). */
+  type?: EventType;
   admissionMode: 'TICKETED' | 'RSVP';
   venue: { name: string; timezone?: string | null } | null;
+  /** A registration event's is the map of the live event it is for. */
   mapId: string | null;
   formCount: number;
   toReview: number;
+  linkedEvent?: LinkedEventSummary | null;
+  registrations?: RegistrationSummary[];
 }
 
 export type WorkspaceTab = 'overview' | 'applications' | 'map' | 'attendees' | 'rsvps' | 'analytics' | 'check-in' | 'history';
@@ -50,13 +56,35 @@ export function useEventWorkspace(eventId: string) {
   return { facts, orgId: selectedOrgId };
 }
 
-/** The tab list for an event; tabs that do not apply are left out. */
-export function workspaceTabs(eventId: string, facts: Pick<EventWorkspaceFacts, 'admissionMode' | 'formCount' | 'toReview'> | null, orgId?: string | null) {
+/**
+ * The tab list for an event; tabs that do not apply are left out. Spec 057:
+ * applications belong to registration events (Registrations, Door check-in for
+ * registrants, the linked live event's map). A live event lists them only while
+ * it still holds forms from before registration events (until the 057 backfill).
+ */
+export function workspaceTabs(
+  eventId: string,
+  facts: (Pick<EventWorkspaceFacts, 'admissionMode' | 'formCount' | 'toReview'> & Partial<Pick<EventWorkspaceFacts, 'type' | 'linkedEvent' | 'mapId'>>) | null,
+  orgId?: string | null
+) {
   const base = `/admin/events/${eventId}`;
+  const overview = { key: 'overview' as const, label: 'Overview', href: `${base}${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}` };
+  const count = facts?.toReview || undefined;
+  if (facts?.type === 'REGISTRATION') {
+    const tabs: { key: WorkspaceTab; label: string; href: string; count?: number }[] = [
+      overview,
+      { key: 'applications', label: 'Registrations', href: `${base}/applications`, count },
+      // The floor map is the live event's: the tab opens it there.
+      ...(facts.linkedEvent ? [{ key: 'map' as const, label: 'Map', href: `/admin/events/${facts.linkedEvent.id}/map` }] : []),
+      { key: 'check-in', label: 'Door check-in', href: `${base}/check-in` },
+    ];
+    return tabs;
+  }
   const ticketed = facts?.admissionMode !== 'RSVP';
+  const legacyForms = !!facts && facts.formCount > 0;
   const tabs: { key: WorkspaceTab; label: string; href: string; count?: number }[] = [
-    { key: 'overview', label: 'Overview', href: `${base}${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}` },
-    { key: 'applications', label: 'Applications', href: `${base}/applications`, count: facts?.toReview || undefined },
+    overview,
+    ...(legacyForms ? [{ key: 'applications' as const, label: 'Applications', href: `${base}/applications`, count }] : []),
     { key: 'map', label: 'Map', href: `${base}/map` },
     ticketed
       ? { key: 'attendees', label: 'Attendees', href: `${base}/attendees` }
@@ -131,11 +159,14 @@ export default function EventWorkspaceHeader({
   eventId: string;
   current: WorkspaceTab;
   /** The page's own heading, e.g. "Attendees". */
-  title: string;
+  title: string | ((facts: EventWorkspaceFacts | null) => string);
   subtitle?: React.ReactNode;
-  actions?: React.ReactNode;
+  /** A function gets the facts (spec 057: actions differ for a registration event). */
+  actions?: React.ReactNode | ((facts: EventWorkspaceFacts | null) => React.ReactNode);
 }) {
   const { facts, orgId } = useEventWorkspace(eventId);
+  const heading = typeof title === 'function' ? title(facts) : title;
+  const actionNodes = typeof actions === 'function' ? actions(facts) : actions;
   const tabs = workspaceTabs(eventId, facts, orgId);
   const overviewHref = tabs[0].href;
 
@@ -160,14 +191,14 @@ export default function EventWorkspaceHeader({
             <ChevronRight className="h-3.5 w-3.5" />
           </li>
           <li aria-current="page" className="shrink-0 text-gray-900 dark:text-slate-200">
-            {title}
+            {heading}
           </li>
         </ol>
       </nav>
 
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{heading}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-slate-400">
             {facts && <EventStatusPill status={facts.status} />}
             {facts && (
@@ -180,7 +211,7 @@ export default function EventWorkspaceHeader({
             {subtitle}
           </div>
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actionNodes && <div className="flex flex-wrap items-center gap-2">{actionNodes}</div>}
       </div>
 
       <div className="mt-4">

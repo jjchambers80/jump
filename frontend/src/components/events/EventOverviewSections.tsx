@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Pencil } from 'lucide-react';
+import { ArrowUpRight, ClipboardList, Pencil, Plus } from 'lucide-react';
 import ContentHtml from '@/components/storefront/ContentHtml';
 import { CapacityMeter, tierAccent } from '@/components/events/EventEditSummary';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
@@ -19,9 +19,11 @@ import {
   type ApplicationState,
   type BoothState,
   type EventOverview,
+  type LinkedEventSummary,
   type OverviewForm,
   type OverviewMap,
   type OverviewTier,
+  type RegistrationSummary,
 } from '@/lib/eventOverview';
 
 const eyebrow = 'text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400';
@@ -408,6 +410,9 @@ export function ApplicationsSection({
   base,
   formHref,
   delay,
+  title = 'Applications',
+  empty = 'Vendors, sponsors and press apply through a form. This event has none yet. Start one from Add to this event.',
+  emptyAction,
 }: {
   overview: EventOverview;
   /** /admin/events/:eventId/applications */
@@ -415,6 +420,10 @@ export function ApplicationsSection({
   /** The application flow that edits a form (spec 051). */
   formHref: (form: OverviewForm) => string;
   delay?: number;
+  /** Spec 057: a registration event's one form reads "Registration form". */
+  title?: string;
+  empty?: string;
+  emptyAction?: React.ReactNode;
 }) {
   const { forms } = overview.applications;
   const zone = overview.event.venue?.timezone;
@@ -423,7 +432,7 @@ export function ApplicationsSection({
   return (
     <OverviewSection
       id="applications"
-      title="Applications"
+      title={title}
       delay={delay}
       aside={
         forms.length > 0 ? (
@@ -435,7 +444,7 @@ export function ApplicationsSection({
       }
     >
       {forms.length === 0 ? (
-        <Empty>Vendors, sponsors and press apply through a form. This event has none yet. Start one from Add to this event.</Empty>
+        <Empty action={emptyAction}>{empty}</Empty>
       ) : (
         <ul className="space-y-5">
           {forms.map((form) => (
@@ -507,6 +516,89 @@ export function ApplicationsSection({
             </li>
           ))}
         </ul>
+      )}
+    </OverviewSection>
+  );
+}
+
+// ── Registration events (spec 057) ─────────────────────────────────────────
+
+const FORM_STATE_LABEL = { DRAFT: 'Form not open', OPEN: 'Taking registrations', CLOSED: 'Closed' } as const;
+
+/** A live event's registration events: who registers for it, and how many wait for review. */
+export function RegistrationsCard({
+  registrations,
+  createHref,
+  delay,
+}: {
+  registrations: RegistrationSummary[];
+  /** The wizard, preset to a registration event for this one; omitted without the form permission. */
+  createHref?: string;
+  delay?: number;
+}) {
+  const create = createHref ? (
+    <Link href={createHref} className={`${quietLink} min-h-11`}>
+      <Plus className="h-4 w-4" aria-hidden />
+      Create registration event
+    </Link>
+  ) : undefined;
+  return (
+    <OverviewSection id="registrations" title="Registrations" delay={delay} aside={registrations.length > 0 ? create : undefined}>
+      {registrations.length === 0 ? (
+        <Empty action={create}>Let vendors, sponsors, volunteers or anyone you choose register for this event, free or with a fee.</Empty>
+      ) : (
+        <ul className="divide-y divide-gray-100 dark:divide-slate-700/70">
+          {registrations.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <div className="flex min-w-0 items-start gap-3">
+                <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" aria-hidden />
+                <div className="min-w-0">
+                  <Link href={`/admin/events/${encodeURIComponent(r.id)}`} className={`rounded font-semibold text-gray-900 hover:underline dark:text-white ${focusRing}`}>
+                    {r.name}
+                  </Link>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    {r.status === 'PUBLISHED' ? (r.formStatus ? FORM_STATE_LABEL[r.formStatus] : 'No form yet') : r.status === 'DRAFT' ? 'Draft' : 'Cancelled'}
+                  </p>
+                </div>
+              </div>
+              {r.toReview > 0 && (
+                <Link href={`/admin/events/${encodeURIComponent(r.id)}/applications`} className={quietLink}>
+                  Review {n(r.toReview)}
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </OverviewSection>
+  );
+}
+
+/** A registration event's "Registering for": the live event it is for, or none. */
+export function LinkedEventCard({
+  linkedEvent,
+  zone,
+  editHref,
+  delay,
+}: {
+  linkedEvent: LinkedEventSummary | null;
+  zone?: string | null;
+  editHref?: string;
+  delay?: number;
+}) {
+  return (
+    <OverviewSection id="linked-event" title="Registering for" editHref={editHref} editLabel="Edit the event this is for" delay={delay}>
+      {linkedEvent ? (
+        <>
+          <Link href={`/admin/events/${encodeURIComponent(linkedEvent.id)}`} className={`rounded font-semibold text-gray-900 hover:underline dark:text-white ${focusRing}`}>
+            {linkedEvent.name}
+          </Link>
+          <p className="mt-0.5 text-sm text-gray-600 dark:text-slate-400">{formatEventDate(linkedEvent.date, zone)}</p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">Registrants can choose a spot on its floor map, and its event page links here.</p>
+        </>
+      ) : (
+        <p className="text-sm text-gray-600 dark:text-slate-400">Not for a specific event.</p>
       )}
     </OverviewSection>
   );
