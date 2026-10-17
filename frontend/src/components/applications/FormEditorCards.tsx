@@ -189,7 +189,7 @@ export function SettingsCard({
     const next = { ...state, ...patch };
     setState(next);
     // The setup flows (spec 051) feed the live preview.
-    onChange?.({ name: next.name, intro: next.intro || null, ...paidSettings(next) });
+    onChange?.({ name: next.name, intro: next.intro || null, buttonLabel: next.buttonLabel.trim() || null, ...paidSettings(next) });
   };
 
   const submit = async (e: FormEvent) => {
@@ -203,7 +203,8 @@ export function SettingsCard({
       opensAt: fromLocalInput(state.opensAt, form.timezone),
       closesAt: fromLocalInput(state.closesAt, form.timezone),
       ...paidSettings(state),
-      ...(standing && { buttonLabel: state.buttonLabel.trim() || null, successMessage: state.successMessage.trim() || null }),
+      buttonLabel: state.buttonLabel.trim() || null,
+      ...(standing && { successMessage: state.successMessage.trim() || null }),
     };
     await onSave(body);
     setSaving(false);
@@ -261,13 +262,15 @@ export function SettingsCard({
         </div>
         )}
         </>
+        {show('details') && (
+          <div>
+            <label htmlFor="f-button" className={labelClass}>Button label</label>
+            <input id="f-button" value={state.buttonLabel} maxLength={80} placeholder={standing ? 'Apply' : state.name} disabled={!canEdit} onChange={(e) => update({ buttonLabel: e.target.value })} aria-describedby="f-button-hint" className={field} />
+            <p id="f-button-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">{standing ? 'The call to action on the pages that show this form.' : 'The button on the event page. Empty: the form name.'}</p>
+          </div>
+        )}
         {standing && show('details') && (
           <>
-            <div>
-              <label htmlFor="f-button" className={labelClass}>Button label</label>
-              <input id="f-button" value={state.buttonLabel} maxLength={80} placeholder="Apply" disabled={!canEdit} onChange={(e) => update({ buttonLabel: e.target.value })} aria-describedby="f-button-hint" className={field} />
-              <p id="f-button-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">The call to action on the pages that show this form.</p>
-            </div>
             <div className="sm:col-span-2">
               <label htmlFor="f-success" className={labelClass}>Thank-you message</label>
               <textarea id="f-success" rows={3} value={state.successMessage} maxLength={2000} placeholder="Thanks — we'll review your application and email you." disabled={!canEdit} onChange={(e) => update({ successMessage: e.target.value })} className={field} />

@@ -109,19 +109,8 @@ export interface AdminTier {
   addOns: TierAddOnOption[];
 }
 
-/** Spec 050 §6.2: what a form is for. Places it in a wizard step and labels its storefront pill. */
+/** Spec 050 §6.2: what a form is for. Only places forms from before spec 057 in a live event's wizard step; registration forms are always OTHER. */
 export type FormPurpose = 'VENDOR' | 'SPONSOR' | 'PRESS' | 'PANEL' | 'SPECIAL_GUEST' | 'VOLUNTEER' | 'OTHER';
-
-/** Short call to action per purpose ("Get involved" pills). */
-export const PURPOSE_CTA: Record<FormPurpose, string> = {
-  VENDOR: 'Become a vendor',
-  SPONSOR: 'Become a sponsor',
-  PRESS: 'Press pass',
-  PANEL: 'Host a panel',
-  SPECIAL_GUEST: 'Apply as a guest',
-  VOLUNTEER: 'Volunteer',
-  OTHER: 'Apply',
-};
 
 /** Business-profile fields a form can ask one by one (backend `BUSINESS_FIELDS`). */
 export const BUSINESS_FIELDS = ['businessName', 'description', 'website', 'socials', 'photos'] as const;
@@ -500,6 +489,7 @@ export interface AdminApplication {
   form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD'; reserveOnApproval?: boolean; spaceSelection?: 'TIERS' | 'MAP' | null; purpose?: FormPurpose };
   /** Spec 050 §7.6: the event lineup row made from this application, if any. */
   lineupGuestId?: string | null;
+  lineupEventId?: string | null;
   /** Spec 037 phase 5: the categories an approval can assign, with what is left. */
   categories?: { id: string; name: string; price: number; isActive: boolean; remaining: number }[];
   /** Spec 037 phase 5: while set, the vendor holds a chosen space and is paying. */

@@ -149,7 +149,7 @@ const DETAIL_INCLUDE = {
   contact: { select: { id: true, organizationId: true, email: true, firstName: true, lastName: true, accountCreatedAt: true, stripeCustomerId: true, stripeCustomerAccountId: true } },
   profile: { include: { images: { include: { image: { include: { file: true } } }, orderBy: { displayOrder: 'asc' } } } },
   tier: true,
-  guests: { select: { id: true } }, // spec 050 §7.6: already in the event's lineup
+  guests: { select: { id: true, eventId: true } }, // spec 050 §7.6: already in the event's lineup
   form: {
     select: {
       id: true,
@@ -1350,7 +1350,7 @@ class ApplicationService {
       if (application.paymentStatus === 'PROCESSING') throw new ConflictError('A payment is in progress for this application; try again in a moment');
       const form = await tx.applicationForm.findUnique({
         where: { id: application.formId },
-        select: { kind: true, eventId: true, reserveOnApproval: true, spaceSelection: true, purpose: true, tiers: { orderBy: { displayOrder: 'asc' } } },
+        select: { kind: true, eventId: true, reserveOnApproval: true, spaceSelection: true, tiers: { orderBy: { displayOrder: 'asc' } } },
       });
 
       const data = { status: spec.to, decidedAt: new Date(), decidedById: input.byUserId };
@@ -2706,6 +2706,8 @@ class ApplicationService {
       event: a.event ? { id: a.event.id, name: a.event.name, date: a.event.date, timezone: a.event.venue?.timezone ?? null } : null,
       // Spec 050 §7.6: the lineup row made from this application, if any.
       lineupGuestId: a.guests?.[0]?.id ?? null,
+      // Spec 057: the lineup it is on (a registration event's guests join the linked live event's).
+      lineupEventId: a.guests?.[0]?.eventId ?? null,
       status: a.status,
       paymentStatus: a.paymentStatus,
       capacitySlot: a.capacitySlot,

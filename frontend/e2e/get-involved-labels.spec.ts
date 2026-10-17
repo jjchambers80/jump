@@ -1,5 +1,5 @@
-// "Get involved" pills (spec 050 §6.2, card 050-B): the short label comes from
-// each form's `purpose`, never from its name. The API is mocked.
+// "Get involved" pills (spec 050 §6.2, card 050-B): the label is the form's
+// button label, else its name — never a word picked from a form type. The API is mocked.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -28,15 +28,11 @@ function eventResponse() {
   };
 }
 
-// Names deliberately say nothing about the role: only `purpose` can produce the label.
-const FORMS: [string, string, string][] = [
-  ['VENDOR', 'Market hall 2027', 'Become a vendor'],
-  ['SPONSOR', 'Partner packages', 'Become a sponsor'],
-  ['PRESS', 'Accreditation', 'Press pass'],
-  ['PANEL', 'Stage program', 'Host a panel'],
-  ['SPECIAL_GUEST', 'Celebrity row', 'Apply as a guest'],
-  ['VOLUNTEER', 'Crew sign-up', 'Volunteer'],
-  ['OTHER', 'Something else', 'Apply'],
+// [purpose, name, buttonLabel, expected pill]: the purpose never shows.
+const FORMS: [string, string, string | null, string][] = [
+  ['VENDOR', 'Market hall 2027', 'Sell at the market', 'Sell at the market'],
+  ['OTHER', 'Member renewal', null, 'Member renewal'],
+  ['SPECIAL_GUEST', 'Celebrity row', '  ', 'Celebrity row'],
 ];
 
 async function mockEvent(page: Page) {
@@ -48,8 +44,8 @@ async function mockEvent(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        data: FORMS.map(([purpose, name], i) => ({
-          id: `f-${i}`, purpose, name, slug: `form-${i}`, kind: 'FREE', intro: null,
+        data: FORMS.map(([purpose, name, buttonLabel], i) => ({
+          id: `f-${i}`, purpose, name, buttonLabel, slug: `form-${i}`, kind: 'FREE', intro: null,
           acceptance: { open: true, reason: null }, chargeTiming: null, feeMode: null, tiers: [], questions: [],
         })),
       }),
@@ -60,14 +56,14 @@ async function mockEvent(page: Page) {
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-test('pill labels come from the form purpose', async ({ page }) => {
+test('pill labels are the button label, else the form name', async ({ page }) => {
   await mockEvent(page);
   await page.goto(`/events/${EVENT_ID}`);
 
   const strip = page.getByTestId('get-involved').filter({ visible: true }).first();
   await expect(strip).toBeVisible({ timeout: 30000 });
-  for (const [, name, label] of FORMS) {
-    const link = strip.getByRole('link', { name: `${label}: ${name}`, exact: true });
+  for (const [, name, , label] of FORMS) {
+    const link = strip.getByRole('link', { name: label === name ? name : `${label}: ${name}`, exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveText(label);
   }

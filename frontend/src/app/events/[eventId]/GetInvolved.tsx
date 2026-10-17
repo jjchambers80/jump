@@ -9,12 +9,11 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import api from '@/services/api';
-import { acceptanceLine, PURPOSE_CTA, type PublicForm } from '@/lib/applications';
+import { acceptanceLine, type PublicForm } from '@/lib/applications';
 
-// Organizers name forms in full ("2026 Game and Geek Vendor Application");
-// the pill only needs the role, from the form's purpose (spec 050 §6.2).
-// The full name stays in the accessible name.
-const shortLabel = (form: PublicForm) => PURPOSE_CTA[form.purpose ?? 'OTHER'] ?? PURPOSE_CTA.OTHER;
+// The pill says what the organizer set as the form's button label, else the
+// form name: forms have no type, so the words are always the organizer's.
+const shortLabel = (form: PublicForm) => form.buttonLabel?.trim() || form.name;
 
 export default function GetInvolved({
   eventId,
@@ -73,7 +72,7 @@ export default function GetInvolved({
               <Link
                 // Spec 057: a linked registration event's form lives on that event.
                 href={`/events/${form.eventId ?? eventId}/apply/${form.slug}`}
-                aria-label={`${label}: ${form.name}`}
+                aria-label={label === form.name ? undefined : `${label}: ${form.name}`}
                 title={form.name}
                 className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm shadow-black/20 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/60"
               >

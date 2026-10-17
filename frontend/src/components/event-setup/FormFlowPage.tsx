@@ -51,7 +51,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { selectedOrg } = useOrg();
   // Unsaved name and intro from Form details: the preview shows them as they are typed.
-  const [typed, setTyped] = useState<{ name?: string; intro?: string | null }>({});
+  const [typed, setTyped] = useState<{ name?: string; intro?: string | null; buttonLabel?: string | null }>({});
   // Start, before the form exists: what is being set up (name, purpose, paid).
   const [draft, setDraft] = useState<DraftForm | null>(null);
 
@@ -201,7 +201,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               {form.name} is set up. Continue to its details, or go back to the event to add another.
             </p>
           )}
-          {form && step.key === 'details' && (flow === 'other-applications' || flow === 'registration') && (
+          {form && step.key === 'details' && flow === 'other-applications' && (
             <div>
               <label htmlFor="flow-form-purpose" className={labelClass}>What is this form for?</label>
               <select
@@ -231,7 +231,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               formId={SETTINGS_FORM_ID}
               hideSubmit
               onSave={saveAndContinue}
-              onChange={(s) => setTyped({ name: s.name as string, intro: (s.intro as string | null) ?? null })}
+              onChange={(s) => setTyped({ name: s.name as string, intro: (s.intro as string | null) ?? null, buttonLabel: (s.buttonLabel as string | null) ?? null })}
             />
           )}
           {form && step.key === 'options' && (

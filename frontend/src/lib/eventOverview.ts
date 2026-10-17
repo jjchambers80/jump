@@ -146,7 +146,6 @@ export interface RegistrationSummary {
   slug: string;
   status: EventStatus;
   formStatus: 'DRAFT' | 'OPEN' | 'CLOSED' | null;
-  purpose: FormPurpose | null;
   toReview: number;
 }
 

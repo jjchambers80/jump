@@ -345,11 +345,11 @@ export default function ApplicationDetail({ eventId = '', standingFormId, applic
               </div>
             )}
 
-            {/* Special guest lineup (spec 050 §7.6): an approved guest can be put on the event page */}
-            {!standing && app.status === 'APPROVED' && app.form.purpose === 'SPECIAL_GUEST' && (
+            {/* Lineup (spec 050 §7.6): any approved applicant can be put on the event page */}
+            {!standing && app.status === 'APPROVED' && (
               <div className={card}>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Event lineup</h3>
-                <AddToLineup eventId={eventId} applicationId={app.id} guestId={app.lineupGuestId ?? null} onAdded={(id) => setApp({ ...app, lineupGuestId: id })} />
+                <AddToLineup eventId={eventId} applicationId={app.id} guestId={app.lineupGuestId ?? null} lineupEventId={app.lineupEventId ?? null} onAdded={(guest) => setApp({ ...app, lineupGuestId: guest.id, lineupEventId: guest.eventId })} />
               </div>
             )}
           </div>

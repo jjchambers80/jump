@@ -142,21 +142,24 @@ test.describe('desktop', () => {
     // One count for the event wizard and the flow: 6 event steps, then Start, Details, Fields, Collect more, Review.
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 11');
     await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair');
-    await expect(main(page).getByLabel('What is this form for?')).toHaveValue('VENDOR');
+    // Generic: no type to pick, the name says who registers.
+    await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
     // A registration starts free; charging adds the options and payment steps.
-    await expect(main(page).getByLabel('Charge for space')).not.toBeChecked();
-    await main(page).getByLabel('Charge for space').check();
+    await expect(main(page).getByLabel('Charge applicants')).not.toBeChecked();
+    await main(page).getByLabel('Charge applicants').check();
     await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
     await expect(page.getByRole('region', { name: 'Live preview of the application form' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', purpose: 'VENDOR', setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', purpose: 'OTHER', setup: true });
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-/);
     await expect(heading(page, 'Form details')).toBeFocused();
     await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 8 of 13, Form details');
     await expect(main(page).getByLabel('Intro shown to applicants')).toBeVisible();
+    await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
+    await expect(main(page).getByLabel('Button label')).toBeVisible();
     await expect(main(page).getByRole('button', { name: 'Save settings' })).toHaveCount(0);
     await main(page).getByLabel('Intro shown to applicants').fill('Tables and power included.');
     await next(page).click();
@@ -225,11 +228,10 @@ test.describe('desktop', () => {
     expect(calls.create).toHaveLength(0);
   });
 
-  test('Start previews the form being set up: the name as it is typed, no business step for volunteers', async ({ page }) => {
+  test('Start previews the form being set up: the name as it is typed, no business step', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
     await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await main(page).getByLabel('What is this form for?').selectOption('VOLUNTEER');
     await main(page).getByLabel('Name').fill('Crew sign-up');
     await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Crew sign-up' })).toBeVisible(COLD);
     await expect(formPreview(page).getByRole('heading', { name: /Your details/ })).toBeVisible();
@@ -250,16 +252,14 @@ test.describe('desktop', () => {
     await expect(formPreview(page).getByLabel('Email')).toHaveCount(0);
   });
 
-  test('a volunteer registration is always free, then fields', async ({ page }) => {
+  test('a free registration, then fields', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
     await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await main(page).getByLabel('What is this form for?').selectOption('VOLUNTEER');
-    await expect(main(page).getByText('Volunteer applications are always free: volunteers give their time.')).toBeVisible();
-    await expect(main(page).getByRole('checkbox', { name: /Charge/ })).toHaveCount(0);
+    await main(page).getByLabel('Name').fill('Crew sign-up');
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toMatchObject({ kind: 'FREE', purpose: 'VOLUNTEER' });
+    expect(calls.create[0].postDataJSON()).toMatchObject({ name: 'Crew sign-up', kind: 'FREE', purpose: 'OTHER' });
     await expect(heading(page, 'Form details')).toBeVisible();
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeVisible();
@@ -278,14 +278,6 @@ test.describe('desktop', () => {
     await add.getByRole('button', { name: 'Add field' }).click();
     await expect.poll(() => calls.questions.map((r) => r.postDataJSON())).toEqual([expect.objectContaining({ label: 'Years volunteering', type: 'NUMBER' })]);
     await expect(questions.getByText('Years volunteering')).toBeVisible();
-  });
-
-  test('who registers is fixed once the form has registrations', async ({ page }) => {
-    await mockApi(page, [form({ id: 'form-sold', purpose: 'SPONSOR', name: 'Sponsors', applicationCount: 2, purposeLocked: true, status: 'OPEN' })]);
-    await page.goto(flowUrl('registration', 'step=details&form=form-sold'));
-    await expect(heading(page, 'Form details')).toBeVisible(COLD);
-    await expect(main(page).getByLabel('What is this form for?')).toBeDisabled();
-    await expect(main(page).getByText('Fixed: this form already has applications.')).toBeVisible();
   });
 
   test('old application links on a registration event open its registration flow', async ({ page }) => {

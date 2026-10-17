@@ -13,6 +13,7 @@
 | `backend/src/services/EventService.js` | `type` / `linkedEventId` on create and PATCH (`_resolveLinkedEvent`), list / summary / CSV `?type=`, `registrationCount`, `_registrationLinks` on workspace and overview |
 | `backend/src/services/ApplicationFormService.js` | One form per registration event (`_assertNoForm`, 409 `FORM_EXISTS`); `publicForms` of a live event adds its published registrations' forms (each carries `eventId`) |
 | `backend/src/services/EventReadinessService.js` | Registration: no ticket checks, blocker `FORM_MISSING`, the linked event's map for the map warning |
+| `frontend/src/app/events/[eventId]/GetInvolved.tsx` | The live event's pill for each linked registration form: its **Button label** (Form details), else its name |
 | `backend/src/services/mapEvents.js` | `mapEventIdFor` / `eventIdsForMap`: the only place that knows a registration uses its live event's map and lineup |
 | `backend/src/scripts/backfill-057-registration-events.js` | Moves every form on a live event onto a linked registration event |
 | `frontend/src/components/event-setup/steps.ts` | `type` step, `registration` slot, `wizardProgress`, `registrationFlowSteps` |
@@ -37,7 +38,7 @@ None. Registration events are part of the **`events`** catalog feature; creating
 2. **Name**, with **Registering for** (optional live event; an empty venue and date are filled from it).
 3. **Venue**, 4. **Date** — the date step creates the event (`setup: true`, `type`, `linkedEventId`).
 5. **Description**, 6. **Image**.
-7. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (purpose + charge, creates the form) → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
+7. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge, creates the form; no type to pick, the form is generic) → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
 8. **Collect more** (extras like power or tables), 9. **Review** publishes the event and opens the form.
 
 One progress bar counts all of it (`wizardProgress`): a free form reads 11 steps, a paid one 13.

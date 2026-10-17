@@ -14,7 +14,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../middleware/err
 import { BUSINESS_FIELDS, CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
 import logger from '../utils/logger.js';
-import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
+import { FORM_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
 import { mapEventIdFor } from './mapEvents.js';
 
@@ -233,7 +233,6 @@ class ApplicationFormService {
         : { collectBusiness: body.kind === 'PAID' };
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
-    this._assertPurposeKind(data.purpose ?? 'OTHER', body.kind);
     // The setup flows (`setup: true`) keep one live form per purpose on an event.
     // Spec 057: a registration event is its one form; a live event's setup flows keep one live form per purpose.
     if (event.type === 'REGISTRATION') await this._assertNoForm(eventId);
@@ -360,7 +359,6 @@ class ApplicationFormService {
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
     const data = this._validateFormFields(body, existing.kind, existing);
-    this._assertPurposeKind(data.purpose ?? existing.purpose, existing.kind);
     if (data.purpose !== undefined && data.purpose !== existing.purpose) {
       const submitted = await prisma.application.count({ where: { formId, status: { not: 'DRAFT' } } });
       if (submitted > 0) throw coded(new ConflictError('Purpose cannot change once the form has submissions'), 'PURPOSE_LOCKED');
@@ -785,28 +783,19 @@ class ApplicationFormService {
     return data;
   }
 
-  /**
-   * Spec 050 §3: special guests and volunteers are never charged, and a PAID
-   * form keeps the business profile approval, booth assignment and check-in read.
-   */
-  /** One live (not CLOSED) form per purpose per event: the setup flows edit that one. */
+  /** Spec 057: a registration event has exactly one form. */
   async _assertNoForm(eventId) {
     const other = await prisma.applicationForm.findFirst({ where: { eventId }, select: { name: true } });
     if (other) throw coded(new ConflictError(`This registration event already has its form: ${other.name}`), 'FORM_EXISTS');
   }
 
+  /** One live (not CLOSED) form per purpose per live event: the setup flows edit that one. */
   async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
     const other = await prisma.applicationForm.findFirst({
       where: { eventId, purpose, status: { not: 'CLOSED' }, ...(excludeId && { id: { not: excludeId } }) },
       select: { id: true, name: true },
     });
     if (other) throw coded(new ConflictError(`This event already has a ${purpose.toLowerCase().replace('_', ' ')} form: ${other.name}. Close it first.`), 'FORM_EXISTS');
-  }
-
-  _assertPurposeKind(purpose, kind) {
-    if (kind === 'PAID' && FREE_ONLY_PURPOSES.has(purpose)) {
-      throw coded(new ValidationError(`${purpose} forms must be FREE`), 'PURPOSE_KIND_MISMATCH');
-    }
   }
 
   async _assertCanOpen(form) {

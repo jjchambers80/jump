@@ -1,7 +1,7 @@
 'use client';
 
-// "Add to lineup" on an approved special guest application (spec 050 §7.6,
-// card 050-Q): copies the profile (name, bio, first photo, links) into the
+// "Add to lineup" on an approved application (spec 050 §7.6, card 050-Q;
+// any form since forms lost their type): copies the profile (name, bio, first photo, links) into the
 // event's guest lineup. Edits to the lineup row happen in the special guests
 // flow's Lineup step (spec 051); this button only creates it once.
 
@@ -12,17 +12,30 @@ import api from '@/services/api';
 import { formFlowHref } from '@/components/event-setup/formFlows';
 import { describeError } from '@/app/admin/events/[eventId]/applications/useApplicationsApi';
 
-export default function AddToLineup({ eventId, applicationId, guestId, onAdded }: { eventId: string; applicationId: string; guestId: string | null; onAdded: (guestId: string) => void }) {
+export default function AddToLineup({
+  eventId,
+  applicationId,
+  guestId,
+  lineupEventId,
+  onAdded,
+}: {
+  eventId: string;
+  applicationId: string;
+  guestId: string | null;
+  /** Spec 057: the event whose lineup the guest is on (a registration event's linked live event). */
+  lineupEventId: string | null;
+  onAdded: (guest: { id: string; eventId: string }) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editHref = formFlowHref(eventId, 'special-guests', { step: 'lineup' });
+  const editHref = formFlowHref(lineupEventId ?? eventId, 'special-guests', { step: 'lineup' });
 
   const add = async () => {
     setBusy(true);
     setError(null);
     try {
-      const guest = await api.post<{ id: string }>(`/admin/events/${eventId}/applications/${applicationId}/add-to-lineup`, {});
-      onAdded(guest.id);
+      const guest = await api.post<{ id: string; eventId: string }>(`/admin/events/${eventId}/applications/${applicationId}/add-to-lineup`, {});
+      onAdded(guest);
     } catch (err) {
       setError(describeError(err, 'Could not add this guest to the lineup'));
     } finally {

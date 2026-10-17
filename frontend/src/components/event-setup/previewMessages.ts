@@ -76,12 +76,13 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
  * saved form, with the unsaved name and intro typed on Form details on top.
  * Always shown as open, whatever its status or dates.
  */
-export function previewForm(form: AdminForm, overlay: { name?: string; intro?: string | null } = {}, organizationName?: string | null): PublicForm {
+export function previewForm(form: AdminForm, overlay: { name?: string; intro?: string | null; buttonLabel?: string | null } = {}, organizationName?: string | null): PublicForm {
   return {
     id: form.id,
     kind: form.kind,
     purpose: form.purpose,
     name: overlay.name?.trim() || form.name,
+    buttonLabel: overlay.buttonLabel !== undefined ? overlay.buttonLabel : form.buttonLabel ?? null,
     slug: form.slug,
     intro: overlay.intro !== undefined ? overlay.intro || null : form.intro,
     acceptance: { open: true, reason: null },
