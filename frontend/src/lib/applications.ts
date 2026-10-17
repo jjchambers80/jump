@@ -190,6 +190,8 @@ export interface PublicTier {
 
 export interface PublicForm {
   id: string;
+  /** Spec 057: the event the form belongs to (a linked registration event's, on a live event's page). */
+  eventId?: string | null;
   kind: FormKind;
   /** Spec 050 §6.2. Optional so older payloads still render (they label as OTHER). */
   purpose?: FormPurpose;

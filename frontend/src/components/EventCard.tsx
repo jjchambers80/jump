@@ -27,6 +27,8 @@ export interface EventSummary {
   /** Event image (Media section); the `original` serving URL. */
   imageUrl?: string | null;
   status: string;
+  /** Spec 057; older payloads omit it (LIVE). */
+  type?: 'LIVE' | 'REGISTRATION';
   admissionMode: 'TICKETED' | 'RSVP';
   rsvpLimit?: number | null;
   rsvpMaxPartySize?: number;

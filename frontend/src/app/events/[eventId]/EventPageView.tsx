@@ -22,6 +22,7 @@ import EventHero from './EventHero';
 import EventAbout from './EventAbout';
 import EventTickets from './EventTickets';
 import EventRsvp from './EventRsvp';
+import EventRegister from './EventRegister';
 import EventCart from './EventCart';
 import EventMobileBar from './EventMobileBar';
 import EventGuests from './EventGuests';
@@ -75,7 +76,9 @@ export default function EventPageView({
 }: EventPageViewProps) {
   const state = eventPageState(event);
   const cancelled = event.cancelled === true;
-  const { isRsvp, isPastEvent, isSoldOut, salesClosed } = state;
+  const { isRegistration, isRsvp, isPastEvent, isSoldOut, salesClosed } = state;
+  // RSVP and registration pages are one column: no cart beside them.
+  const single = isRsvp || isRegistration;
   const zone = event.venue?.timezone;
   const formattedDate = event.date ? formatEventDate(event.date, zone, { weekday: 'long', month: 'long' }) : '';
 
@@ -89,7 +92,7 @@ export default function EventPageView({
           signIn={org.signInLinks !== false}
         />
       )}
-      <div className={`max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${isRsvp ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
+      <div className={`max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${single ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
         {/* RSVP mode drops overflow-hidden so the pass can stick; the hero clips its own corners */}
         <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-2xl sm:border sm:border-gray-200 sm:dark:border-slate-700 sm:shadow-sm sm:dark:shadow-black/20 ${isRsvp ? '' : 'overflow-hidden'}`}>
           <EventHero event={event} org={org} preview={preview} onShowDescription={on.onShowDescription} onShowImage={on.onShowImage} />
@@ -104,6 +107,8 @@ export default function EventPageView({
           >
             {cancelled ? (
               <EventCancelledNotice event={event} org={org} />
+            ) : isRegistration ? (
+              <EventRegister event={event} preview={preview} />
             ) : isRsvp ? (
               <EventRsvp
                 event={event}
@@ -134,12 +139,12 @@ export default function EventPageView({
           </div>
         </div>
 
-        {!cancelled && !isRsvp && !isPastEvent && !isSoldOut && !salesClosed && (
+        {!cancelled && !single && !isPastEvent && !isSoldOut && !salesClosed && (
           <EventCart cart={cart} preview={preview} onCheckout={on.onCheckout} onToggleLine={on.onToggleLine} onToggleAllLines={on.onToggleAllLines} />
         )}
       </div>
 
-      {!cancelled && <EventMobileBar state={state} cart={cart} preview={preview} rsvpSubmitted={rsvpSubmitted} onOpenCart={on.onOpenCart} onCheckout={on.onCheckout} />}
+      {!cancelled && !isRegistration && <EventMobileBar state={state} cart={cart} preview={preview} rsvpSubmitted={rsvpSubmitted} onOpenCart={on.onOpenCart} onCheckout={on.onCheckout} />}
 
       {!preview && children}
       {chrome && org.id && org.name && <StorefrontFooter organization={{ id: org.id, name: org.name }} />}

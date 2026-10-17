@@ -26,6 +26,7 @@ describe('formatEventSummary', () => {
       category: 'music',
       imageUrl: null,
       status: 'PUBLISHED',
+      type: 'LIVE',
       admissionMode: 'TICKETED',
       rsvpLimit: null,
       rsvpMaxPartySize: 1,
@@ -53,5 +54,15 @@ describe('formatEventSummary', () => {
       admissionMode: 'RSVP', rsvpLimit: 100, rsvpMaxPartySize: 4,
       priceRange: null, availableTickets: 0,
     });
+  });
+
+  it('carries the type and no ticket pricing for a registration event (spec 057)', () => {
+    const result = formatEventSummary({
+      id: 'event-reg', name: 'Vendors', date: new Date('2027-08-01T19:00:00.000Z'),
+      category: null, status: 'PUBLISHED', type: 'REGISTRATION', admissionMode: 'TICKETED', venue: { id: 'venue-1' },
+      priceTiers: [{ price: 20, quantityTotal: 5, quantitySold: 0, quantityReserved: 0 }],
+    });
+    expect(result).toMatchObject({ type: 'REGISTRATION', priceRange: null, availableTickets: 0 });
+    expect(formatEventSummary({ id: 'e', name: 'Live', date: new Date(), status: 'PUBLISHED', venue: null, priceTiers: [] }).type).toBe('LIVE');
   });
 });

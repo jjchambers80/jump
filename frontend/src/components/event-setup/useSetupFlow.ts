@@ -186,6 +186,7 @@ export function useSetupFlow(eventId: string | null) {
   // No description overlay: ContentHtml renders only server-sanitised HTML
   // (gotcha 20), so the preview shows it after the save, from preview-payload.
   if (saved && fields.admissionMode && fields.admissionMode !== saved.admissionMode) overlay.admissionMode = fields.admissionMode;
+  if (!saved && fields.type) overlay.type = fields.type;
   const preview: PreviewMessage = {
     type: PREVIEW_MESSAGE, orgId: orgId ?? '', eventId: saved?.id ?? null, overlay, revision, anchor: step.anchor,
   };
