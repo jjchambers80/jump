@@ -11,7 +11,8 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight, ExternalLink, Lock, MapPin, Pencil, CalendarDays } from 'lucide-react';
 import api from '@/services/api';
-import { useOrg } from '@/components/OrgContext';
+import { useCan, useOrg } from '@/components/OrgContext';
+import { formEditHref } from '@/components/event-setup/formFlows';
 import { ReauthProvider } from '@/app/admin/account/useReauth';
 import { imageVariantUrl } from '@/lib/assets';
 import { formatEventDate, formatEventDateTime, formatEventTime } from '@/lib/eventTime';
@@ -24,7 +25,6 @@ import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import DuplicateEventDialog from '../DuplicateEventDialog';
 import ContinueSetupLink from '@/components/event-setup/ContinueSetupLink';
 import { continueSetupHref, detailsEditLinks } from '@/lib/eventWizard';
-import { AddToEventCard } from '@/components/events/AddToEvent';
 import { rememberEditControl, takeEditControl } from '@/lib/detailsReturn';
 import { WorkspaceTabs, workspaceTabs } from '@/components/events/EventWorkspace';
 import {
@@ -32,9 +32,11 @@ import {
   ApplicationsSection,
   DescriptionSection,
   GuestsCard,
+  LinkedEventCard,
   ListingCard,
   MapCard,
   PaymentsCard,
+  RegistrationsCard,
   RsvpSection,
   SalesSection,
   WhenWhereCard,
@@ -65,6 +67,7 @@ function EventDetailsContent() {
   const [cancelling, setCancelling] = useState(false);
   // Spec 050-P: the special guest lineup, for its summary card ('error' when it failed to load).
   const [guests, setGuests] = useState<AdminEventGuest[] | 'error' | null>(null);
+  const canForms = useCan('applications.forms');
 
   // Spec 050-O: Save & exit in the wizard returns here with ?saved=1 (saved)
   // or ?saved=0 (the organizer left after a failed save).
@@ -158,7 +161,9 @@ function EventDetailsContent() {
   const q = `?orgId=${encodeURIComponent(orgId)}`;
   const base = `/admin/events/${eventId}`;
   const publicPath = `/events/${encodeURIComponent(event.slug || event.id)}`;
-  const ticketed = event.admissionMode === 'TICKETED';
+  // Spec 057: a registration event is its one form; a live event lists its registration events.
+  const registration = event.type === 'REGISTRATION';
+  const ticketed = !registration && event.admissionMode === 'TICKETED';
   // Spec 050-O/P: every Edit opens its wizard step (one form per field).
   const wizard = detailsEditLinks(eventId, overview.applications.forms, orgId);
   const cancelled = event.status === 'CANCELLED';
@@ -239,7 +244,9 @@ function EventDetailsContent() {
           tabs={workspaceTabs(
             eventId,
             {
+              type: event.type,
               admissionMode: event.admissionMode,
+              linkedEvent: overview.linkedEvent ?? null,
               formCount: overview.applications.forms.length,
               toReview: overview.applications.forms.reduce((s, f) => s + f.counts.SUBMITTED, 0),
             },
@@ -283,28 +290,61 @@ function EventDetailsContent() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
-          {ticketed ? (
-            <SalesSection
+          {registration ? (
+            <ApplicationsSection
               overview={overview}
-              editHref={wizard.tickets}
-              editLabel="Edit tickets"
-              ordersHref={`/admin/orders?eventId=${eventId}`}
-              tierHref={cancelled ? undefined : wizard.tier}
-              addOnsHref={wizard.addOns}
+              base={`${base}/applications`}
+              formHref={(form) => formEditHref(eventId, form, orgId, 'REGISTRATION')}
+              title="Registration form"
+              empty="Set up the form people register through."
+              emptyAction={
+                !cancelled && canForms ? (
+                  <Link href={`${base}/setup?step=registration&org=${encodeURIComponent(orgId)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-accent-700 hover:underline dark:text-accent-300">
+                    Set up the form
+                  </Link>
+                ) : undefined
+              }
               delay={40}
             />
           ) : (
-            <RsvpSection overview={overview} editHref={wizard.tickets} addOnsHref={wizard.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
+            <>
+              {ticketed ? (
+                <SalesSection
+                  overview={overview}
+                  editHref={wizard.tickets}
+                  editLabel="Edit tickets"
+                  ordersHref={`/admin/orders?eventId=${eventId}`}
+                  tierHref={cancelled ? undefined : wizard.tier}
+                  addOnsHref={wizard.addOns}
+                  delay={40}
+                />
+              ) : (
+                <RsvpSection overview={overview} editHref={wizard.tickets} addOnsHref={wizard.addOns} rsvpsHref={`${base}/rsvps`} delay={40} />
+              )}
+              <RegistrationsCard
+                registrations={overview.registrations ?? []}
+                createHref={!cancelled && canForms ? `/admin/events/new?type=registration&linked=${encodeURIComponent(eventId)}` : undefined}
+                delay={60}
+              />
+              {/* Forms from before registration events, until the spec 057 backfill moves them. */}
+              {overview.applications.forms.length > 0 && (
+                <ApplicationsSection overview={overview} base={`${base}/applications`} formHref={wizard.form} delay={80} />
+              )}
+              <GuestsCard guests={guests} editHref={wizard.guests} delay={100} />
+            </>
           )}
-          <AddToEventCard hrefFor={wizard.addForm} guests={Array.isArray(guests) ? guests.length : null} delay={60} />
-          <ApplicationsSection overview={overview} base={`${base}/applications`} formHref={wizard.form} delay={80} />
-          <GuestsCard guests={guests} editHref={wizard.guests} delay={100} />
           <DescriptionSection overview={overview} editHref={wizard.description} editLabel="Edit description" delay={120} />
         </div>
         <aside className="min-w-0 space-y-6" aria-label="Event settings">
           <WhenWhereCard overview={overview} editHref={wizard.date} venueHref={wizard.venue} delay={60} />
-          <AdmissionCard overview={overview} editHref={wizard.tickets} delay={100} />
-          <MapCard overview={overview} wizardHref={wizard.map} delay={140} />
+          {registration ? (
+            <LinkedEventCard linkedEvent={overview.linkedEvent ?? null} zone={event.venue?.timezone} editHref={cancelled ? undefined : wizard.name} delay={100} />
+          ) : (
+            <>
+              <AdmissionCard overview={overview} editHref={wizard.tickets} delay={100} />
+              <MapCard overview={overview} wizardHref={wizard.map} delay={140} />
+            </>
+          )}
           <ListingCard
             overview={overview}
             editHref={wizard.listing}
@@ -396,7 +436,8 @@ function EventHero({
   const image = imageVariantUrl(event.logoUrl, 'thumb');
   const monogram = (event.name.trim()[0] ?? 'E').toUpperCase();
   const past = new Date(event.date) < new Date();
-  const ticketed = event.admissionMode === 'TICKETED';
+  const registration = event.type === 'REGISTRATION';
+  const ticketed = !registration && event.admissionMode === 'TICKETED';
   const dateParts = formatEventDate(event.date, zone).match(/^(\w+), (\w+) (\d+), (\d+)$/);
 
   const allocated = event.priceTiers.reduce((s, t) => s + t.quantityTotal, 0);
@@ -405,18 +446,32 @@ function EventHero({
   const appsTotal = forms.reduce((s, f) => s + f.total, 0);
   const toReview = forms.reduce((s, f) => s + f.counts.SUBMITTED, 0);
 
-  const stats: { label: string; value: string; detail?: string }[] = ticketed
+  const approved = forms.reduce((s, f) => s + f.counts.APPROVED, 0);
+  // Spec 057: a live event counts its registration events' queues, or its own forms from before them.
+  const registrationsWaiting = (overview.registrations ?? []).reduce((s, r) => s + r.toReview, 0);
+  const lastStat = forms.length
+    ? { label: 'Applications', value: n(appsTotal), detail: toReview ? `${n(toReview)} to review` : 'None waiting' }
+    : { label: 'Registrations', value: n(overview.registrations?.length ?? 0), detail: registrationsWaiting ? `${n(registrationsWaiting)} to review` : 'None waiting' };
+
+  const stats: { label: string; value: string; detail?: string }[] = registration
+    ? [
+        { label: 'Registrations', value: n(appsTotal), detail: forms.length ? (forms[0].status === 'OPEN' ? 'Form open' : forms[0].status === 'DRAFT' ? 'Form not open' : 'Form closed') : 'No form yet' },
+        { label: 'To review', value: n(toReview), detail: toReview ? 'Waiting for you' : 'None waiting' },
+        { label: 'Approved', value: n(approved), detail: forms.some((f) => f.kind === 'PAID') ? `${n(forms.reduce((s, f) => s + f.approvedSettled, 0))} paid` : 'Free to register' },
+        { label: 'Collected', value: formatMoney(money.gross), detail: money.refunded > 0 ? `${formatMoney(money.refunded)} refunded` : `${n(money.applications.orders)} paid orders` },
+      ]
+    : ticketed
     ? [
         { label: 'Collected', value: formatMoney(money.gross), detail: money.refunded > 0 ? `${formatMoney(money.refunded)} refunded` : `${n(money.tickets.orders + money.applications.orders)} paid orders` },
         { label: 'Tickets sold', value: n(sold), detail: allocated ? `of ${n(allocated)} · ${Math.round((sold / allocated) * 100)}%` : 'No tiers yet' },
         { label: 'Checked in', value: n(tickets?.checkedIn ?? 0), detail: `of ${n(tickets?.issued ?? 0)} issued` },
-        { label: 'Applications', value: n(appsTotal), detail: forms.length ? (toReview ? `${n(toReview)} to review` : 'None waiting') : 'No forms' },
+        lastStat,
       ]
     : [
         { label: 'Guests', value: n(rsvp?.headcount ?? 0), detail: event.rsvpLimit ? `of ${n(event.rsvpLimit)}` : 'No limit' },
         { label: 'RSVPs', value: n(rsvp?.going ?? 0), detail: `${n(rsvp?.cancelled ?? 0)} cancelled` },
         { label: 'Spots left', value: rsvp?.remaining == null ? '∞' : n(rsvp.remaining), detail: 'Free admission' },
-        { label: 'Applications', value: n(appsTotal), detail: forms.length ? (toReview ? `${n(toReview)} to review` : 'None waiting') : 'No forms' },
+        lastStat,
       ];
 
   return (
@@ -482,7 +537,7 @@ function EventHero({
                 <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{past ? 'Ended' : 'Starts'} {relativeDays(event.date)}</span>
               )}
               <span aria-hidden className="text-xs text-gray-400 dark:text-slate-500">·</span>
-              <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{ticketed ? 'Ticketed' : 'RSVP'}</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-slate-400">{registration ? 'Registration' : ticketed ? 'Ticketed' : 'RSVP'}</span>
             </div>
             <h1 id="event-title" tabIndex={-1} className="mt-1.5 text-2xl font-bold tracking-tight text-gray-900 [overflow-wrap:anywhere] dark:text-white sm:text-3xl">
               {event.name}

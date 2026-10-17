@@ -9,6 +9,7 @@ const API = 'http://localhost:3002';
 const ORG_ID = 'org-details';
 const EVENT_ID = 'evt-details';
 const RSVP_ID = 'evt-rsvp';
+const REG_ID = 'evt-reg';
 
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -70,6 +71,21 @@ const overview = {
     id: 'map-1', name: 'Hall A', status: 'PUBLISHED', publishedAt: future, updatedAt: future,
     booths: { AVAILABLE: 15, HELD: 1, SOLD: 3, RESERVED: 1, BLOCKED: 0 }, boothTotal: 20, unassignedBooths: 2,
   },
+  // Spec 057: registration events for this one.
+  linkedEvent: null,
+  registrations: [{ id: REG_ID, name: 'Game & Geek Vendors', slug: 'gg-vendors', status: 'PUBLISHED', formStatus: 'OPEN', purpose: 'VENDOR', toReview: 2 }],
+};
+
+/** Spec 057: a registration event, for the live event above. */
+const registrationOverview = {
+  ...overview,
+  event: { ...baseEvent, id: REG_ID, name: 'Game & Geek Vendors', type: 'REGISTRATION', linkedEventId: EVENT_ID, capacity: null, priceTiers: [] },
+  money: { gross: 400, orgReceives: 380, refunded: 0, net: 400, tickets: { orders: 0, gross: 0 }, applications: { orders: 2, gross: 400 } },
+  tickets: null,
+  addOns: { addOns: [], totals: { sold: 0, reserved: 0, revenue: 0 } },
+  map: null,
+  linkedEvent: { id: EVENT_ID, name: 'Game & Geek 2026', slug: 'game-geek-2026', status: 'PUBLISHED', date: future },
+  registrations: [],
 };
 
 const rsvpOverview = {
@@ -81,6 +97,7 @@ const rsvpOverview = {
   addOns: { addOns: [], totals: { sold: 0, reserved: 0, revenue: 0 } },
   applications: { forms: [] },
   map: null,
+  registrations: [],
 };
 
 const guests = [
@@ -99,6 +116,8 @@ async function mockApi(page: Page) {
   );
   await page.route(`${API}/organizations/${ORG_ID}/events/${EVENT_ID}/overview`, (route) => route.fulfill(json(overview)));
   await page.route(`${API}/organizations/${ORG_ID}/events/${RSVP_ID}/overview`, (route) => route.fulfill(json(rsvpOverview)));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${REG_ID}/overview`, (route) => route.fulfill(json(registrationOverview)));
+  await page.route(`${API}/organizations/${ORG_ID}/events/${REG_ID}/guests`, (route) => route.fulfill(json({ data: [] })));
   await page.route(`${API}/organizations/${ORG_ID}/events/missing/overview`, (route) =>
     route.fulfill(json({ error: 'Event not found' }, 404))
   );
@@ -215,37 +234,58 @@ test('an RSVP event shows its guests instead of sales', async ({ page }) => {
   const rsvps = page.getByRole('region', { name: 'RSVPs' });
   await expect(rsvps.getByText('of 40 guests')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Event pages' }).getByRole('link', { name: 'Guest list' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Applications' }).getByText('This event has none yet.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Registrations' }).getByText('register for this event', { exact: false })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Applications' })).toHaveCount(0);
 });
 
-test('Add to this event starts each application flow, with what is already there', async ({ page }) => {
+test('Registrations lists the registration events for this one and creates another (spec 057)', async ({ page }) => {
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
-  const card = page.getByRole('region', { name: 'Add to this event' });
-  const flow = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
-  const tiles: [string, string][] = [
-    ['Add a vendor application', flow(`vendors?org=${ORG_ID}`)],
-    ['Add special guests', flow(`special-guests?step=lineup&org=${ORG_ID}`)],
-    ['Add a volunteer application', flow(`volunteers?org=${ORG_ID}`)],
-    ['Add an application', flow(`other-applications?org=${ORG_ID}`)],
-  ];
-  for (const [name, href] of tiles) {
-    const link = card.getByRole('link', { name });
-    await expect(link).toHaveAttribute('href', href);
-    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  }
-  await expect(card.getByTestId('add-to-event-special-guests')).toContainText('5 guests in the lineup');
-  // One form per flow (spec 056): tiles never count forms.
-  await expect(card.getByTestId('add-to-event-other-applications')).not.toContainText(/\d+ forms?/);
+  await expect(page.getByRole('region', { name: 'Add to this event' })).toHaveCount(0);
+  const card = page.getByRole('region', { name: 'Registrations' });
+  await expect(card.getByRole('link', { name: 'Game & Geek Vendors' })).toHaveAttribute('href', `/admin/events/${REG_ID}`);
+  await expect(card.getByText('Taking registrations')).toBeVisible();
+  await expect(card.getByRole('link', { name: /Review 2/ })).toHaveAttribute('href', `/admin/events/${REG_ID}/applications`);
+  const create = card.getByRole('link', { name: 'Create registration event' });
+  await expect(create).toHaveAttribute('href', `/admin/events/new?type=registration&linked=${EVENT_ID}`);
+  expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(
-    (await new AxeBuilder({ page }).include('#add-to-event').analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))
+    (await new AxeBuilder({ page }).include('#registrations').analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))
   ).toEqual([]);
 });
 
-test('Add to this event is hidden without form access', async ({ page }) => {
+test('Create registration event is hidden without form access', async ({ page }) => {
   await page.route(`${API}/admin/permissions`, (route) => route.fulfill(json({ granted: ['dashboard', 'events', 'applications', 'venues', 'maps'], hiddenPaths: [] })));
   await page.goto(`/admin/events/${EVENT_ID}?orgId=${ORG_ID}`);
   await expect(page.getByRole('region', { name: 'Sales' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Add to this event' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Create registration event' })).toHaveCount(0);
+});
+
+test('a registration event reads like an event, with its form and registrants (spec 057)', async ({ page }) => {
+  await page.goto(`/admin/events/${REG_ID}?orgId=${ORG_ID}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Game & Geek Vendors' })).toBeVisible();
+  await expect(page.getByText('Registration', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Sales' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Admission' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Registration form' }).getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute(
+    'href',
+    `/admin/events/${REG_ID}/setup/registration?step=details&form=form-1&org=${ORG_ID}`
+  );
+  const linked = page.getByRole('region', { name: 'Registering for' });
+  await expect(linked.getByRole('link', { name: 'Game & Geek 2026' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}`);
+  const stats = page.locator('section[aria-labelledby="event-title"] dl');
+  await expect(stats.getByText('To review')).toBeVisible();
+  await expect(stats.getByText('Collected')).toBeVisible();
+
+  const tabs = page.getByRole('navigation', { name: 'Event pages' });
+  await expect(tabs.getByRole('link', { name: /Registrations/ })).toHaveAttribute('href', `/admin/events/${REG_ID}/applications`);
+  // The floor map is the live event's.
+  await expect(tabs.getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
+  await expect(tabs.getByRole('link', { name: 'Door check-in' })).toBeVisible();
+  await expect(tabs.getByRole('link', { name: 'Attendees' })).toHaveCount(0);
+  await expect(tabs.getByRole('link', { name: 'Analytics' })).toHaveCount(0);
+  expect(
+    (await new AxeBuilder({ page }).include('main').analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))
+  ).toEqual([]);
 });
 
 test('an event of another organization reads as not found', async ({ page }) => {

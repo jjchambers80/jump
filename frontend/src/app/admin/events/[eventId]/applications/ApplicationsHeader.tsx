@@ -1,13 +1,14 @@
 'use client';
 
 // Header shared by the admin applications pages of one event (spec 011): the
-// event workspace header (spec 037) plus "Add a form", a disclosure of the
-// four application flows (spec 051: forms are set up only there). Door
-// check-in is a workspace tab of its own.
+// event workspace header (spec 037). A registration event (spec 057) is its
+// one form: "Registrations" and Edit form. A live event creates registration
+// events; "Add a form" (the four spec 051 flows) stays only for forms it
+// already has. Door check-in is a workspace tab of its own.
 
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Pencil, Plus } from 'lucide-react';
 import EventWorkspaceHeader from '@/components/events/EventWorkspace';
 import { useCan, useOrg } from '@/components/OrgContext';
 import { ADD_TO_EVENT } from '@/components/events/AddToEvent';
@@ -73,13 +74,34 @@ function AddFormMenu({ eventId, orgId }: { eventId: string; orgId: string | null
 export default function ApplicationsHeader({ eventId, title, subtitle }: { eventId: string; title?: string; subtitle?: string }) {
   const { selectedOrgId } = useOrg();
   const canEdit = useCan('applications.forms');
+  const button = `inline-flex min-h-11 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 ${focusRing}`;
   return (
     <EventWorkspaceHeader
       eventId={eventId}
       current="applications"
-      title={title ?? 'Applications'}
+      // Spec 057: a registration event's one form takes registrations.
+      title={(facts) => title ?? (facts?.type === 'REGISTRATION' ? 'Registrations' : 'Applications')}
       subtitle={subtitle ? <span>{subtitle}</span> : undefined}
-      actions={canEdit ? <AddFormMenu eventId={eventId} orgId={selectedOrgId} /> : undefined}
+      actions={(facts) => {
+        if (!canEdit || !facts) return undefined;
+        if (facts.type === 'REGISTRATION')
+          return (
+            <Link href={formFlowHref(eventId, 'registration', { org: selectedOrgId })} className={button}>
+              <Pencil className="h-4 w-4" aria-hidden />
+              Edit form
+            </Link>
+          );
+        // A live event takes new forms as registration events; the old menu stays for its existing forms.
+        return (
+          <>
+            <Link href={`/admin/events/new?type=registration&linked=${encodeURIComponent(eventId)}`} className={button}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Create registration event
+            </Link>
+            {facts.formCount > 0 && <AddFormMenu eventId={eventId} orgId={selectedOrgId} />}
+          </>
+        );
+      }}
     />
   );
 }

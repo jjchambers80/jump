@@ -1443,11 +1443,14 @@ class EventService {
         linkedEventId: true,
         venue: { select: { name: true, timezone: true } },
         floorMap: { select: { id: true } },
+        // Spec 057: a registration event's map is its live event's.
+        linkedEvent: { select: { floorMap: { select: { id: true } } } },
         _count: { select: { applicationForms: true } },
       },
     });
     if (!event) throw new NotFoundError('Event not found');
     const toReview = await prisma.application.count({ where: { eventId, status: 'SUBMITTED' } });
+    const mapId = (event.type === 'REGISTRATION' ? event.linkedEvent?.floorMap : event.floorMap)?.id ?? null;
     return {
       id: event.id,
       name: event.name,
@@ -1458,7 +1461,7 @@ class EventService {
       admissionMode: event.admissionMode,
       ...(await this._registrationLinks(event)),
       venue: event.venue,
-      mapId: event.floorMap?.id ?? null,
+      mapId,
       formCount: event._count.applicationForms,
       toReview,
     };

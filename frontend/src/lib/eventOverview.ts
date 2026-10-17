@@ -126,6 +126,28 @@ export interface EventOverview {
   addOns: AddOnSales;
   applications: { forms: OverviewForm[] };
   map: OverviewMap | null;
+  /** Spec 057: the live event a registration event is for. */
+  linkedEvent?: LinkedEventSummary | null;
+  /** Spec 057: a live event's registration events. */
+  registrations?: RegistrationSummary[];
+}
+
+export interface LinkedEventSummary {
+  id: string;
+  name: string;
+  slug: string;
+  status: EventStatus;
+  date: string;
+}
+
+export interface RegistrationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  status: EventStatus;
+  formStatus: 'DRAFT' | 'OPEN' | 'CLOSED' | null;
+  purpose: FormPurpose | null;
+  toReview: number;
 }
 
 export const formatMoney = (amount: number) =>
