@@ -92,8 +92,8 @@ test('a tier in the cart is marked selected', async ({ page }) => {
 
 test('application forms show as short links in the event header', async ({ page }) => {
   await mockEvent(page);
-  const form = (id: string, name: string, slug: string, acceptance: object, purpose: string) => ({
-    id, name, slug, purpose, kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
+  const form = (id: string, name: string, slug: string, acceptance: object, buttonLabel: string | null) => ({
+    id, name, slug, buttonLabel, purpose: 'OTHER', kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
   });
   await page.route(`${API}/events/${EVENT_ID}/applications/forms`, (route) =>
     route.fulfill({
@@ -101,8 +101,8 @@ test('application forms show as short links in the event header', async ({ page 
       contentType: 'application/json',
       body: JSON.stringify({
         data: [
-          form('f-vendor', '2026 Ticket Tiers Vendor Application', 'vendors', { open: true }, 'VENDOR'),
-          form('f-sponsor', 'Sponsorship Packages', 'sponsors', { open: false, reason: 'closed' }, 'SPONSOR'),
+          form('f-vendor', '2026 Ticket Tiers Vendor Application', 'vendors', { open: true }, 'Become a vendor'),
+          form('f-sponsor', 'Sponsorship Packages', 'sponsors', { open: false, reason: 'closed' }, null),
         ],
       }),
     })
@@ -115,7 +115,7 @@ test('application forms show as short links in the event header', async ({ page 
   await expect(vendor).toHaveAttribute('href', `/events/${EVENT_ID}/apply/vendors`);
   await expect(vendor).toHaveAccessibleName('Become a vendor: 2026 Ticket Tiers Vendor Application');
   // Closed forms stay visible with their status but are not links
-  await expect(links).toContainText('Become a sponsor');
+  await expect(links).toContainText('Sponsorship Packages');
   await expect(links).toContainText('Closed');
   await expect(links.getByRole('link')).toHaveCount(1);
   // It sits in the header, above the ticket list
