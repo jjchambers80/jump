@@ -9,6 +9,7 @@ import { prisma } from '@jump/db';
 import { SETTINGS_GROUPS, checkFields } from '@jump/theme';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import imageService, { SQUARE_VARIANT } from './ImageService.js';
+import { mapEventIdFor } from './mapEvents.js';
 
 const MAX_GUESTS_PER_EVENT = 200;
 const LIMITS = { name: 120, role: 80, bio: 600 };
@@ -180,10 +181,12 @@ class EventGuestService {
     const photo = profile?.images?.[0]?.image;
     const image = photo ? await prisma.image.create({ data: { fileId: photo.fileId, usageType: 'event_guest', focalX: photo.focalX, focalY: photo.focalY } }) : null;
 
+    // Spec 057: a registration event's guests join the lineup of the live event it is for.
+    const lineupEventId = await mapEventIdFor(eventId);
     let guest;
     try {
       guest = await prisma.eventGuest.create({
-        data: { eventId, applicationId, name, bio, links: linksFromProfile(profile) ?? undefined, imageId: image?.id ?? null, displayOrder: await this._nextOrder(eventId) },
+        data: { eventId: lineupEventId, applicationId, name, bio, links: linksFromProfile(profile) ?? undefined, imageId: image?.id ?? null, displayOrder: await this._nextOrder(lineupEventId) },
         ...ONE,
       });
     } catch (error) {

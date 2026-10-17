@@ -30,7 +30,11 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const registration = event?.type === 'REGISTRATION';
   const formId = params.get('form') ?? (registration ? forms.forms[0]?.id ?? null : null);
   const form = (formId && forms.forms.find((f) => f.id === formId)) || null;
-  const list = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
+  // Spec 057: a live event takes no new forms (people register through registration events);
+  // it keeps its special guest lineup and any form it still has from before.
+  const liveWithoutForm = !!event && !registration && !form;
+  const steps = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
+  const list = liveWithoutForm && flow === 'special-guests' ? steps.filter((s) => s.key === 'lineup') : steps;
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
   const fallback = form ? list.find((step) => step.key === 'details')! : list[0];
@@ -55,11 +59,16 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
         : `/admin/events/${encodeURIComponent(eventId)}`
       : live
         ? formEditHref(eventId, live, org)
-        : form && !registration && stepForPurpose(form.purpose) !== flow
+        : liveWithoutForm && flow !== 'special-guests'
+          ? `/admin/events/${encodeURIComponent(eventId)}`
+          : form && !registration && stepForPurpose(form.purpose) !== flow
           ? formEditHref(eventId, form, org)
-          : step !== requested || (formId && !form) || (registration && form && !params.get('form'))
-            ? href(step.key)
-            : null;
+          : registration && form && !params.get('form')
+            ? // The registration's one form exists: its Start is done, so open the step asked for or Details.
+              href(step.key === 'start' ? 'details' : step.key)
+            : step !== requested || (formId && !form)
+              ? href(step.key)
+              : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);
