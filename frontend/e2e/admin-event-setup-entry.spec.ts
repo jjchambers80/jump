@@ -99,7 +99,7 @@ const finishedInThisTab = (page: Page) =>
 const FINISHED = { setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' };
 
 async function openPastEventDialog(page: Page) {
-  await page.goto('/admin/events/new');
+  await page.goto('/admin/events/new?step=name');
   await expect(heading(page, 'Name your event')).toBeVisible(COLD);
   await main(page).getByRole('button', { name: 'Start from a past event' }).click();
   const dialog = page.getByRole('dialog', { name: 'Start from a past event' });

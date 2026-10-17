@@ -105,7 +105,8 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
   const viewHref = live ? shareUrl : preview.state.status === 'ready' ? preview.state.value.url : null;
   const viewState = live ? overview : preview;
   const hasForms = (ov?.applications.forms.length ?? 0) > 0;
-  const canAdd = useCan('applications.forms');
+  // A registration event is already a form (spec 057): nothing to add to it.
+  const canAdd = useCan('applications.forms') && event.type !== 'REGISTRATION';
 
   return (
     <div className="mx-auto w-full max-w-[640px] px-4 py-6 motion-safe:animate-fade-in sm:px-6 sm:py-8">

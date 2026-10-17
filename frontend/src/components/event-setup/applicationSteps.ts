@@ -67,6 +67,15 @@ export const APPLICATION_STEPS: Record<ApplicationStepKey, ApplicationStepConfig
   },
 };
 
+/** Spec 057: a registration event's one form, for anyone the organizer chooses. */
+export const REGISTRATION_CONFIG: ApplicationStepConfig = {
+  purposes: ['VENDOR', 'SPONSOR', 'PRESS', 'PANEL', 'SPECIAL_GUEST', 'VOLUNTEER', 'OTHER'],
+  addLabel: 'Set up the registration form',
+  empty: 'People register here. You review each one.',
+  nameSuffix: '',
+  defaultKind: 'FREE',
+};
+
 export const isApplicationStep = (key: string): key is ApplicationStepKey => key in APPLICATION_STEPS;
 
 /** The forms that belong on a step. A form without a purpose (older payload) is OTHER. */

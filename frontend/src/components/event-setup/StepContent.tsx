@@ -8,6 +8,8 @@ import { forwardRef } from 'react';
 import type { CreatedVenue } from '@/components/VenueFlyout';
 import ErrorSummary from './ErrorSummary';
 import NameStep from './steps/NameStep';
+import TypeStep from './steps/TypeStep';
+import LinkedEventField from './steps/LinkedEventField';
 import VenueStep from './steps/VenueStep';
 import LocationStep from './steps/LocationStep';
 import { useCan } from '@/components/OrgContext';
@@ -20,10 +22,11 @@ import DescribeStep from './steps/DescribeStep';
 import ImageStep from './steps/ImageStep';
 import TicketsStep from './steps/TicketsStep';
 import CollectMoreStep from './steps/CollectMoreStep';
-import type { EventStep, FieldError, SavedEvent, SetupFields } from './steps';
+import { eventTypeOf, type EventStep, type FieldError, type SavedEvent, type SetupFields } from './steps';
 import type { SavedRowProps, SetupVenue } from './steps/types';
 
 const INTRO: Partial<Record<EventStep['key'], string>> = {
+  type: 'Pick what people do: come to it, or register for it. You set up the rest next.',
   name: 'The name buyers will see and search for.',
   venue: 'Where it happens. Its address sets the time zone for every time on this event.',
   date: 'When it starts, and if you like, when it ends.',
@@ -32,6 +35,14 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   image: 'The picture at the top of the event page.',
   tickets: 'Sell tickets in tiers, or take free RSVPs.',
   'collect-more': 'Extras buyers can add to their order, like parking or merch.',
+};
+
+/** Spec 057: a registration event's steps speak to registrants, not buyers. */
+const REGISTRATION_INTRO: Partial<Record<EventStep['key'], string>> = {
+  name: 'The name registrants will see.',
+  description: 'What registrants read before they apply. You can change it any time.',
+  review: 'Check what registrants will see, then publish.',
+  'collect-more': 'Extras registrants can add when they choose and pay, like power or a table.',
 };
 
 interface Props {
@@ -63,6 +74,8 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
   // Venues off or hidden for the role (System › Roles): a plain address instead.
   const VenueForm = useCan('venues') ? VenueStep : LocationStep;
   const form = { fields, onChange, errors: Object.fromEntries(props.inline.map((e) => [e.field, e.message])), status };
+  const registration = eventTypeOf({ saved: props.event, fields }) === 'REGISTRATION';
+  const intro = (registration && REGISTRATION_INTRO[step.key]) || INTRO[step.key];
   if (step.key === 'done' && props.event) return <DoneStep ref={headingRef} event={props.event} orgId={props.orgId} />;
 
   return (
@@ -74,7 +87,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
       >
         {step.title}
       </h1>
-      {INTRO[step.key] && <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">{INTRO[step.key]}</p>}
+      {intro && <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">{intro}</p>}
       <div className="mt-6">
         <ErrorSummary ref={summaryRef} errors={summary} onOpenStep={onOpenStep} />
         {readOnly && (
@@ -84,7 +97,13 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
         )}
         <fieldset disabled={readOnly} className="min-w-0">
           <legend className="sr-only">{step.title}</legend>
+          {step.key === 'type' && <TypeStep {...form} locked={!!props.event} />}
           {step.key === 'name' && <NameStep {...form} savedSlug={props.event?.slug ?? null} />}
+          {step.key === 'name' && registration && (
+            <div className="mt-5">
+              <LinkedEventField {...form} orgId={props.orgId} hasRow={!!props.event} />
+            </div>
+          )}
           {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
           {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
@@ -96,7 +115,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           )}
           {!step.built && <PendingStep />}
         </fieldset>
-        {step.key === 'name' && !props.event && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
+        {step.key === 'name' && !props.event && !registration && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
       </div>
     </div>
   );
