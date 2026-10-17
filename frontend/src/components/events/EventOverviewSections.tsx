@@ -702,7 +702,7 @@ export function DescriptionSection({
         </div>
       ) : (
         <Empty action={<Link href={editHref} className={quietLink}>Write a description</Link>}>
-          No description. Buyers see only the name, date and venue.
+          No description. Visitors see only the name, date and venue.
         </Empty>
       )}
     </OverviewSection>

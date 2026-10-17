@@ -113,7 +113,9 @@ const DoneStep = forwardRef<HTMLHeadingElement, { event: SavedEvent; orgId: stri
       </h1>
       <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
         {live
-          ? `${event.name} is on sale. Share the link to start selling.`
+          ? event.type === 'REGISTRATION'
+            ? `${event.name} is live. Share the link so people can register.`
+            : `${event.name} is on sale. Share the link to start selling.`
           : `${event.name} is saved and only staff can see it. Publish it from the event page when you are ready.`}
       </p>
       {/* What Publish did with each form ticked on Review (050-N). */}

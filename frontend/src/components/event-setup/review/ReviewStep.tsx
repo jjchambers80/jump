@@ -138,6 +138,7 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         </section>
       )}
       <ReviewForms
+        title={saved.type === 'REGISTRATION' ? 'Registration form' : undefined}
         forms={forms}
         warnings={readiness.warnings}
         selected={chosen}

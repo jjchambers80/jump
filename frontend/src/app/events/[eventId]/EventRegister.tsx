@@ -32,7 +32,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
 
   return (
     <div className="space-y-8">
-      <EventAbout description={event.description} />
+      {(event.description || preview) && <EventAbout description={event.description} />}
       <section id="register" aria-labelledby="register-heading" className="scroll-mt-6">
         <h2 id="register-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">
           Register

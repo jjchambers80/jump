@@ -135,7 +135,8 @@ export default function EventPageView({
                 />
               </>
             )}
-            <EventGuests guests={event.guests} preview={preview} className="mt-10" />
+            {/* Spec 057: the lineup is the live event's, never a registration event's. */}
+            {!isRegistration && <EventGuests guests={event.guests} preview={preview} className="mt-10" />}
           </div>
         </div>
 
