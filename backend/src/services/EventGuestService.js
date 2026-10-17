@@ -152,22 +152,21 @@ class EventGuestService {
 
   /**
    * POST /admin/events/:eventId/applications/:applicationId/add-to-lineup:
-   * a row from an APPROVED SPECIAL_GUEST application's profile (business name,
-   * description → bio, first photo, socials). A FREE guest form may collect no
-   * profile (050-B), so the applicant's name is the fallback. 409 when the
+   * a row from an APPROVED application's profile (business name, description
+   * → bio, first photo, socials). Any form's applicant can join: forms have no
+   * type to gate on. A form may collect no profile (050-B), so the applicant's
+   * name is the fallback. 409 when the
    * application is already in the lineup.
    */
   async addFromApplication(eventId, applicationId, organizationId) {
     const application = await prisma.application.findFirst({
       where: { id: applicationId, eventId, ...(organizationId && { event: { venue: { organizationId } } }) },
       include: {
-        form: { select: { purpose: true } },
         contact: { select: { firstName: true, lastName: true } },
         profile: { include: { images: { orderBy: { displayOrder: 'asc' }, take: 1, include: { image: { select: { fileId: true, focalX: true, focalY: true } } } } } },
       },
     });
     if (!application || application.status === 'DRAFT') throw new NotFoundError('Application not found');
-    if (application.form?.purpose !== 'SPECIAL_GUEST') throw coded(new ValidationError('Only special guest applications can join the lineup'), 'NOT_SPECIAL_GUEST');
     if (application.status !== 'APPROVED') throw coded(new ConflictError('Approve the application before adding it to the lineup'), 'NOT_APPROVED');
     if (await prisma.eventGuest.findUnique({ where: { applicationId }, select: { id: true } })) {
       throw coded(new ConflictError('This guest is already in the lineup'), 'ALREADY_IN_LINEUP');
@@ -205,7 +204,7 @@ class EventGuestService {
 
   /** Organizer shape: every field, visibility included. */
   serialize(g) {
-    return { ...this.serializePublic(g), isVisible: g.isVisible, displayOrder: g.displayOrder, applicationId: g.applicationId ?? null, imageId: g.imageId ?? null };
+    return { ...this.serializePublic(g), isVisible: g.isVisible, displayOrder: g.displayOrder, applicationId: g.applicationId ?? null, imageId: g.imageId ?? null, eventId: g.eventId };
   }
 
   /** Public event payload shape (§7.6). */

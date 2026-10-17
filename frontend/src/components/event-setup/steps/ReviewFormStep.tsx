@@ -10,7 +10,6 @@ import { ExternalLink, Inbox, Pencil, Trash2, XCircle } from 'lucide-react';
 import { businessFieldsOf, type AdminForm } from '@/lib/applications';
 import { SettingsCard } from '@/components/applications/FormEditorCards';
 import { formatEventDateTime } from '@/lib/eventTime';
-import { PURPOSE_LABEL } from '../applicationSteps';
 import type { FlowStep, FlowStepKey } from '../formFlows';
 import { secondaryButton, textButton } from '../ui';
 
@@ -40,7 +39,8 @@ export default function ReviewFormStep({ form, steps, stepHref, canEdit, eventDr
   const fields = ['Email', form.collectName !== false && 'name', businessFieldsOf(form).length > 0 && count(businessFieldsOf(form).length, 'business field'), form.questions.length > 0 && count(form.questions.length, 'other field')].filter(Boolean).join(', ');
   const rows: { label: string; value: string; step: FlowStepKey }[] = [
     { label: 'Name', value: form.name, step: 'details' },
-    { label: 'For', value: `${PURPOSE_LABEL[form.purpose ?? 'OTHER']} · ${form.kind === 'PAID' ? 'Paid' : 'Free'}`, step: 'details' },
+    { label: 'Charge', value: form.kind === 'PAID' ? 'Paid' : 'Free', step: 'details' },
+    ...(form.buttonLabel ? [{ label: 'Button label', value: form.buttonLabel, step: 'details' as const }] : []),
     { label: 'Takes applications', value: dates || 'No open or close date', step: 'details' },
     ...(has('options') ? [{ label: 'Options', value: form.tiers.length ? `${count(form.tiers.length, 'option')} · ${form.tiers.map((t) => t.name).join(', ')}` : 'None yet', step: 'options' as const }] : []),
     { label: 'Fields', value: fields, step: 'questions' },

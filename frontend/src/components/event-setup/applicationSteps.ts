@@ -30,12 +30,6 @@ export const PURPOSE_LABEL: Record<FormPurpose, string> = {
   OTHER: 'Other',
 };
 
-/** Spec 050 §3: never charged (400 PURPOSE_KIND_MISMATCH). The reason is shown in text. */
-export const FREE_ONLY: Partial<Record<FormPurpose, string>> = {
-  SPECIAL_GUEST: 'Special guest applications are always free: guests are not charged to appear.',
-  VOLUNTEER: 'Volunteer applications are always free: volunteers give their time.',
-};
-
 export const APPLICATION_STEPS: Record<ApplicationStepKey, ApplicationStepConfig> = {
   vendors: {
     purposes: ['VENDOR'],
@@ -67,9 +61,13 @@ export const APPLICATION_STEPS: Record<ApplicationStepKey, ApplicationStepConfig
   },
 };
 
-/** Spec 057: a registration event's one form, for anyone the organizer chooses. */
+/**
+ * Spec 057: a registration event's one form, for anyone the organizer chooses.
+ * Generic on purpose: no type to pick (always OTHER). Its name and button label
+ * say who registers, so any business can use it.
+ */
 export const REGISTRATION_CONFIG: ApplicationStepConfig = {
-  purposes: ['VENDOR', 'SPONSOR', 'PRESS', 'PANEL', 'SPECIAL_GUEST', 'VOLUNTEER', 'OTHER'],
+  purposes: ['OTHER'],
   addLabel: 'Set up the registration form',
   empty: 'People register here. You review each one.',
   nameSuffix: '',

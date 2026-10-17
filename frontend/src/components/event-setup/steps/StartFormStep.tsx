@@ -1,7 +1,8 @@
 'use client';
 
 // Start of an application flow (spec 051, simplified): name, what the form
-// is for (Other applications only) and whether it charges. Every form starts
+// is for (Other applications only; a registration form has no type) and
+// whether it charges. Every form starts
 // blank — it asks for an email only; the rest is added on the Fields step.
 // An event has one live form per purpose: when the chosen purpose already has
 // one (Other applications), Start links to it instead of creating another.
@@ -12,7 +13,7 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import type { DraftForm } from '../previewMessages';
 import type { FormKind, FormPurpose } from '@/lib/applications';
-import { FREE_ONLY, PURPOSE_LABEL, type ApplicationStepConfig } from '../applicationSteps';
+import { PURPOSE_LABEL, type ApplicationStepConfig } from '../applicationSteps';
 import { hintClass, inputClass, labelClass } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
@@ -41,8 +42,7 @@ export default function StartFormStep({ config, live, onBusyChange, onDraftChang
   const [paid, setPaid] = useState(config.defaultKind === 'PAID');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const freeOnly = FREE_ONLY[purpose];
-  const kind: FormKind = paid && !freeOnly ? 'PAID' : 'FREE';
+  const kind: FormKind = paid ? 'PAID' : 'FREE';
   useEffect(() => onDraftChange({ name, kind, purpose }), [name, kind, purpose, onDraftChange]);
   const taken = live.find((f) => f.purpose === purpose);
 
@@ -91,19 +91,15 @@ export default function StartFormStep({ config, live, onBusyChange, onDraftChang
           )}
         </div>
       )}
-      {freeOnly ? (
-        <p className={hintClass}>{freeOnly}</p>
-      ) : (
-        <div>
-          <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200">
-            <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="h-5 w-5 accent-accent-600" aria-describedby="add-form-paid-hint" />
-            {purpose === 'VENDOR' ? 'Charge for space' : 'Charge applicants'}
-          </label>
-          <p id="add-form-paid-hint" className={hintClass}>
-            {paid ? 'Approved applicants pay for an option you set up next.' : 'Applicants apply and are approved without paying.'}
-          </p>
-        </div>
-      )}
+      <div>
+        <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200">
+          <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="h-5 w-5 accent-accent-600" aria-describedby="add-form-paid-hint" />
+          Charge applicants
+        </label>
+        <p id="add-form-paid-hint" className={hintClass}>
+          {paid ? 'Approved applicants pay for an option you set up next.' : 'Applicants apply and are approved without paying.'}
+        </p>
+      </div>
     </form>
   );
 }

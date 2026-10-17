@@ -11,7 +11,6 @@ import { ClipboardList, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import api from '@/services/api';
 import { useOrg, useCan } from '@/components/OrgContext';
 import { formatDate, type AdminForm } from '@/lib/applications';
-import { PURPOSE_LABEL } from '@/components/event-setup/applicationSteps';
 import { FORM_STATUS_LABEL, FormStatusBadge } from './FormStatusBadge';
 import ContactsHeader from '../ContactsHeader';
 

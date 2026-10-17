@@ -69,12 +69,9 @@ describe('createForm starts blank', () => {
     expect(res.body.collectBusiness).toBe(true);
   });
 
-  it('FREE-only purposes refuse PAID for an ORGANIZER too', async () => {
-    for (const purpose of ['SPECIAL_GUEST', 'VOLUNTEER']) {
-      const res = await create({ kind: 'PAID', purpose, name: `Paid ${purpose}` });
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('PURPOSE_KIND_MISMATCH');
-    }
+  it('no purpose is FREE-only: an ORGANIZER can make a PAID special guest form', async () => {
+    const res = await create({ kind: 'PAID', purpose: 'SPECIAL_GUEST', name: 'Paid SPECIAL_GUEST' });
+    expect(res.status).toBe(201);
   });
 
   it('an ORGANIZER can switch the purpose and delete a form without applications', async () => {

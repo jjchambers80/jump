@@ -87,7 +87,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   registration: {
     title: 'Registration form',
     steps: [
-      s('start', 'Who registers?', 'Vendors, sponsors, volunteers or anyone you choose. Decide if they pay.', { formAnchor: 'apply-top' }),
+      s('start', 'Who registers?', 'Name the form for them (vendors, volunteers, members or anyone else) and decide if they pay.', { formAnchor: 'apply-top' }),
       details,
       s('options', 'Options and pricing', 'What registrants can be approved for: a price and a number of spots for each.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
       s('payment', 'How registrants choose and pay', 'Registration is free. Once you approve someone, they choose and pay.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),

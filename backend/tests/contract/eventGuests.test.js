@@ -191,13 +191,13 @@ describe('Special guest lineup (spec 050 §7.6)', () => {
       expect(res.body).toMatchObject({ name: 'Mara Voss', bio: null, imageUrl: null, links: null });
     });
 
-    it('refuses unapproved and non-guest applications', async () => {
+    it('refuses unapproved applications; any approved form joins (forms have no type)', async () => {
       const pending = await application({ status: 'SUBMITTED' });
       expect((await addToLineup(pending.id)).status).toBe(409);
       const vendor = await application({ form: vendorForm });
       const res = await addToLineup(vendor.id);
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('NOT_SPECIAL_GUEST');
+      expect(res.status).toBe(201);
+      expect(res.body.eventId).toBe(eventId);
     });
   });
 

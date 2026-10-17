@@ -78,12 +78,9 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     expect(plain.body).toMatchObject({ purpose: 'OTHER', collectBusiness: false, questions: [] });
   });
 
-  it('SPECIAL_GUEST and VOLUNTEER refuse PAID; PAID keeps the business step; bad purpose is 400', async () => {
-    for (const purpose of ['SPECIAL_GUEST', 'VOLUNTEER']) {
-      const res = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose, name: 'Paid guests' });
-      expect(res.status).toBe(400);
-      expect(res.body.code).toBe('PURPOSE_KIND_MISMATCH');
-    }
+  it('any purpose may be PAID (forms are generic); bad purpose is 400', async () => {
+    const paidVolunteers = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VOLUNTEER', name: 'Paid volunteers' });
+    expect(paidVolunteers.status).toBe(201);
     // Spec 056: a paid vendor form may skip business details.
     const noBiz = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VENDOR', name: 'Vendors', collectBusiness: false });
     expect(noBiz.status).toBe(201);
@@ -94,8 +91,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     const paid = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'SPONSOR', name: 'Sponsors' });
     expect(paid.status).toBe(201);
     const toGuest = await request(app).patch(`${forms()}/${paid.body.id}`).set(...auth()).send({ purpose: 'SPECIAL_GUEST' });
-    expect(toGuest.status).toBe(400);
-    expect(toGuest.body.code).toBe('PURPOSE_KIND_MISMATCH');
+    expect(toGuest.status).toBe(200);
   });
 
   it('a FREE VOLUNTEER form submits without the business step', async () => {

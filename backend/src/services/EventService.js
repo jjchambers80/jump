@@ -1675,7 +1675,7 @@ class EventService {
     const rows = await prisma.event.findMany({
       where: { linkedEventId: event.id, deletedAt: null },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, slug: true, status: true, applicationForms: { select: { status: true, purpose: true }, take: 1 } },
+      select: { id: true, name: true, slug: true, status: true, applicationForms: { select: { status: true }, take: 1 } },
     });
     const pending = rows.length
       ? await prisma.application.groupBy({ by: ['eventId'], where: { eventId: { in: rows.map((r) => r.id) }, status: 'SUBMITTED' }, _count: { id: true } })
@@ -1689,7 +1689,6 @@ class EventService {
         slug: r.slug,
         status: r.status,
         formStatus: r.applicationForms[0]?.status ?? null,
-        purpose: r.applicationForms[0]?.purpose ?? null,
         toReview: toReview[r.id] ?? 0,
       })),
     };
