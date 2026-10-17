@@ -13,6 +13,8 @@ export interface EventsSummaryData {
 
 export type StatusFilter = '' | 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
 export type SortOption = 'upcoming' | 'date_desc' | 'created_desc' | 'name_asc';
+/** Spec 057: '' = both types. */
+export type TypeFilter = '' | 'LIVE' | 'REGISTRATION';
 
 interface EventsToolbarProps {
   /** Status counts from the summary API {all, DRAFT, PUBLISHED, CANCELLED} */
@@ -23,12 +25,23 @@ interface EventsToolbarProps {
   currentStatus: StatusFilter;
   currentQ: string;
   currentCategory: string;
+  currentType: TypeFilter;
   currentSort: SortOption;
   onStatusChange: (status: StatusFilter) => void;
   onQChange: (q: string) => void;
   onCategoryChange: (category: string) => void;
+  onTypeChange: (type: TypeFilter) => void;
   onSortChange: (sort: SortOption) => void;
 }
+
+const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
+  { value: '', label: 'All events' },
+  { value: 'LIVE', label: 'Live events' },
+  { value: 'REGISTRATION', label: 'Registration events' },
+];
+
+const selectClass =
+  "rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%239ca3af%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat";
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
   '': 'All',
@@ -53,10 +66,12 @@ export default function EventsToolbar({
   currentStatus,
   currentQ,
   currentCategory,
+  currentType,
   currentSort,
   onStatusChange,
   onQChange,
   onCategoryChange,
+  onTypeChange,
   onSortChange,
 }: EventsToolbarProps) {
   // Local search input state with debounce. Sync from prop when URL changes externally.
@@ -168,13 +183,29 @@ export default function EventsToolbar({
           )}
         </div>
 
+        {/* Type (spec 057) */}
+        <div>
+          <select
+            value={currentType}
+            onChange={(e) => onTypeChange(e.target.value as TypeFilter)}
+            aria-label="Filter by type"
+            className={selectClass}
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Category */}
         <div>
           <select
             value={currentCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
             aria-label="Filter by category"
-            className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%239ca3af%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat"
+            className={selectClass}
           >
             <option value="">All categories</option>
             {categories.map((cat) => (
@@ -191,7 +222,7 @@ export default function EventsToolbar({
             value={currentSort}
             onChange={(e) => onSortChange(e.target.value as SortOption)}
             aria-label="Sort events"
-            className="rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%239ca3af%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat"
+            className={selectClass}
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>

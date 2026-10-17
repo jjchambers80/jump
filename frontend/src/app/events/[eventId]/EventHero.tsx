@@ -25,7 +25,8 @@ const PILL =
   'inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm';
 
 export default function EventHero({ event, org, preview = false, onShowDescription, onShowImage }: EventHeroProps) {
-  const isRsvp = event.admissionMode === 'RSVP';
+  // RSVP and registration pages (spec 057) show the description inline, so no Event Information button.
+  const isRsvp = event.admissionMode === 'RSVP' || event.type === 'REGISTRATION';
 
   return (
     <div id="event-hero" className="relative">
@@ -95,7 +96,8 @@ export default function EventHero({ event, org, preview = false, onShowDescripti
             {!event.cancelled && <FloorMapButton eventId={event.id} eventName={event.name} preview={preview} />}
             {/* Applications (spec 011): vendors, sponsors, press, panels — above the fold */}
             {/* Spec 050-D: a sales close shuts every form, so the pills go */}
-            {!event.salesClosed && !event.cancelled && <GetInvolved eventId={event.id} preview={preview} forms={event.previewForms} />}
+            {/* Spec 057: a registration event's form is the page itself, so no pills */}
+            {!event.salesClosed && !event.cancelled && event.type !== 'REGISTRATION' && <GetInvolved eventId={event.id} preview={preview} forms={event.previewForms} />}
           </div>
         </div>
 

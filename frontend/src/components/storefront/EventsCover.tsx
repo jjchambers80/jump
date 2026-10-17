@@ -68,7 +68,7 @@ export default function EventsCover({
                 </p>
               </div>
               <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition group-hover:bg-gray-100 sm:inline-flex">
-                {nextEvent.admissionMode === 'RSVP' ? (labels.rsvp ?? 'RSVP') : (labels.getTickets ?? 'Get tickets')}
+                {nextEvent.type === 'REGISTRATION' ? 'Register' : nextEvent.admissionMode === 'RSVP' ? (labels.rsvp ?? 'RSVP') : (labels.getTickets ?? 'Get tickets')}
                 <ArrowRight className="h-4 w-4 transition-transform motion-safe:group-hover:translate-x-0.5" aria-hidden />
               </span>
             </Link>

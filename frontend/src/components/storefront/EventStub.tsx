@@ -40,9 +40,11 @@ export default function EventStub({
   const zone = event.venue?.timezone;
   const tile = dateTile(event.date, zone);
   const time = formatEventTime(event.date, zone);
-  const isRsvp = event.admissionMode === 'RSVP';
-  const isSoldOut = !isRsvp && event.availableTickets === 0;
-  const isScarce = !isRsvp && event.availableTickets > 0 && event.availableTickets <= SCARCE_AT;
+  // Spec 057: a registration event has no tickets to count; its card says Register.
+  const isRegistration = event.type === 'REGISTRATION';
+  const isRsvp = !isRegistration && event.admissionMode === 'RSVP';
+  const isSoldOut = !isRsvp && !isRegistration && event.availableTickets === 0;
+  const isScarce = !isRsvp && !isRegistration && event.availableTickets > 0 && event.availableTickets <= SCARCE_AT;
 
   return (
     <div className="event-stub-shadow">
@@ -86,9 +88,9 @@ export default function EventStub({
         {/* Details */}
         <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5 sm:pl-6">
           <div className="min-w-0 flex-1">
-            {event.category && (
+            {(event.category || isRegistration) && (
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">
-                {event.category}
+                {[isRegistration && 'Registration', event.category].filter(Boolean).join(' · ')}
               </p>
             )}
             <h3
@@ -113,7 +115,7 @@ export default function EventStub({
 
           <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-center sm:gap-2 sm:text-right">
             <div className="leading-tight">
-              {!showPrice ? null : isRsvp ? (
+              {!showPrice || isRegistration ? null : isRsvp ? (
                 <span className="text-xl font-bold text-gray-900 dark:text-slate-100">Free</span>
               ) : event.priceRange ? (
                 <span className="whitespace-nowrap">
@@ -140,7 +142,7 @@ export default function EventStub({
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition-colors group-hover:bg-brand-hover">
-                {isRsvp ? (labels.rsvp ?? 'RSVP') : (labels.getTickets ?? 'Get tickets')}
+                {isRegistration ? 'Register' : isRsvp ? (labels.rsvp ?? 'RSVP') : (labels.getTickets ?? 'Get tickets')}
                 <ArrowRight
                   className="h-4 w-4 transition-transform motion-safe:group-hover:translate-x-0.5"
                   aria-hidden
