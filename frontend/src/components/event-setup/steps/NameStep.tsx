@@ -1,19 +1,14 @@
 'use client';
 
-// Step 1, "Name your event": the name, and the URL slug behind "Edit URL"
-// (plan §3: the slug lives in the Name step, collapsed). Client state until the
-// date step creates the row; a PATCH after that.
+// Step 1, "Name your event". The URL slug is derived from the name on the
+// server; organizers never see or edit it. Client state until the date step
+// creates the row; a PATCH after that.
 
-import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
-import SlugField from '@/components/SlugField';
 import { FIELD_IDS } from '../steps';
-import { describedBy, errorText, hintClass, inputClass, labelClass, textButton } from '../ui';
+import { describedBy, errorText, hintClass, inputClass, labelClass } from '../ui';
 import type { StepFormProps } from './types';
 
-/** `savedSlug`: the live URL; changing it on a PUBLISHED event breaks shared links (050-O, as the Listing flyout warned). */
-export default function NameStep({ fields, onChange, errors, status, savedSlug }: StepFormProps & { savedSlug?: string | null }) {
-  const [editUrl, setEditUrl] = useState(!!fields.slug);
+export default function NameStep({ fields, onChange, errors }: StepFormProps) {
   const nameError = errors[FIELD_IDS.name];
   const id = FIELD_IDS.name;
 
@@ -42,37 +37,6 @@ export default function NameStep({ fields, onChange, errors, status, savedSlug }
             {nameError}
           </p>
         )}
-      </div>
-
-      <div>
-        <button
-          type="button"
-          aria-expanded={editUrl}
-          aria-controls="setup-slug-panel"
-          onClick={() => setEditUrl((open) => !open)}
-          className={`${textButton} -ml-3`}
-        >
-          Edit URL
-          <ChevronDown className={`h-4 w-4 ${editUrl ? 'rotate-180' : ''}`} aria-hidden />
-        </button>
-        <div id="setup-slug-panel" hidden={!editUrl} className="mt-2">
-          {editUrl && (
-            <SlugField
-              id={FIELD_IDS.slug}
-              value={fields.slug}
-              onChange={(slug) => onChange({ slug })}
-              source={fields.name}
-              prefix="/events/"
-              baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-              error={errors[FIELD_IDS.slug]}
-            />
-          )}
-          {status === 'PUBLISHED' && savedSlug && fields.slug && fields.slug !== savedSlug && (
-            <p role="status" className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              The event is live. Links already shared with the old address stop working.
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );
