@@ -127,8 +127,8 @@ const orgRouter = express.Router({ mergeParams: true });
 orgRouter.get('/summary', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
-    const { q, category } = req.query;
-    const result = await eventService.getOrgEventsSummary(orgId, { q, category });
+    const { q, category, type } = req.query;
+    const result = await eventService.getOrgEventsSummary(orgId, { q, category, type });
     res.json(result);
   } catch (error) {
     next(error);
@@ -142,8 +142,8 @@ orgRouter.get('/summary', requireAuth, requireOrganizer, requireOrgMembership(),
 orgRouter.get('/', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
-    const { page, limit, status, q, category, sort } = req.query;
-    const result = await eventService.listOrgEvents(orgId, { page, limit, status, q, category, sort });
+    const { page, limit, status, q, category, sort, type } = req.query;
+    const result = await eventService.listOrgEvents(orgId, { page, limit, status, q, category, sort, type });
     res.json(result);
   } catch (error) {
     next(error);
@@ -158,8 +158,8 @@ orgRouter.get('/', requireAuth, requireOrganizer, requireOrgMembership(), async 
 orgRouter.get('/export.csv', requireAuth, requireOrganizer, requireOrgMembership(), async (req, res, next) => {
   try {
     const { orgId } = req.params;
-    const { status, q, category, sort } = req.query;
-    const csv = await eventService.exportEventsCsv(orgId, { status, q, category, sort });
+    const { status, q, category, sort, type } = req.query;
+    const csv = await eventService.exportEventsCsv(orgId, { status, q, category, sort, type });
     const orgSlug = (await prisma.organization.findUnique({ where: { id: orgId }, select: { slug: true } }))?.slug || orgId;
     const dateStr = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -178,6 +178,10 @@ orgRouter.get('/export.csv', requireAuth, requireOrganizer, requireOrgMembership
 orgRouter.post('/', requireAuth, requireOrganizer, requireOrgMembership(), validateCreateEvent, async (req, res, next) => {
   try {
     const { orgId } = req.params;
+    // Spec 057: a registration event is an application form, so it takes the form permission.
+    if (req.body.type === 'REGISTRATION' && !(await can(req, 'applications.forms'))) {
+      throw new ForbiddenError('Your role does not have access to this');
+    }
     if (req.body.setup === true) {
       // Wizard create (spec 050 §7.1): a replay of the same Idempotency-Key returns the row, 200.
       const { event, replayed } = await eventService.createSetupEvent(orgId, req.body, req.get('Idempotency-Key'));

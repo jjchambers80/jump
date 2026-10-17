@@ -75,6 +75,7 @@ import logger from '../utils/logger.js';
 import { normalizeEmail } from '../utils/normalizeEmail.js';
 import { upsertContactFillBlanks } from './contactRecord.js';
 import { assertSalesOpen } from './salesOpen.js';
+import { mapEventIdFor } from './mapEvents.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
@@ -905,7 +906,7 @@ class ApplicationService {
     const organization = event.venue.organization;
     const [addOnRows, map, placed] = await Promise.all([
       applicationFormService._addOnsForEvent(a.eventId, { activeOnly: true }),
-      prisma.floorMap.findUnique({ where: { eventId: a.eventId }, select: { id: true, status: true } }),
+      mapEventIdFor(a.eventId).then((eventId) => prisma.floorMap.findUnique({ where: { eventId }, select: { id: true, status: true } })),
       prisma.booth.findFirst({ where: { applicationId: a.id }, select: { id: true, label: true, w: true, h: true, status: true, price: true } }),
     ]);
     const tiers = a.tier ? [a.tier] : (a.form.tiers || []).filter((t) => t.isActive);
@@ -1312,7 +1313,7 @@ class ApplicationService {
    * asked to choose from nothing.
    */
   async _assertSpotsInCategory(tx, eventId, tier) {
-    const spots = await tx.booth.count({ where: { tierId: tier.id, map: { eventId, status: 'PUBLISHED' } } });
+    const spots = await tx.booth.count({ where: { tierId: tier.id, map: { eventId: await mapEventIdFor(eventId, tx), status: 'PUBLISHED' } } });
     if (spots === 0) {
       throw coded(new ConflictError(`${tier.name} has no spots on the published floor map`), 'NO_SPOTS_IN_CATEGORY');
     }

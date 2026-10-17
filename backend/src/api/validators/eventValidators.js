@@ -60,14 +60,24 @@ function validateAdmission(body, errors) {
     errors.push({ field: 'rsvpMaxPartySize', message: 'rsvpMaxPartySize must be an integer between 1 and 10' });
 }
 
+/** Spec 057: LIVE (default) or REGISTRATION; only a registration event links to a live event. */
+function validateType(body, errors) {
+  const { type, linkedEventId } = body;
+  if (type !== undefined && !['LIVE', 'REGISTRATION'].includes(type))
+    errors.push({ field: 'type', message: 'type must be LIVE or REGISTRATION' });
+  if (linkedEventId !== undefined && linkedEventId !== null && (typeof linkedEventId !== 'string' || !linkedEventId))
+    errors.push({ field: 'linkedEventId', message: 'linkedEventId must be an event id' });
+}
+
 export const validateCreateEvent = (req, res, next) => {
   const errors = [];
-  const { venueId, name, date, capacity, priceTiers, admissionMode = 'TICKETED' } = req.body;
+  const { venueId, name, date, capacity, priceTiers, admissionMode = 'TICKETED', type = 'LIVE' } = req.body;
   if (!venueId) errors.push({ field: 'venueId', message: 'venueId is required' });
   if (!name) errors.push({ field: 'name', message: 'name is required' });
   if (name && name.length > 255) errors.push({ field: 'name', message: 'name must be 255 characters or less' });
   if (!date) errors.push({ field: 'date', message: 'date is required' });
   validateAdmission(req.body, errors);
+  validateType(req.body, errors);
 
   if (req.body.setup === true) {
     // Wizard create (spec 050 §7.1): a DRAFT with name, venue and date; the rest comes later.
@@ -79,7 +89,7 @@ export const validateCreateEvent = (req, res, next) => {
     const key = req.get('Idempotency-Key');
     if (key !== undefined && (!key.trim() || key.length > 255))
       errors.push({ field: 'Idempotency-Key', message: 'Idempotency-Key must be 1 to 255 characters' });
-  } else if (admissionMode === 'TICKETED') {
+  } else if (type === 'LIVE' && admissionMode === 'TICKETED') {
     if (capacity === undefined || capacity === null) {
       errors.push({ field: 'capacity', message: 'capacity is required' });
     } else {
@@ -113,6 +123,7 @@ export const validateUpdateEvent = (req, res, next) => {
   if (setupCompleted !== undefined && setupCompleted !== true)
     errors.push({ field: 'setupCompleted', message: 'setupCompleted can only be true' });
   validateAdmission(req.body, errors);
+  validateType(req.body, errors);
   if (errors.length) return next(new ValidationError('Validation failed', errors));
   if (!normalizeSlug(req, next)) return;
   next();
