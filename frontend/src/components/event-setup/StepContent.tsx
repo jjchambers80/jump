@@ -98,7 +98,7 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
         <fieldset disabled={readOnly} className="min-w-0">
           <legend className="sr-only">{step.title}</legend>
           {step.key === 'type' && <TypeStep {...form} locked={!!props.event} />}
-          {step.key === 'name' && <NameStep {...form} savedSlug={props.event?.slug ?? null} />}
+          {step.key === 'name' && <NameStep {...form} />}
           {step.key === 'name' && registration && (
             <div className="mt-5">
               <LinkedEventField {...form} orgId={props.orgId} hasRow={!!props.event} />

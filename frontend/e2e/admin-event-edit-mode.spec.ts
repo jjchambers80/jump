@@ -244,16 +244,6 @@ test.describe('edit mode', () => {
     await expect(page.getByRole('banner').getByRole('link', { name: /View event/ })).toHaveAttribute('href', '/events/spring-fair');
   });
 
-  test('changing the URL of a live event warns that shared links break', async ({ page }) => {
-    await mockApi(page);
-    await page.goto(setupUrl('step=name'));
-    await expect(heading(page, 'Name your event')).toBeFocused(COLD);
-    // A saved slug opens the panel already.
-    await expect(main(page).getByRole('button', { name: 'Edit URL' })).toHaveAttribute('aria-expanded', 'true');
-    await main(page).getByLabel('URL slug').fill('spring-fair-2031');
-    await expect(main(page).getByText('The event is live. Links already shared with the old address stop working.')).toBeVisible();
-  });
-
   test('the progress is the bar alone: no step line, no saved line, no step menu', async ({ page }) => {
     await mockApi(page);
     await page.goto(setupUrl('step=description'));
