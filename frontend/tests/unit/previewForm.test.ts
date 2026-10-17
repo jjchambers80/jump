@@ -3,7 +3,7 @@ import { PREVIEW_MESSAGE, draftPreviewForm, isPreviewMessage, previewForm, space
 import type { AdminForm } from '@/lib/applications';
 
 const admin = {
-  id: 'f1', eventId: 'e1', kind: 'PAID', purpose: 'VENDOR', name: 'Vendors', slug: 'vendors', intro: 'Saved intro', status: 'DRAFT',
+  id: 'f1', eventId: 'e1', kind: 'PAID', name: 'Vendors', slug: 'vendors', intro: 'Saved intro', status: 'DRAFT',
   opensAt: null, closesAt: null, chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW',
   reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null, acceptance: { open: false, reason: 'not_published' }, paymentsEnabled: true,
   applicationCount: 0, collectBusiness: true, addOns: [], timezone: 'America/New_York',
@@ -32,16 +32,16 @@ describe('previewForm (spec 051)', () => {
 });
 
 describe('draftPreviewForm (spec 051 Start step)', () => {
-  it('previews the form being set up: typed name, kind, purpose, no questions yet', () => {
-    expect(draftPreviewForm({ name: '  Makers  ', kind: 'PAID', purpose: 'VENDOR' }, 'Retro Org')).toMatchObject({
-      name: 'Makers', kind: 'PAID', purpose: 'VENDOR', questions: [], tiers: [], collectBusiness: false, collectName: false, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
+  it('previews the form being set up: typed name, kind, no questions yet', () => {
+    expect(draftPreviewForm({ name: '  Makers  ', kind: 'PAID' }, 'Retro Org')).toMatchObject({
+      name: 'Makers', kind: 'PAID', questions: [], tiers: [], collectBusiness: false, collectName: false, acceptance: { open: true, reason: null }, organizationName: 'Retro Org',
     });
-    expect(draftPreviewForm({ name: '', kind: 'FREE', purpose: 'VOLUNTEER' })).toMatchObject({ name: 'Untitled application', collectBusiness: false });
+    expect(draftPreviewForm({ name: '', kind: 'FREE' })).toMatchObject({ name: 'Untitled application', collectBusiness: false });
   });
 });
 
 describe('spacePreviewApplication (spec 056 Options and pricing)', () => {
-  const form = draftPreviewForm({ name: 'Makers', kind: 'PAID', purpose: 'VENDOR' });
+  const form = draftPreviewForm({ name: 'Makers', kind: 'PAID' });
   const tiers = [
     { id: 't1', name: 'Table', description: null, price: 100, applicantPays: 108, feesIncluded: 8, tax: 0, soldOut: false, addOns: [] },
     { id: 't2', name: 'Corner', description: 'Two sides open', price: 150, applicantPays: 160, feesIncluded: 10, tax: 0, soldOut: true, addOns: [] },

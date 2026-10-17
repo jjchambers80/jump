@@ -4,7 +4,7 @@
 import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('@jump/db', () => ({ prisma: {} }));
-const { evaluate, stepForForm } = await import('../../src/services/EventReadinessService.js');
+const { evaluate } = await import('../../src/services/EventReadinessService.js');
 
 const now = new Date('2027-01-01T00:00:00.000Z');
 const tier = (extra = {}) => ({ isActive: true, price: 10, quantityTotal: 50, ...extra });
@@ -70,8 +70,8 @@ describe('EventReadinessService.evaluate', () => {
     const off = run(ready({ applicationForms: forms }));
     expect(off.ready).toBe(true);
     expect(off.warnings.filter((w) => w.code === 'PAID_FORMS_DISABLED').map((w) => [w.formId, w.step])).toEqual([
-      ['p1', 'vendors'],
-      ['p2', 'vendors'],
+      ['p1', 'registration'],
+      ['p2', 'registration'],
     ]);
     expect(codes(run(ready({ applicationForms: forms }), { paymentsEnabled: true }).warnings)).toEqual([]);
   });
@@ -80,7 +80,7 @@ describe('EventReadinessService.evaluate', () => {
     const ctx = { paymentsEnabled: true };
     const none = run(ready({ applicationForms: [form({ kind: 'PAID', tiers: [] })] }), ctx);
     expect(none.ready).toBe(true);
-    expect(none.warnings).toEqual([expect.objectContaining({ code: 'PAID_FORM_NO_OPTIONS', formId: 'f1', step: 'vendors' })]);
+    expect(none.warnings).toEqual([expect.objectContaining({ code: 'PAID_FORM_NO_OPTIONS', formId: 'f1', step: 'registration' })]);
     expect(codes(run(ready({ applicationForms: [form({ kind: 'PAID', tiers: [{ isActive: false }] })] }), ctx).warnings)).toEqual(['PAID_FORM_NO_OPTIONS']);
     expect(run(ready({ applicationForms: [form({ kind: 'FREE', tiers: [] })] }), ctx).warnings).toEqual([]);
     // A registration event's item points at its flow.
@@ -98,20 +98,13 @@ describe('EventReadinessService.evaluate', () => {
     expect(codes(run(ready({ applicationForms: [mapForm] }), ctx).warnings)).toEqual(['MAP_FORM_WITHOUT_PUBLISHED_MAP']);
     expect(codes(run(ready({ applicationForms: [mapForm], floorMap: { status: 'DRAFT' } }), ctx).warnings)).toEqual(['MAP_FORM_WITHOUT_PUBLISHED_MAP']);
     expect(run(ready({ applicationForms: [mapForm], floorMap: { status: 'PUBLISHED' } }), ctx).warnings).toEqual([]);
-    // Spec 051: the floor map is a step of that vendor form's flow, so the item names the form.
-    expect(run(ready({ applicationForms: [mapForm] }), ctx).warnings[0]).toMatchObject({ step: 'floor-map', formId: 'f1' });
+    // The floor map is a step of the form's flow, so the item names the form.
+    expect(run(ready({ applicationForms: [mapForm] }), ctx).warnings[0]).toMatchObject({ step: 'registration', formId: 'f1' });
   });
 
   it('warns when the tax rate could not be resolved', () => {
     const result = run(ready(), { taxError: 'No Stripe Tax registration for North Carolina' });
     expect(result.ready).toBe(true);
     expect(result.warnings).toEqual([expect.objectContaining({ code: 'TAX_RATE_UNRESOLVED', step: 'review' })]);
-  });
-
-  it('places forms in their wizard step by purpose', () => {
-    expect(stepForForm({})).toBe('vendors');
-    expect(stepForForm({ purpose: 'SPECIAL_GUEST' })).toBe('special-guests');
-    expect(stepForForm({ purpose: 'VOLUNTEER' })).toBe('volunteers');
-    expect(stepForForm({ purpose: 'SPONSOR' })).toBe('other-applications');
   });
 });

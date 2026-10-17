@@ -294,7 +294,7 @@ function EventDetailsContent() {
             <ApplicationsSection
               overview={overview}
               base={`${base}/applications`}
-              formHref={(form) => formEditHref(eventId, form, orgId, 'REGISTRATION')}
+              formHref={(form) => formEditHref(eventId, form, orgId)}
               title="Registration form"
               empty="Set up the form people register through."
               emptyAction={

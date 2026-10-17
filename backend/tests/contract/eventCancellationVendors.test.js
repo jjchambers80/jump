@@ -68,8 +68,8 @@ describe('Vendors of a cancelled event (spec 054-D)', () => {
     await joinOrgByToken(adminToken, org.id, 'ADMIN');
     const venue = await prisma.venue.create({ data: { organizationId: org.id, name: `${TAG} Hall`, address: '1 Main St', city: 'Raleigh', state: 'NC', timezone: 'America/New_York' } });
     event = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Market`, date: new Date('2027-09-18T23:00:00Z'), status: 'PUBLISHED', capacity: 100 } });
-    const paidForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'PAID', purpose: 'VENDOR', name: 'Vendors', slug: `${TAG}-vendors`, status: 'OPEN' } });
-    const freeForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'FREE', purpose: 'PRESS', name: 'Press', slug: `${TAG}-press`, status: 'OPEN', businessFields: [] } });
+    const paidForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'PAID', name: 'Vendors', slug: `${TAG}-vendors`, status: 'OPEN' } });
+    const freeForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: event.id, kind: 'FREE', name: 'Press', slug: `${TAG}-press`, status: 'OPEN', businessFields: [] } });
     tier = await prisma.applicationTier.create({ data: { formId: paidForm.id, name: 'Booth', price: 100, quantityTotal: 10, quantityApproved: 1, quantityReserved: 1 } });
 
     await application('paid', paidForm, { tierId: tier.id, status: 'APPROVED', paymentStatus: 'PAID', capacitySlot: 'APPROVED' }, { status: 'COMPLETED', paidAt: new Date() });

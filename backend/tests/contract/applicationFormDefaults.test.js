@@ -36,20 +36,14 @@ describe('createForm starts blank', () => {
   });
 
   const cases = [
-    { purpose: 'VENDOR', kind: 'PAID', collectBusiness: true },
-    { purpose: 'VENDOR', kind: 'FREE', collectBusiness: false },
-    { purpose: 'SPECIAL_GUEST', kind: 'FREE', collectBusiness: false },
-    { purpose: 'VOLUNTEER', kind: 'FREE', collectBusiness: false },
-    { purpose: 'SPONSOR', kind: 'PAID', collectBusiness: true },
-    { purpose: 'PRESS', kind: 'FREE', collectBusiness: false },
-    { purpose: 'PANEL', kind: 'FREE', collectBusiness: false },
-    { purpose: 'OTHER', kind: 'FREE', collectBusiness: false },
+    { kind: 'PAID', collectBusiness: true },
+    { kind: 'FREE', collectBusiness: false },
   ];
 
-  it.each(cases)('$purpose ($kind) starts with no questions', async ({ purpose, kind, collectBusiness }) => {
-    const res = await create({ kind, purpose, name: `${purpose} ${kind}` });
+  it.each(cases)('a $kind form starts with no questions', async ({ kind, collectBusiness }) => {
+    const res = await create({ kind, name: `Blank ${kind}` });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ purpose, kind, status: 'DRAFT', collectBusiness, collectName: true, purposeLocked: false });
+    expect(res.body).toMatchObject({ kind, status: 'DRAFT', collectBusiness, collectName: true });
     expect(res.body.questions).toEqual([]);
   });
 
@@ -57,57 +51,33 @@ describe('createForm starts blank', () => {
     const venueId = (await prisma.venue.findFirst({ where: { organizationId: org.id }, select: { id: true } })).id;
     const fresh = await prisma.event.create({ data: { venueId, name: `${TAG} Market`, date: new Date('2027-11-18T15:00:00Z'), status: 'DRAFT', capacity: 100 } });
     for (const kind of ['PAID', 'FREE']) {
-      const res = await request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send({ kind, purpose: kind === 'PAID' ? 'VENDOR' : 'PRESS', name: kind, setup: true });
+      const res = await request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send({ kind, name: kind, setup: true });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ collectName: false, collectBusiness: false, questions: [] });
     }
   });
 
   it('an explicit collectBusiness on a FREE form wins', async () => {
-    const res = await create({ kind: 'FREE', purpose: 'VENDOR', name: 'Makers', collectBusiness: true });
+    const res = await create({ kind: 'FREE', name: 'Makers', collectBusiness: true });
     expect(res.status).toBe(201);
     expect(res.body.collectBusiness).toBe(true);
   });
 
-  it('no purpose is FREE-only: an ORGANIZER can make a PAID special guest form', async () => {
-    const res = await create({ kind: 'PAID', purpose: 'SPECIAL_GUEST', name: 'Paid SPECIAL_GUEST' });
-    expect(res.status).toBe(201);
-  });
-
-  it('an ORGANIZER can switch the purpose and delete a form without applications', async () => {
-    const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'Switch me' });
-    const patched = await request(app).patch(`${forms()}/${res.body.id}`).set('Authorization', `Bearer ${token}`).send({ purpose: 'PRESS' });
-    expect(patched.status).toBe(200);
-    expect(patched.body.purpose).toBe('PRESS');
+  it('an ORGANIZER can delete a form without applications', async () => {
+    const res = await create({ kind: 'FREE', name: 'Delete me' });
     const del = await request(app).delete(`${forms()}/${res.body.id}`).set('Authorization', `Bearer ${token}`);
     expect(del.status).toBeLessThan(300);
   });
 
-  it('the setup flows keep one live form per purpose on an event', async () => {
-    // A fresh event: the cases above already made a form of every purpose.
-    const venueId = (await prisma.venue.findFirst({ where: { organizationId: org.id }, select: { id: true } })).id;
-    const fresh = await prisma.event.create({ data: { venueId, name: `${TAG} Fair`, date: new Date('2027-10-18T15:00:00Z'), status: 'DRAFT', capacity: 100 } });
-    const create = (body) => request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send(body);
-    const first = await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels', setup: true });
-    expect(first.status).toBe(201);
-    const second = await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels again', setup: true });
-    expect(second.status).toBe(409);
-    expect(second.body.code).toBe('FORM_EXISTS');
-    // Another purpose is fine, and so is the same one once the first is closed.
-    expect((await create({ kind: 'FREE', purpose: 'SPONSOR', name: 'Sponsors', setup: true })).status).toBe(201);
-    await prisma.applicationForm.update({ where: { id: first.body.id }, data: { status: 'CLOSED' } });
-    expect((await create({ kind: 'FREE', purpose: 'PANEL', name: 'Panels 2028', setup: true })).status).toBe(201);
-  });
-
   it('form templates are gone (spec 056): no routes, and templateId is refused', async () => {
     expect((await request(app).get('/admin/application-templates').set('Authorization', `Bearer ${token}`)).status).toBe(404);
-    const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'From a template', templateId: 'tpl-old' });
+    const res = await create({ kind: 'FREE', name: 'From a template', templateId: 'tpl-old' });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/Unknown form field\(s\): templateId/);
   });
 
   it('setup is accepted on create only', async () => {
-    const res = await create({ kind: 'FREE', purpose: 'OTHER', name: 'Bad flag', setup: 'yes' });
+    const res = await create({ kind: 'FREE', name: 'Bad flag', setup: 'yes' });
     expect(res.status).toBe(400);
   });
 });

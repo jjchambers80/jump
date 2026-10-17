@@ -108,7 +108,7 @@ export function useSetupFlow(eventId: string | null) {
   // An application step link from before spec 051 (email, bookmark, readiness item): its flow now.
   const rawStep = params.get('step');
   const redirect = eventId && rawStep && FORMER_STEPS.has(rawStep)
-    ? legacyFlowHref(eventId, rawStep, params.get('form'), forms.forms, params.get('org'))
+    ? legacyFlowHref(eventId, rawStep, params.get('form'), params.get('org'))
     : saved && current === 'registration'
       // Spec 057: the registration form is set up in its flow (Start, or the form's details).
       ? formFlowHref(saved.id, 'registration', { form: forms.forms[0]?.id, step: forms.forms[0] ? 'details' : undefined, org: params.get('org') })

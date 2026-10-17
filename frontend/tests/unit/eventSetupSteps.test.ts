@@ -52,7 +52,7 @@ describe('visible and counting', () => {
 
   test('one count across a registration event and its form flow (spec 057)', () => {
     const saved = row({ type: 'REGISTRATION' });
-    const free = ctx({ saved, forms: [{ id: 'f', purpose: 'VENDOR', kind: 'FREE' }] });
+    const free = ctx({ saved, forms: [{ id: 'f', kind: 'FREE' }] });
     const flow = registrationFlowSteps(free).map((s) => s.key);
     expect(flow).toEqual(['start', 'details', 'questions']);
     // 6 event steps, 3 flow steps, Collect more, Review.
@@ -64,7 +64,7 @@ describe('visible and counting', () => {
   });
 
   test('a registration form sells a floor map only when linked to a live event', () => {
-    const forms = [{ id: 'f', purpose: 'VENDOR' as const, kind: 'PAID', spaceSelection: 'MAP' as const }];
+    const forms = [{ id: 'f', kind: 'PAID', spaceSelection: 'MAP' as const }];
     expect(registrationFlowSteps({ saved: row({ type: 'REGISTRATION' }), forms }).map((s) => s.key)).not.toContain('floor-map');
     expect(registrationFlowSteps({ saved: row({ type: 'REGISTRATION', linkedEventId: 'live' }), forms }).map((s) => s.key)).toContain('floor-map');
   });
@@ -83,8 +83,8 @@ describe('visible and counting', () => {
     expect(keys(ctx({ saved: rsvp, donationsEligible: true }))).toContain('collect-more');
   });
 
-  test('a MAP vendor form adds no step: the floor map is in the vendor flow', () => {
-    expect(keys(ctx({ saved: row(), forms: [{ id: 'f', purpose: 'VENDOR', spaceSelection: 'MAP' }] }))).not.toContain('floor-map');
+  test('a MAP form adds no event step: the floor map is in the form flow', () => {
+    expect(keys(ctx({ saved: row(), forms: [{ id: 'f', spaceSelection: 'MAP' }] }))).not.toContain('floor-map');
   });
 
   test('later steps need the server row', () => {

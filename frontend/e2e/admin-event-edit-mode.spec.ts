@@ -37,22 +37,23 @@ function baseEvent(patch: Record<string, unknown> = {}) {
 }
 
 const counts = { SUBMITTED: 0, WAITLISTED: 0, APPROVED: 0, REJECTED: 0, WITHDRAWN: 0 };
-const overviewForm = (id: string, name: string, purpose: string, spaceSelection: string | null = null) => ({
-  id, name, slug: id, kind: 'FREE', status: 'OPEN', purpose, spaceSelection, opensAt: null, closesAt: null, paid: false,
+const overviewForm = (id: string, name: string, spaceSelection: string | null = null) => ({
+  id, name, slug: id, kind: 'FREE', status: 'OPEN', spaceSelection, opensAt: null, closesAt: null, paid: false,
   counts, total: 0, approvedSettled: 0, approvedAwaitingPayment: 0, tiers: [],
 });
 /** The admin form shape the wizard's application steps list. */
 const adminForm = (f: ReturnType<typeof overviewForm>) => ({
   ...f, eventId: EVENT_ID, intro: null, chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7,
   overduePolicy: 'WITHDRAW', reserveOnApproval: true, displayOrder: 0, createdFromTemplateId: null,
-  acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.purpose !== 'VOLUNTEER',
+  acceptance: { accepting: true, reason: null }, paymentsEnabled: true, applicationCount: 0, collectBusiness: f.id !== 'f-volunteers',
   addOns: [], questions: [], timezone: VENUE.timezone,
   ...(f.id === 'f-volunteers' && { applicationCount: 2, opensAt: '2031-05-01T14:00:00.000Z' }),
 });
 
 const OTHER_ORG = { id: 'org-other', name: 'Other Org', slug: 'other-org', status: 'ACTIVE', brandColor: '#0f766e', themeMode: 'LIGHT' };
 
-const FORMS = [overviewForm('f-vendors', 'Vendor booths', 'VENDOR', 'MAP'), overviewForm('f-volunteers', 'Volunteer crew', 'VOLUNTEER')];
+// Forms from before spec 057: a live event keeps them, but they are edited only on a registration event.
+const FORMS = [overviewForm('f-vendors', 'Vendor booths', 'MAP'), overviewForm('f-volunteers', 'Volunteer crew')];
 
 type Calls = { patch: Request[] };
 type Options = { failPatch?: boolean; otherOrgFirst?: boolean };
@@ -130,7 +131,7 @@ test.beforeAll(async ({ browser }) => {
   await mockApi(page);
   await page.goto(DETAILS, { timeout: 120000 });
   await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible({ timeout: 120000 });
-  for (const url of [setupUrl('step=name'), `/admin/events/${EVENT_ID}/setup/volunteers?step=details&form=f-volunteers`]) {
+  for (const url of [setupUrl('step=name')]) {
     await page.goto(url, { timeout: 120000 });
     await expect(page.locator('main h1').first()).toBeVisible({ timeout: 120000 });
   }
@@ -154,9 +155,12 @@ const LINKS: [string, string, string][] = [
   ['Edit add-ons', '?step=collect-more', 'Collect more'],
   ['Edit admission', '?step=tickets', 'Tickets or RSVP'],
   ['Edit listing', '?step=description', 'Describe it'],
-  ['Edit form Vendor booths', '/vendors?step=details&form=f-vendors', 'Form details'],
-  ['Edit form Volunteer crew', '/volunteers?step=details&form=f-volunteers', 'Form details'],
-  ['Edit floor map', '/vendors?step=floor-map&form=f-vendors', 'Floor map'],
+];
+// A form opens the registration flow (spec 057); a live event's old form goes back to the event.
+const FORM_LINKS: [string, string][] = [
+  ['Edit form Vendor booths', '/registration?step=details&form=f-vendors'],
+  ['Edit form Volunteer crew', '/registration?step=details&form=f-volunteers'],
+  ['Edit floor map', '/registration?step=floor-map&form=f-vendors'],
 ];
 const linkHref = (path: string) => `/admin/events/${EVENT_ID}/setup${path}${ORG_Q}`;
 const flowUrl = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
@@ -166,7 +170,7 @@ test.describe('Details links into the wizard', () => {
     await mockApi(page);
     await page.goto(DETAILS);
     await expect(page.getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
-    for (const [name, path] of LINKS) {
+    for (const [name, path] of [...LINKS, ...FORM_LINKS]) {
       await expect(page.getByRole('link', { name, exact: true }).first(), name).toHaveAttribute('href', linkHref(path));
     }
     // One form per field: no Edit control opens a dialog here any more.
@@ -191,17 +195,15 @@ test.describe('Details links into the wizard', () => {
       await expect(heading(page, title)).toBeFocused(COLD);
     });
   }
+
+  test('a live event\'s old form link goes back to the event', async ({ page }) => {
+    await mockApi(page);
+    await page.goto(flowUrl('registration?step=details&form=f-volunteers'));
+    await expect(page).toHaveURL((url) => url.pathname === DETAILS, COLD);
+  });
 });
 
 test.describe('edit mode', () => {
-  test('a form\'s Review step: View public form, and no template checkbox', async ({ page }) => {
-    await mockApi(page);
-    await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
-    await expect(heading(page, 'Review and open')).toBeFocused(COLD);
-    await expect(main(page).getByRole('link', { name: /View public form/ })).toHaveAttribute('href', `/events/${EVENT_ID}/apply/f-volunteers`);
-    await expect(main(page).getByRole('checkbox', { name: /template/ })).toHaveCount(0);
-  });
-
   test('a failed save then "Leave anyway" never says "Saved."; focus returns to the exact control', async ({ page }) => {
     await mockApi(page, baseEvent(), { failPatch: true });
     await page.goto(DETAILS);
@@ -250,21 +252,6 @@ test.describe('edit mode', () => {
     await expect(main(page).getByRole('button', { name: 'Edit URL' })).toHaveAttribute('aria-expanded', 'true');
     await main(page).getByLabel('URL slug').fill('spring-fair-2031');
     await expect(main(page).getByText('The event is live. Links already shared with the old address stop working.')).toBeVisible();
-  });
-
-  test('a form shows its applications and its window in the venue zone', async ({ page }) => {
-    await mockApi(page);
-    await page.goto(flowUrl('volunteers?step=review&form=f-volunteers'));
-    await expect(heading(page, 'Review and open')).toBeFocused(COLD);
-    await expect(main(page).getByRole('link', { name: 'View applications' })).toHaveAttribute(
-      'href',
-      `/admin/events/${EVENT_ID}/applications?form=f-volunteers`
-    );
-    await page.goto(flowUrl('volunteers?step=details&form=f-volunteers'));
-    await expect(heading(page, 'Form details')).toBeFocused(COLD);
-    // 14:00 UTC is 10:00 on the venue's clock (New York, EDT).
-    await expect(main(page).getByLabel('Opens')).toHaveValue('2031-05-01T10:00');
-    await expect(main(page).getByText(/Times are the venue's clock: New York/)).toBeVisible();
   });
 
   test('the progress is the bar alone: no step line, no saved line, no step menu', async ({ page }) => {
@@ -333,22 +320,27 @@ test.describe('edit mode', () => {
 });
 
 test.describe('redirects to the wizard', () => {
-  // Forms open their application flow (spec 051).
   const cases: [string, string][] = [
     [`${DETAILS}/edit#event-add-ons`, '?step=collect-more'],
     [`${DETAILS}/edit/details#event-media`, '?step=image'],
     [`${DETAILS}/edit/details`, '?step=name'],
     [`${DETAILS}/edit/sales#event-admission`, '?step=tickets'],
     [`${DETAILS}/edit/sales`, '?step=tickets'],
-    // The event already has a live vendor form, so Start opens it (one per purpose).
-    [`${DETAILS}/applications/forms`, '/vendors?step=details&form=f-vendors'],
-    [`${DETAILS}/applications/forms/f-volunteers`, '/volunteers?step=details&form=f-volunteers'],
   ];
   for (const [from, path] of cases) {
     test(`${from.replace(DETAILS, '…')} → ${path}`, async ({ page }) => {
       await mockApi(page);
       await page.goto(from);
       await expect(page).toHaveURL((url) => url.pathname + url.search === `${DETAILS}/setup${path}`, COLD);
+    });
+  }
+
+  // Old form links open the registration flow, which sends a live event back to the event (spec 057).
+  for (const from of [`${DETAILS}/applications/forms`, `${DETAILS}/applications/forms/f-volunteers`]) {
+    test(`${from.replace(DETAILS, '…')} → the event`, async ({ page }) => {
+      await mockApi(page);
+      await page.goto(from);
+      await expect(page).toHaveURL((url) => url.pathname === DETAILS, COLD);
     });
   }
 

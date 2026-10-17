@@ -1,7 +1,7 @@
-// Contract tests for ApplicationForm.purpose (spec 050 §6.2, card 050-B):
-// blank start, purpose/kind rules, FREE event forms without the
-// business step, purpose fixed once submitted, and
-// the admin, public and preview payloads carry it.
+// Contract tests for generic application forms (spec 050 §6.2, card 050-B;
+// forms lost their type): blank start, FREE event forms without the business
+// step, any form may be PAID, a stale `purpose` is ignored, and the admin,
+// public and preview payloads.
 
 import request from 'supertest';
 import { staffToken, joinOrgByToken, cleanupStaff } from '../helpers/staff.js';
@@ -10,9 +10,9 @@ import { allAcceptances } from '../helpers/legal.js';
 const { default: app } = await import('../../src/api/server.js');
 const { prisma } = await import('@jump/db');
 
-const TAG = 'form-purpose-ct';
+const TAG = 'form-generic-ct';
 
-describe('Application form purpose (spec 050 §6.2)', () => {
+describe('Generic application forms (spec 050 §6.2)', () => {
   let adminToken;
   let org;
   let eventId;
@@ -42,14 +42,14 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     await cleanupStaff(emails);
   });
 
-  it('a VOLUNTEER form starts blank with no business step; explicit questions are kept', async () => {
-    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Blank crew' });
+  it('a FREE form starts blank with no business step; explicit questions are kept', async () => {
+    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', name: 'Blank crew' });
     expect(blank.status).toBe(201);
-    expect(blank.body).toMatchObject({ purpose: 'VOLUNTEER', collectBusiness: false, questions: [] });
+    expect(blank.body).toMatchObject({ collectBusiness: false, questions: [] });
+    expect(blank.body).not.toHaveProperty('purpose');
     const days = ['Friday', 'Saturday', 'Sunday'];
     const res = await request(app).post(forms()).set(...auth()).send({
       kind: 'FREE',
-      purpose: 'VOLUNTEER',
       name: 'Crew',
       collectBusiness: false,
       questions: [
@@ -60,7 +60,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
       ],
     });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ purpose: 'VOLUNTEER', collectBusiness: false });
+    expect(res.body).toMatchObject({ collectBusiness: false });
     expect(res.body.questions.map((q) => q.label)).toEqual([
       'Which days are you available?',
       'Which roles interest you?',
@@ -70,31 +70,20 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     volunteer = res.body;
   });
 
-  it('explicit questions are kept; no purpose means OTHER', async () => {
-    const own = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'VENDOR', name: 'Makers', questions: [] });
-    expect(own.status).toBe(201);
-    expect(own.body.questions).toEqual([]);
-    const plain = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', name: 'Plain' });
-    expect(plain.body).toMatchObject({ purpose: 'OTHER', collectBusiness: false, questions: [] });
-  });
-
-  it('any purpose may be PAID (forms are generic); bad purpose is 400', async () => {
-    const paidVolunteers = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VOLUNTEER', name: 'Paid volunteers' });
-    expect(paidVolunteers.status).toBe(201);
-    // Spec 056: a paid vendor form may skip business details.
-    const noBiz = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VENDOR', name: 'Vendors', collectBusiness: false });
+  it('any form may be PAID; a stale purpose from an old browser is ignored', async () => {
+    const paid = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VOLUNTEER', name: 'Paid crew' });
+    expect(paid.status).toBe(201);
+    expect(paid.body).not.toHaveProperty('purpose');
+    // Spec 056: a paid form may skip business details.
+    const noBiz = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', name: 'Vendors', collectBusiness: false });
     expect(noBiz.status).toBe(201);
     expect(noBiz.body.collectBusiness).toBe(false);
-    const bad = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'ROADIE', name: 'Roadies' });
-    expect(bad.status).toBe(400);
-
-    const paid = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'SPONSOR', name: 'Sponsors' });
-    expect(paid.status).toBe(201);
-    const toGuest = await request(app).patch(`${forms()}/${paid.body.id}`).set(...auth()).send({ purpose: 'SPECIAL_GUEST' });
-    expect(toGuest.status).toBe(200);
+    const patched = await request(app).patch(`${forms()}/${paid.body.id}`).set(...auth()).send({ purpose: 'ROADIE', intro: 'Hi' });
+    expect(patched.status).toBe(200);
+    expect(patched.body.intro).toBe('Hi');
   });
 
-  it('a FREE VOLUNTEER form submits without the business step', async () => {
+  it('a FREE form submits without the business step', async () => {
     const open = await request(app).patch(`${forms()}/${volunteer.id}`).set(...auth()).send({ status: 'OPEN' });
     expect(open.status).toBe(200);
     const q = Object.fromEntries(volunteer.questions.map((x) => [x.label, x.id]));
@@ -112,7 +101,7 @@ describe('Application form purpose (spec 050 §6.2)', () => {
   });
 
   it('a blank form asks for an email only: no name is needed, and a name form still requires one (spec 056)', async () => {
-    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', purpose: 'PRESS', name: 'Press list', setup: true });
+    const blank = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', name: 'Press list', setup: true });
     expect(blank.body).toMatchObject({ collectName: false, collectBusiness: false });
     expect((await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ status: 'OPEN' })).status).toBe(200);
     const submit = (contact) =>
@@ -128,34 +117,20 @@ describe('Application form purpose (spec 050 §6.2)', () => {
     await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ status: 'DRAFT' });
   });
 
-  it('purpose is fixed once the form has submissions (409); other fields still save', async () => {
-    const res = await request(app).patch(`${forms()}/${volunteer.id}`).set(...auth()).send({ purpose: 'OTHER' });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('PURPOSE_LOCKED');
-    const same = await request(app).patch(`${forms()}/${volunteer.id}`).set(...auth()).send({ purpose: 'VOLUNTEER', intro: 'Thanks!' });
-    expect(same.status).toBe(200);
-  });
-
-  it('purpose changes freely before any submission', async () => {
-    const created = await request(app).post(forms()).set(...auth()).send({ kind: 'FREE', name: 'Speakers' });
-    const res = await request(app).patch(`${forms()}/${created.body.id}`).set(...auth()).send({ purpose: 'PANEL' });
-    expect(res.status).toBe(200);
-    expect(res.body.purpose).toBe('PANEL');
-  });
-
-  it('admin list and public forms carry purpose', async () => {
+  it('admin list and public forms carry the form, without a purpose', async () => {
     const admin = await request(app).get(forms()).set(...auth());
     expect(admin.status).toBe(200);
-    expect(admin.body.data.find((f) => f.id === volunteer.id).purpose).toBe('VOLUNTEER');
+    expect(admin.body.data.find((f) => f.id === volunteer.id)).not.toHaveProperty('purpose');
     const pub = await request(app).get(`/events/${eventId}/applications/forms`);
     expect(pub.status).toBe(200);
-    expect(pub.body.data).toEqual([expect.objectContaining({ id: volunteer.id, purpose: 'VOLUNTEER', collectBusiness: false })]);
+    expect(pub.body.data).toEqual([expect.objectContaining({ id: volunteer.id, collectBusiness: false })]);
+    expect(pub.body.data[0]).not.toHaveProperty('purpose');
   });
 
-  it('the preview payload includes the draft event\'s DRAFT forms with purpose', async () => {
-    expect((await request(app).post(forms(draftEventId)).set(...auth()).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Crew 2' })).status).toBe(201);
+  it('the preview payload includes the draft event\'s DRAFT forms', async () => {
+    expect((await request(app).post(forms(draftEventId)).set(...auth()).send({ kind: 'FREE', name: 'Crew 2' })).status).toBe(201);
     const res = await request(app).get(`/organizations/${org.id}/events/${draftEventId}/preview-payload`).set(...auth());
     expect(res.status).toBe(200);
-    expect(res.body.forms).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Crew 2', purpose: 'VOLUNTEER', acceptance: { open: false, reason: 'not_published' } })]));
+    expect(res.body.forms).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Crew 2', acceptance: { open: false, reason: 'not_published' } })]));
   });
 });

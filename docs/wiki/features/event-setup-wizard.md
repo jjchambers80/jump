@@ -129,6 +129,8 @@ Edit-mode extras: **View event** in the header (public page, or a signed preview
 
 ### Application forms by purpose (050-B, 050-L; flows since spec 051)
 
+*History: forms lost their type, and the per-type flows were removed. See [registration events](registration-events.md).*
+
 The rules below still hold; the editing UI moved to the [application setup flows](application-setup-flows.md). `ApplicationsStep`, `FormRow`, `InlineFormEditor` and `AddFormDialog` were removed (Start step = `steps/StartFormStep.tsx`).
 
 - `ApplicationForm.purpose` (enum `VENDOR SPONSOR PRESS PANEL SPECIAL_GUEST VOLUNTEER OTHER`, default OTHER) places a form in a step: `vendors` (VENDOR), `special-guests` (SPECIAL_GUEST), `volunteers` (VOLUNTEER), `other-applications` (SPONSOR / PRESS / PANEL / OTHER; null → OTHER). `GetInvolved` labels come from `PURPOSE_CTA` (`lib/applications.ts`), not the form name.

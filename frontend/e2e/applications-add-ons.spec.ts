@@ -66,7 +66,6 @@ const adminTier = (t: typeof boothTier) => ({
 const adminForm = {
   ...publicForm,
   eventId: EVENT_ID,
-  purpose: 'VENDOR',
   status: 'OPEN',
   opensAt: null,
   closesAt: null,
@@ -194,7 +193,8 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
  */
 async function mockWizard(page: Page) {
   const adminEvent = {
-    ...event, slug: 'maker-fair-2027', logoUrl: null, endDate: null, category: null, admissionMode: 'TICKETED',
+    // Spec 057: forms live on registration events and are edited in the registration flow.
+    ...event, type: 'REGISTRATION', linkedEventId: null, slug: 'maker-fair-2027', logoUrl: null, endDate: null, category: null, admissionMode: 'TICKETED',
     setupStep: null, setupCompletedAt: '2026-01-01T00:00:00.000Z', rsvpLimit: null, rsvpMaxPartySize: 1, rsvpRemaining: null,
     tax: { rate: 0.1, source: 'MANUAL', region: 'NC' }, taxInclusivePricing: false,
   };
@@ -492,10 +492,10 @@ test('vendor flow Options and pricing: tier rows show offered add-ons; ADMIN att
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
   test.setTimeout(120000);
   await mockWizard(page);
-  // The old form editor URL opens the form in its application flow (spec 051).
+  // The old form editor URL opens the form in the registration flow (spec 057).
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
-  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/vendors\\?step=details&form=${FORM_ID}`), { timeout: 60000 });
-  await page.goto(`/admin/events/${EVENT_ID}/setup/vendors?step=options&form=${FORM_ID}`);
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=details&form=${FORM_ID}`), { timeout: 60000 });
+  await page.goto(`/admin/events/${EVENT_ID}/setup/registration?step=options&form=${FORM_ID}`);
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs', { timeout: 30000 });
   await page.getByTestId(`tier-row-${cornerTier.id}`).getByRole('button', { name: 'Edit' }).click();
   const fieldset = page.getByTestId(`tier-add-ons-${cornerTier.id}`);
@@ -512,7 +512,7 @@ test('vendor flow How vendors choose and pay: no floor-map choice; the form keep
   const { calls } = await mockAdmin(page, baseURL!, 'ADMIN');
   test.setTimeout(120000);
   await mockWizard(page);
-  await page.goto(`/admin/events/${EVENT_ID}/setup/vendors?step=payment&form=${FORM_ID}`);
+  await page.goto(`/admin/events/${EVENT_ID}/setup/registration?step=payment&form=${FORM_ID}`);
   const settings = page.getByTestId('form-settings');
   await expect(settings.getByText('When you approve a vendor')).toBeVisible({ timeout: 60000 });
   await expect(settings.getByText('How vendors choose their space')).toHaveCount(0);

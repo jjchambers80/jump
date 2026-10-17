@@ -1582,8 +1582,7 @@ class EventService {
         slug: f.slug,
         kind: f.kind,
         status: f.status,
-        // Spec 050-O: Details links each form to its wizard step (purpose) and the map card to the floor-map step.
-        purpose: f.purpose,
+        // Spec 050-O: Details links the map card to the floor-map step.
         spaceSelection: f.spaceSelection,
         opensAt: f.opensAt,
         closesAt: f.closesAt,

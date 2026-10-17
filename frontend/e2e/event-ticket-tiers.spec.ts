@@ -93,7 +93,7 @@ test('a tier in the cart is marked selected', async ({ page }) => {
 test('application forms show as short links in the event header', async ({ page }) => {
   await mockEvent(page);
   const form = (id: string, name: string, slug: string, acceptance: object, buttonLabel: string | null) => ({
-    id, name, slug, buttonLabel, purpose: 'OTHER', kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
+    id, name, slug, buttonLabel, kind: 'PAID', intro: null, acceptance, chargeTiming: null, feeMode: null, tiers: [], questions: [],
   });
   await page.route(`${API}/events/${EVENT_ID}/applications/forms`, (route) =>
     route.fulfill({

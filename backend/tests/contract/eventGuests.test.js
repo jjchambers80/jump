@@ -56,8 +56,8 @@ describe('Special guest lineup (spec 050 §7.6)', () => {
     await joinOrgByToken(tokens.OUTSIDER, otherOrg.id, 'ORGANIZER');
     const venue = await prisma.venue.create({ data: { organizationId: org.id, name: `${TAG} Hall`, address: '1 Main St', city: 'Raleigh', state: 'NC', timezone: 'America/New_York' } });
     eventId = (await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Con`, date: new Date('2027-09-18T15:00:00Z'), status: 'PUBLISHED', capacity: 100 } })).id;
-    guestForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId, name: 'Guests', slug: `guests-${seq++}`, kind: 'FREE', purpose: 'SPECIAL_GUEST' } });
-    vendorForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId, name: 'Vendors', slug: `vendors-${seq++}`, kind: 'FREE', purpose: 'VENDOR' } });
+    guestForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId, name: 'Guests', slug: `guests-${seq++}`, kind: 'FREE' } });
+    vendorForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId, name: 'Vendors', slug: `vendors-${seq++}`, kind: 'FREE' } });
   });
 
   afterAll(async () => {

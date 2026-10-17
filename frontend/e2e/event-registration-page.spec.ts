@@ -35,7 +35,7 @@ function event(overrides: Record<string, unknown> = {}) {
 }
 
 const form = (overrides: Record<string, unknown> = {}) => ({
-  id: 'form-reg', eventId: REG_ID, kind: 'PAID', purpose: 'VENDOR', name: 'Vendor registration', slug: 'vendors', intro: null,
+  id: 'form-reg', eventId: REG_ID, kind: 'PAID', name: 'Vendor registration', slug: 'vendors', intro: null,
   acceptance: { open: true, reason: null }, tiers: [], questions: [], ...overrides,
 });
 

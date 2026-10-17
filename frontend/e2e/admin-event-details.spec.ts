@@ -73,7 +73,7 @@ const overview = {
   },
   // Spec 057: registration events for this one.
   linkedEvent: null,
-  registrations: [{ id: REG_ID, name: 'Game & Geek Vendors', slug: 'gg-vendors', status: 'PUBLISHED', formStatus: 'OPEN', purpose: 'VENDOR', toReview: 2 }],
+  registrations: [{ id: REG_ID, name: 'Game & Geek Vendors', slug: 'gg-vendors', status: 'PUBLISHED', formStatus: 'OPEN', toReview: 2 }],
 };
 
 /** Spec 057: a registration event, for the live event above. */
@@ -152,9 +152,9 @@ test('shows the event read-only, with an Edit link per section into the wizard',
   for (const [name, query] of edits) {
     await expect(page.getByRole('link', { name, exact: true }).first()).toHaveAttribute('href', setup(query));
   }
-  // Spec 051: application forms and the lineup open their own flows.
+  // A form opens the registration flow (spec 057); the lineup opens its own.
   const flow = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
-  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', flow(`other-applications?step=details&form=form-1&org=${ORG_ID}`));
+  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', flow(`registration?step=details&form=form-1&org=${ORG_ID}`));
   await expect(page.getByRole('link', { name: 'Edit special guests' })).toHaveAttribute('href', flow(`special-guests?step=lineup&org=${ORG_ID}`));
   // No MAP form, so the floor map is edited from the Map tab.
   await expect(page.getByRole('link', { name: 'Edit floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);

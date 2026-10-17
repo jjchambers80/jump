@@ -4,14 +4,11 @@
 // form this run edits (`?form=`), the visible steps and the current one
 // (`?step=`). A step that needs the form is unreachable until Start creates
 // it; anything invalid is replaced in the URL, so Back and reloads work.
-// An event has one live form per purpose: Start on a single-purpose flow that
-// already has one opens that form instead.
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCan, useOrg } from '@/components/OrgContext';
-import { APPLICATION_STEPS, formsOnStep, stepForPurpose } from './applicationSteps';
-import { flowSteps, formEditHref, formFlowHref, type FlowStep, type FlowStepKey, type FormFlowKey } from './formFlows';
+import { flowSteps, formFlowHref, type FlowStep, type FlowStepKey, type FormFlowKey } from './formFlows';
 import { useSetupData } from './useSetupData';
 import { useSetupForms } from './useSetupForms';
 
@@ -26,49 +23,35 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
 
   const org = params.get('org');
   const event = data.saved;
-  // Spec 057: a registration event has one form, its `registration` flow; a live event keeps the four flows.
+  // Spec 057: a registration event has one form, its `registration` flow; a live event keeps its lineup.
   const registration = event?.type === 'REGISTRATION';
   const formId = params.get('form') ?? (registration ? forms.forms[0]?.id ?? null : null);
   const form = (formId && forms.forms.find((f) => f.id === formId)) || null;
-  // Spec 057: a live event takes no new forms (people register through registration events);
-  // it keeps its special guest lineup and any form it still has from before.
-  const liveWithoutForm = !!event && !registration && !form;
-  const steps = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
-  const list = liveWithoutForm && flow === 'special-guests' ? steps.filter((s) => s.key === 'lineup') : steps;
+  const list = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
-  const fallback = form ? list.find((step) => step.key === 'details')! : list[0];
+  const fallback = (form && list.find((step) => step.key === 'details')) || list[0];
   const step = requested && reachable(requested) ? requested : fallback;
   const at = list.indexOf(step);
   const ready = data.load.status === 'ready' && forms.load.status === 'ready';
-  const live =
-    flow !== 'registration' && !form && step.key === 'start' && APPLICATION_STEPS[flow].purposes.length === 1
-      ? formsOnStep(flow, forms.forms).find((f) => f.status !== 'CLOSED') ?? null
-      : null;
   // The wrong flow for the event's type: its own flow (a live event has no `registration` flow).
   const wrongFlow = ready && !!event && (registration ? flow !== 'registration' : flow === 'registration');
 
   const href = (key: FlowStepKey, id: string | null = form?.id ?? null) => formFlowHref(eventId, flow, { form: id, step: key, org });
 
-  // Put the resolved step (and a form that exists) in the URL; a form of another type opens its own flow.
+  // Put the resolved step (and a form that exists) in the URL.
   const target = !ready
     ? null
     : wrongFlow
       ? registration
         ? formFlowHref(eventId, 'registration', { form: form?.id, step: form ? 'details' : undefined, org })
         : `/admin/events/${encodeURIComponent(eventId)}`
-      : live
-        ? formEditHref(eventId, live, org)
-        : liveWithoutForm && flow !== 'special-guests'
-          ? `/admin/events/${encodeURIComponent(eventId)}`
-          : form && !registration && stepForPurpose(form.purpose) !== flow
-          ? formEditHref(eventId, form, org)
-          : registration && form && !params.get('form')
-            ? // The registration's one form exists: its Start is done, so open the step asked for or Details.
-              href(step.key === 'start' ? 'details' : step.key)
-            : step !== requested || (formId && !form)
-              ? href(step.key)
-              : null;
+      : registration && form && !params.get('form')
+        ? // The registration's one form exists: its Start is done, so open the step asked for or Details.
+          href(step.key === 'start' ? 'details' : step.key)
+        : step !== requested || (formId && !form)
+          ? href(step.key)
+          : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);

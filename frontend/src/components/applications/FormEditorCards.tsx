@@ -11,7 +11,6 @@ import { FormEvent, useEffect, useState } from 'react';
 import { instantToZonedInput, zonedInputToIso } from '@/lib/eventTime';
 import { timeZoneLabel } from '@/lib/timeZones';
 // The event setup wizard's floor-map and collect-more steps (spec 050-L).
-import { wizardLink } from '@/components/event-setup/applicationSteps';
 import { BUSINESS_FIELDS, businessFieldsOf, MAX_PINNED_QUESTIONS, money, QUESTION_TYPE_LABEL, type AdminForm, type BusinessField, type AdminTier, type Question, type QuestionType } from '@/lib/applications';
 
 const card = 'rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-5';
@@ -376,7 +375,7 @@ export function TiersCard({
         {eventAddOns.length === 0 && (
           <>
             {' '}Add-ons (power, badges, tables) are created on the{' '}
-            <Link href={wizardLink(form.eventId!, 'add-ons').href} className="text-accent-600 underline dark:text-accent-300">{wizardLink(form.eventId!, 'add-ons').label}</Link>.
+            <Link href={`/admin/events/${form.eventId}/setup?step=collect-more`} className="text-accent-600 underline dark:text-accent-300">Collect more step</Link>.
           </>
         )}
       </p>
