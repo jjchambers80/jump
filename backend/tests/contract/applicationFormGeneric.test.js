@@ -1,6 +1,6 @@
 // Contract tests for generic application forms (spec 050 §6.2, card 050-B;
 // forms lost their type): blank start, FREE event forms without the business
-// step, any form may be PAID, a stale `purpose` is ignored, and the admin,
+// step, any form may be PAID, `purpose` is refused (the column is gone), and the admin,
 // public and preview payloads.
 
 import request from 'supertest';
@@ -70,17 +70,18 @@ describe('Generic application forms (spec 050 §6.2)', () => {
     volunteer = res.body;
   });
 
-  it('any form may be PAID; a stale purpose from an old browser is ignored', async () => {
-    const paid = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VOLUNTEER', name: 'Paid crew' });
+  it('any form may be PAID; purpose is an unknown field', async () => {
+    const stale = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', purpose: 'VOLUNTEER', name: 'Paid crew' });
+    expect(stale.status).toBe(400);
+    expect(stale.body.message).toMatch(/Unknown form field\(s\): purpose/);
+    const paid = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', name: 'Paid crew' });
     expect(paid.status).toBe(201);
     expect(paid.body).not.toHaveProperty('purpose');
     // Spec 056: a paid form may skip business details.
     const noBiz = await request(app).post(forms()).set(...auth()).send({ kind: 'PAID', name: 'Vendors', collectBusiness: false });
     expect(noBiz.status).toBe(201);
     expect(noBiz.body.collectBusiness).toBe(false);
-    const patched = await request(app).patch(`${forms()}/${paid.body.id}`).set(...auth()).send({ purpose: 'ROADIE', intro: 'Hi' });
-    expect(patched.status).toBe(200);
-    expect(patched.body.intro).toBe('Hi');
+    expect((await request(app).patch(`${forms()}/${paid.body.id}`).set(...auth()).send({ purpose: 'ROADIE' })).status).toBe(400);
   });
 
   it('a FREE form submits without the business step', async () => {

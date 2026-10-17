@@ -4,9 +4,7 @@
 import { ValidationError } from '../../middleware/errorHandler.js';
 import permissionService from '../../services/PermissionService.js';
 
-// `purpose` is accepted and ignored for one release, so a browser still on the
-// old bundle can save; it goes with the column.
-const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'purpose', 'collectBusiness', 'businessFields', 'collectName', 'buttonLabel', 'successMessage', 'setup']);
+const FORM_FIELDS = new Set(['kind', 'name', 'slug', 'intro', 'status', 'opensAt', 'closesAt', 'chargeTiming', 'feeMode', 'taxable', 'paymentDueDays', 'overduePolicy', 'reserveOnApproval', 'spaceSelection', 'displayOrder', 'tiers', 'questions', 'collectBusiness', 'businessFields', 'collectName', 'buttonLabel', 'successMessage', 'setup']);
 const TIER_FIELDS = new Set(['name', 'description', 'price', 'quantityTotal', 'displayOrder', 'isActive']);
 const QUESTION_FIELDS = new Set(['label', 'helpText', 'type', 'required', 'options', 'displayOrder', 'pinned']);
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'WAITLIST', 'WITHDRAW']);
