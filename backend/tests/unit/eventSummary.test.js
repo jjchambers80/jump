@@ -26,6 +26,7 @@ describe('formatEventSummary', () => {
       category: 'music',
       imageUrl: null,
       status: 'PUBLISHED',
+      type: 'LIVE',
       admissionMode: 'TICKETED',
       rsvpLimit: null,
       rsvpMaxPartySize: 1,
