@@ -6,6 +6,8 @@ import { ValidationError, ConflictError, NotFoundError } from '../../src/middlew
 
 const mockPrisma = {};
 jest.unstable_mockModule('@jump/db', () => ({ prisma: mockPrisma }));
+// Spec 057: no registration events here, so every event uses its own map.
+jest.unstable_mockModule('../../src/services/mapEvents.js', () => ({ mapEventIdFor: async (id) => id, eventIdsForMap: async (id) => [id] }));
 jest.unstable_mockModule('../../src/utils/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
@@ -166,7 +168,7 @@ describe('MapService', () => {
       const result = await service.publicMap('evt_1');
 
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { eventId: 'evt_1', status: 'APPROVED', publicProfile: true, form: { kind: 'PAID' } },
+        where: { eventId: { in: ['evt_1'] }, status: 'APPROVED', publicProfile: true, form: { kind: 'PAID' } },
         orderBy: [{ profile: { businessName: 'asc' } }, { id: 'asc' }],
       }));
       expect(result.vendors).toEqual([expect.objectContaining({

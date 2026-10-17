@@ -36,8 +36,13 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
   }
 
   const tiers = event.priceTiers || [];
+  // Spec 057: a registration event has no admission; its one form is what it publishes.
+  const registration = event.type === 'REGISTRATION';
+  if (registration && !(event.applicationForms || []).length) {
+    blockers.push(item('FORM_MISSING', 'registration', 'Set up the registration form.'));
+  }
   // Gotcha 29: branch on admissionMode. RSVP events have no tiers or capacity.
-  if (event.admissionMode === 'TICKETED') {
+  if (!registration && event.admissionMode === 'TICKETED') {
     if (event.capacity == null) blockers.push(item('CAPACITY_MISSING', 'tickets', 'Set the event capacity.'));
     if (!tiers.some((t) => t.isActive)) blockers.push(item('NO_ACTIVE_TIER', 'tickets', 'Add at least one active ticket tier.'));
     const total = tiers.reduce((sum, t) => sum + t.quantityTotal, 0);
@@ -54,7 +59,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
 
   const forms = (event.applicationForms || []).filter((f) => f.status !== 'CLOSED');
   for (const form of forms) {
-    const step = stepForForm(form);
+    const step = registration ? 'registration' : stepForForm(form);
     if (form.kind === 'PAID' && !gateOn) {
       warnings.push(item('PAID_FORMS_DISABLED', step, `${form.name} charges applicants, and paid applications are not available yet. It stays closed.`, { formId: form.id }));
     }
@@ -63,7 +68,9 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     }
   }
   const mapForm = forms.find((f) => f.kind === 'PAID' && f.spaceSelection === 'MAP');
-  if (mapForm && event.floorMap?.status !== 'PUBLISHED') {
+  // Spec 057: a registration event uses the floor map of the live event it is for.
+  const floorMap = registration ? event.linkedEvent?.floorMap : event.floorMap;
+  if (mapForm && floorMap?.status !== 'PUBLISHED') {
     warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
   }
   if (taxError) warnings.push(item('TAX_RATE_UNRESOLVED', 'review', `Sales tax could not be looked up: ${taxError}`));
@@ -73,7 +80,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
 
 /** True when the event takes money: a paid ticket tier or a PAID application form. */
 const takesMoney = (event) =>
-  (event.admissionMode === 'TICKETED' && (event.priceTiers || []).some((t) => t.isActive && Number(t.price) > 0)) ||
+  (event.type !== 'REGISTRATION' && event.admissionMode === 'TICKETED' && (event.priceTiers || []).some((t) => t.isActive && Number(t.price) > 0)) ||
   (event.applicationForms || []).some((f) => f.kind === 'PAID' && f.status !== 'CLOSED');
 
 class EventReadinessService {
@@ -84,6 +91,7 @@ class EventReadinessService {
         venue: true,
         priceTiers: true,
         floorMap: { select: { status: true } },
+        linkedEvent: { select: { floorMap: { select: { status: true } } } },
         applicationForms: { include: { _count: { select: { questions: { where: { archivedAt: null } } } } } },
       },
     });

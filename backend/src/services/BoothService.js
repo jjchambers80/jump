@@ -10,6 +10,7 @@ import { prisma } from '@jump/db';
 import { ConflictError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { BOOTH_HOLD_MS } from '../config/applications.js';
 import logger from '../utils/logger.js';
+import { eventIdsForMap, mapEventIdFor } from './mapEvents.js';
 
 function coded(error, code) {
   error.code = code;
@@ -31,7 +32,7 @@ class BoothService {
    */
   async mapBoundTierIds(eventId, { tx = prisma } = {}) {
     const rows = await tx.booth.findMany({
-      where: { tierId: { not: null }, map: { eventId, status: 'PUBLISHED' } },
+      where: { tierId: { not: null }, map: { eventId: await mapEventIdFor(eventId, tx), status: 'PUBLISHED' } },
       select: { tierId: true },
       distinct: ['tierId'],
     });
@@ -42,7 +43,7 @@ class BoothService {
   async isMapBound(eventId, tierId, { tx = prisma } = {}) {
     if (!eventId || !tierId) return false;
     const booth = await tx.booth.findFirst({
-      where: { tierId, map: { eventId, status: 'PUBLISHED' } },
+      where: { tierId, map: { eventId: await mapEventIdFor(eventId, tx), status: 'PUBLISHED' } },
       select: { id: true },
     });
     return Boolean(booth);
@@ -105,7 +106,7 @@ class BoothService {
     const map = await tx.floorMap.findUnique({ where: { id: booth.mapId }, select: { status: true, eventId: true } });
     // Tenant isolation: a booth on another event (another organizer) is "not
     // found", never a category mismatch.
-    if (!map || map.eventId !== application.eventId) throw new NotFoundError('Booth not found');
+    if (!map || map.eventId !== (await mapEventIdFor(application.eventId, tx))) throw new NotFoundError('Booth not found');
     if (booth.tierId !== application.tierId) {
       throw coded(new ValidationError('This booth belongs to a different category'), 'BOOTH_TIER_MISMATCH');
     }
@@ -305,7 +306,7 @@ class BoothService {
         select: { id: true, tierId: true, eventId: true },
       });
       if (!application) throw new NotFoundError('Approved application not found in this organization');
-      if (application.eventId !== map.eventId) {
+      if (!(await eventIdsForMap(map.eventId, tx)).includes(application.eventId)) {
         throw new ValidationError('Application belongs to a different event');
       }
 
@@ -547,7 +548,7 @@ class BoothService {
     const heldIds = new Set(heldBooths.map((b) => b.applicationId));
 
     const where = {
-      eventId: map.eventId,
+      eventId: { in: await eventIdsForMap(map.eventId) },
       organizationId: orgId,
       status: 'APPROVED',
       id: { notIn: [...heldIds] },

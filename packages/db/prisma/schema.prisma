@@ -959,6 +959,10 @@ model Event {
   salesClosedById  String? // spec 050-D: who closed (no FK; the audit trail has the rest)
   category         String?
   status           EventStatus   @default(DRAFT)
+  // Spec 057: LIVE = tickets or RSVPs (admissionMode); REGISTRATION = one application form, no admission.
+  type             EventType     @default(LIVE)
+  // Spec 057: a registration event may be for a LIVE event of the same organization (its map, its page's pills).
+  linkedEventId    String?
   admissionMode    AdmissionMode @default(TICKETED)
   rsvpLimit        Int?
   rsvpMaxPartySize Int           @default(1)
@@ -982,9 +986,18 @@ model Event {
 
   cancellation EventCancellation?
 
+  linkedEvent   Event?  @relation("EventRegistrations", fields: [linkedEventId], references: [id], onDelete: SetNull)
+  registrations Event[] @relation("EventRegistrations")
+
   @@index([venueId])
   @@index([status])
   @@index([date])
+  @@index([linkedEventId])
+}
+
+enum EventType {
+  LIVE
+  REGISTRATION
 }
 
 enum AdmissionMode {

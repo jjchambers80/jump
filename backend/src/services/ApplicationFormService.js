@@ -16,6 +16,7 @@ import feeService from './FeeService.js';
 import logger from '../utils/logger.js';
 import { FORM_PURPOSES, FREE_ONLY_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
+import { mapEventIdFor } from './mapEvents.js';
 
 const FORM_KINDS = new Set(['PAID', 'FREE']);
 const FORM_STATUSES = new Set(['DRAFT', 'OPEN', 'CLOSED']);
@@ -234,7 +235,9 @@ class ApplicationFormService {
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
     this._assertPurposeKind(data.purpose ?? 'OTHER', body.kind);
     // The setup flows (`setup: true`) keep one live form per purpose on an event.
-    if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
+    // Spec 057: a registration event is its one form; a live event's setup flows keep one live form per purpose.
+    if (event.type === 'REGISTRATION') await this._assertNoForm(eventId);
+    else if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -612,7 +615,15 @@ class ApplicationFormService {
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
     const addOns = await this._addOnsForEvent(eventId, { activeOnly: true });
-    return forms.map((f) => this._serializePublicForm(f, event, addOns));
+    const own = forms.map((f) => this._serializePublicForm(f, event, addOns));
+    // Spec 057: a live event's page also offers the forms of its published registration events.
+    const linked = await prisma.event.findMany({
+      where: { linkedEventId: eventId, type: 'REGISTRATION', status: 'PUBLISHED', deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    for (const registration of linked) own.push(...(await this.publicForms(registration.id)));
+    return own;
   }
 
   async publicForm(eventId, slug) {
@@ -779,6 +790,11 @@ class ApplicationFormService {
    * form keeps the business profile approval, booth assignment and check-in read.
    */
   /** One live (not CLOSED) form per purpose per event: the setup flows edit that one. */
+  async _assertNoForm(eventId) {
+    const other = await prisma.applicationForm.findFirst({ where: { eventId }, select: { name: true } });
+    if (other) throw coded(new ConflictError(`This registration event already has its form: ${other.name}`), 'FORM_EXISTS');
+  }
+
   async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
     const other = await prisma.applicationForm.findFirst({
       where: { eventId, purpose, status: { not: 'CLOSED' }, ...(excludeId && { id: { not: excludeId } }) },
@@ -807,7 +823,7 @@ class ApplicationFormService {
    * form may be set to MAP before the map is ready; opening it checks.
    */
   async _assertMapReady(form) {
-    const map = await prisma.floorMap.findUnique({ where: { eventId: form.eventId }, select: { id: true, status: true } });
+    const map = await prisma.floorMap.findUnique({ where: { eventId: await mapEventIdFor(form.eventId) }, select: { id: true, status: true } });
     if (!map || map.status !== 'PUBLISHED') {
       throw coded(new ValidationError('Publish the event\'s floor map before vendors choose spots on it'), 'MAP_NOT_READY');
     }
@@ -955,6 +971,8 @@ class ApplicationFormService {
   _serializePublicForm(form, event, addOns = [], organization = event?.venue?.organization || form.organization) {
     return {
       id: form.id,
+      // Spec 057: the event the form belongs to (a linked registration event on a live event's page).
+      eventId: form.eventId,
       kind: form.kind,
       purpose: form.purpose,
       name: form.name,

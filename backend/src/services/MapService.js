@@ -21,6 +21,7 @@ import imageService from './ImageService.js';
 import applicationFormService, { tierAmounts } from './ApplicationFormService.js';
 import { spacePriceFor } from './orderLines.js';
 import floorMapTemplateService from './FloorMapTemplateService.js';
+import { eventIdsForMap, mapEventIdFor } from './mapEvents.js';
 
 // Spec 039: per-booth price ceiling (the tier validator's range).
 const MAX_BOOTH_PRICE = 100_000;
@@ -118,7 +119,7 @@ class MapService {
       const boundTierIds = [...new Set(materialised.booths.map((booth) => booth.tierId).filter(Boolean))];
       if (boundTierIds.length > 0) {
         const destinationTiers = await prisma.applicationTier.findMany({
-          where: { id: { in: boundTierIds }, form: { eventId } },
+          where: { id: { in: boundTierIds }, form: { eventId: { in: await eventIdsForMap(eventId) } } },
           select: { id: true },
         });
         if (destinationTiers.length !== boundTierIds.length) {
@@ -172,7 +173,7 @@ class MapService {
     if (!map) throw new NotFoundError('Floor map not found');
 
     const tiers = await prisma.applicationTier.findMany({
-      where: { form: { eventId: map.eventId, kind: 'PAID' } },
+      where: { form: { eventId: { in: await eventIdsForMap(map.eventId) }, kind: 'PAID' } },
       select: { id: true, name: true, price: true, quantityTotal: true, formId: true, displayOrder: true },
       orderBy: [{ form: { displayOrder: 'asc' } }, { displayOrder: 'asc' }],
     });
@@ -500,7 +501,8 @@ class MapService {
   async publicMap(identifier) {
     const resolved = await findByPublicIdentifier(prisma.event, identifier, { select: { id: true } });
     if (!resolved) throw new NotFoundError('Map not published for this event');
-    const eventId = resolved.id;
+    // Spec 057: a registration event shows the map of the live event it is for.
+    const eventId = await mapEventIdFor(resolved.id);
     const map = await prisma.floorMap.findUnique({
       where: { eventId },
       include: {
@@ -539,7 +541,7 @@ class MapService {
     // and explicitly visible. Never select Contact or organizer-only metadata.
     const vendors = await prisma.application.findMany({
       where: {
-        eventId,
+        eventId: { in: await eventIdsForMap(eventId) },
         status: 'APPROVED',
         publicProfile: true,
         form: { kind: 'PAID' },

@@ -74,6 +74,12 @@ const PUBLIC_EVENT_INCLUDE = {
   guests: { where: { isVisible: true }, ...GUESTS_INCLUDE },
 };
 
+/** Spec 057: the `type` list filter, LIVE or REGISTRATION. */
+function assertEventType(type) {
+  if (!['LIVE', 'REGISTRATION'].includes(type)) throw new ValidationError('type must be LIVE or REGISTRATION');
+  return type;
+}
+
 class EventService {
   /**
    * Create a new event in DRAFT status with price tiers
@@ -82,8 +88,14 @@ class EventService {
    * @returns {Promise<Object>} Created event with venue and price tiers
    */
   async createEvent(orgId, data, { setupRequestId = null } = {}) {
-    const { venueId, name, description, date, capacity, category, priceTiers } = data;
-    const admissionMode = data.admissionMode || 'TICKETED';
+    const { venueId, name, description, date, category } = data;
+    // Spec 057: a registration event has one application form and no admission.
+    const type = data.type || 'LIVE';
+    const registration = type === 'REGISTRATION';
+    const admissionMode = registration ? 'TICKETED' : data.admissionMode || 'TICKETED';
+    const capacity = registration ? null : data.capacity;
+    const priceTiers = registration ? [] : data.priceTiers;
+    const linkedEventId = await this._resolveLinkedEvent(orgId, type, data.linkedEventId);
     // Spec 050 §7.1: the wizard creates a DRAFT before capacity and tiers are known.
     const setup = data.setup === true;
 
@@ -101,7 +113,7 @@ class EventService {
       throw new ValidationError('RSVP limit must be between 1 and 100,000');
     if (admissionMode === 'RSVP' && (isNaN(rsvpMaxPartySize) || rsvpMaxPartySize < 1 || rsvpMaxPartySize > 10))
       throw new ValidationError('RSVP maximum party size must be between 1 and 10');
-    const capacityUnset = setup && (capacity === undefined || capacity === null);
+    const capacityUnset = (setup || registration) && (capacity === undefined || capacity === null);
     const capacityNum = admissionMode === 'RSVP' ? (rsvpLimit ?? 0) : capacityUnset ? null : parseInt(capacity);
     if (admissionMode === 'TICKETED' && !capacityUnset && (isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100000)) {
       throw new ValidationError('Capacity must be between 1 and 100,000');
@@ -151,6 +163,8 @@ class EventService {
         description: description ? sanitizeContentHtml(description) : null,
         date: eventDate,
         capacity: capacityNum,
+        type,
+        linkedEventId,
         admissionMode,
         rsvpLimit,
         rsvpMaxPartySize,
@@ -194,6 +208,22 @@ class EventService {
     await this._refreshTaxRate(event);
 
     return this._formatEventDetail(event);
+  }
+
+  /**
+   * Spec 057: the live event a registration event is for, or null. Only a
+   * REGISTRATION event links, and only to a LIVE event of the same
+   * organization that is not deleted.
+   */
+  async _resolveLinkedEvent(orgId, type, linkedEventId) {
+    if (linkedEventId === undefined || linkedEventId === null) return null;
+    if (type !== 'REGISTRATION') throw new ValidationError('Only a registration event links to another event');
+    const target = await prisma.event.findFirst({
+      where: { id: linkedEventId, type: 'LIVE', deletedAt: null, venue: { organizationId: orgId } },
+      select: { id: true },
+    });
+    if (!target) throw new ValidationError('Linked event not found in this organization');
+    return target.id;
   }
 
   /**
@@ -272,6 +302,8 @@ class EventService {
           // Same length as the source event (spec 050 §6.1).
           endDate: source.endDate ? new Date(eventDate.getTime() + (source.endDate - source.date)) : null,
           capacity: source.capacity,
+          type: source.type,
+          linkedEventId: source.linkedEventId,
           admissionMode: source.admissionMode,
           rsvpLimit: source.rsvpLimit,
           rsvpMaxPartySize: source.rsvpMaxPartySize,
@@ -342,6 +374,15 @@ class EventService {
     }
 
     const updateData = {};
+    if (updates.type !== undefined && updates.type !== existing.type) throw new ValidationError('An event cannot change type');
+    if (existing.type === 'REGISTRATION') {
+      for (const field of ['admissionMode', 'capacity', 'rsvpLimit', 'rsvpMaxPartySize']) {
+        if (updates[field] !== undefined) throw new ValidationError(`A registration event has no ${field}`);
+      }
+    }
+    if (updates.linkedEventId !== undefined) {
+      updateData.linkedEventId = await this._resolveLinkedEvent(orgId, existing.type, updates.linkedEventId);
+    }
     const nextMode = updates.admissionMode ?? existing.admissionMode;
     if (updates.admissionMode !== undefined && !['TICKETED', 'RSVP'].includes(updates.admissionMode))
       throw new ValidationError('admissionMode must be TICKETED or RSVP');
@@ -971,7 +1012,7 @@ class EventService {
    * @param {Object} options - Pagination, filter, search, and sort options
    * @returns {Promise<Object>} Paginated org events
    */
-  async listOrgEvents(orgId, { page = 1, limit = 25, status, q, category, sort } = {}) {
+  async listOrgEvents(orgId, { page = 1, limit = 25, status, q, category, sort, type } = {}) {
     const VALID_SORTS = ['upcoming', 'date_desc', 'created_desc', 'name_asc'];
     if (sort && !VALID_SORTS.includes(sort)) {
       throw new ValidationError(`Invalid sort parameter "${sort}". Must be one of: ${VALID_SORTS.join(', ')}`);
@@ -984,6 +1025,7 @@ class EventService {
     const where = { deletedAt: null, venue: { organizationId: orgId } };
     if (status) where.status = status;
     if (category) where.category = category;
+    if (type) where.type = assertEventType(type);
     if (q) {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
@@ -1084,9 +1126,26 @@ class EventService {
         : []
     );
 
+    // Spec 057: a registration event's card counts its applications.
+    const registrationIds = events.filter((e) => e.type === 'REGISTRATION').map((e) => e.id);
+    const registrationCounts = {};
+    if (registrationIds.length > 0) {
+      const rows = await prisma.application.groupBy({
+        by: ['eventId', 'status'],
+        where: { eventId: { in: registrationIds }, status: { not: 'DRAFT' } },
+        _count: { id: true },
+      });
+      for (const row of rows) {
+        const c = (registrationCounts[row.eventId] ??= { total: 0, toReview: 0 });
+        c.total += row._count.id;
+        if (row.status === 'SUBMITTED') c.toReview += row._count.id;
+      }
+    }
+
     const formattedEvents = events.map((e) => ({
       ...this._formatEventDetail(e),
       rsvpGoingCount: e.admissionMode === 'RSVP' ? (rsvpGoingMap[e.id] || 0) : null,
+      ...(e.type === 'REGISTRATION' && { registrationCount: registrationCounts[e.id] ?? { total: 0, toReview: 0 } }),
       ...(e.status === 'CANCELLED' && { refunding: refunding.has(e.id) }),
     }));
 
@@ -1108,9 +1167,10 @@ class EventService {
    * @param {Object} options - Optional { q, category } filters
    * @returns {Promise<Object>} Summary object
    */
-  async getOrgEventsSummary(orgId, { q, category } = {}) {
+  async getOrgEventsSummary(orgId, { q, category, type } = {}) {
     const baseWhere = { deletedAt: null, venue: { organizationId: orgId } };
     if (category) baseWhere.category = category;
+    if (type) baseWhere.type = assertEventType(type);
     if (q) {
       baseWhere.OR = [
         { name: { contains: q, mode: 'insensitive' } },
@@ -1379,6 +1439,8 @@ class EventService {
         status: true,
         date: true,
         admissionMode: true,
+        type: true,
+        linkedEventId: true,
         venue: { select: { name: true, timezone: true } },
         floorMap: { select: { id: true } },
         _count: { select: { applicationForms: true } },
@@ -1392,7 +1454,9 @@ class EventService {
       slug: event.slug,
       status: event.status,
       date: event.date,
+      type: event.type,
       admissionMode: event.admissionMode,
+      ...(await this._registrationLinks(event)),
       venue: event.venue,
       mapId: event.floorMap?.id ?? null,
       formCount: event._count.applicationForms,
@@ -1587,6 +1651,43 @@ class EventService {
       addOns: addOnSales,
       applications: { forms },
       map,
+      ...(await this._registrationLinks(event)),
+    };
+  }
+
+  /**
+   * Spec 057: what a workspace shows about the other side of a link. A
+   * registration event names the live event it is for; a live event lists
+   * its registration events with their form status and how many wait for
+   * review.
+   */
+  async _registrationLinks(event) {
+    if (event.type === 'REGISTRATION') {
+      const linked = event.linkedEventId
+        ? await prisma.event.findFirst({ where: { id: event.linkedEventId, deletedAt: null }, select: { id: true, name: true, slug: true, status: true, date: true } })
+        : null;
+      return { linkedEvent: linked, registrations: [] };
+    }
+    const rows = await prisma.event.findMany({
+      where: { linkedEventId: event.id, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, slug: true, status: true, applicationForms: { select: { status: true, purpose: true }, take: 1 } },
+    });
+    const pending = rows.length
+      ? await prisma.application.groupBy({ by: ['eventId'], where: { eventId: { in: rows.map((r) => r.id) }, status: 'SUBMITTED' }, _count: { id: true } })
+      : [];
+    const toReview = Object.fromEntries(pending.map((p) => [p.eventId, p._count.id]));
+    return {
+      linkedEvent: null,
+      registrations: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        status: r.status,
+        formStatus: r.applicationForms[0]?.status ?? null,
+        purpose: r.applicationForms[0]?.purpose ?? null,
+        toReview: toReview[r.id] ?? 0,
+      })),
     };
   }
 
@@ -1633,7 +1734,7 @@ class EventService {
    * abbreviation), venue, category, tiers, sold, available, capacity,
    * RSVPs going, public URL (slug).
    */
-  async exportEventsCsv(orgId, { status, q, category, sort } = {}) {
+  async exportEventsCsv(orgId, { status, q, category, sort, type } = {}) {
     const VALID_SORTS = ['upcoming', 'date_desc', 'created_desc', 'name_asc'];
     if (sort && !VALID_SORTS.includes(sort)) {
       throw new ValidationError(`Invalid sort parameter "${sort}". Must be one of: ${VALID_SORTS.join(', ')}`);
@@ -1643,6 +1744,7 @@ class EventService {
     const where = { deletedAt: null, venue: { organizationId: orgId } };
     if (status) where.status = status;
     if (category) where.category = category;
+    if (type) where.type = assertEventType(type);
     if (q) {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
@@ -1768,6 +1870,9 @@ class EventService {
       capacity: event.capacity ?? null,
       category: event.category,
       status: event.status,
+      // Spec 057: LIVE or REGISTRATION, and the live event a registration is for.
+      type: event.type || 'LIVE',
+      linkedEventId: event.linkedEventId ?? null,
       // Wizard state (spec 050) is admin-only; the public payload stays minimal.
       ...(!publicView && { setupStep: event.setupStep ?? null, setupCompletedAt: event.setupCompletedAt ?? null }),
       // Spec 050-D: checkout, RSVPs and new applications off; the event stays PUBLISHED.
