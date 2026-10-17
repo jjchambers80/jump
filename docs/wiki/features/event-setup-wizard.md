@@ -5,6 +5,9 @@
 
 Plan: [`specs/050-event-setup-wizard/plan.md`](../../../specs/050-event-setup-wizard/plan.md). Research: [`docs/research/2026-10-10-event-creation-wizard.md`](../../research/2026-10-10-event-creation-wizard.md). Donations hook-up: [`specs/047-donations/plan-d1.md`](../../../specs/047-donations/plan-d1.md) §0. PRs #400, #403, #409, #412–#414, #416, #417, #419–#423, #425, #428–#432, and 050-P.
 
+
+> **Spec 057:** step 1 is now **What do you want to create?** (live or registration event). A registration event skips Tickets and sets up its one form in the `registration` slot between Image and Collect more; see [Registration Events](registration-events.md).
+
 ## Overview
 
 Every **Create event** opens a Zeffy-style step wizard: name → venue → date (which creates the draft) → description, image, tickets or RSVP, add-ons, review and publish. Application forms (vendors with their floor map, special guests, volunteers, other applications) are set up afterwards, one form at a time, in their own [application setup flows](application-setup-flows.md) (spec 051), started from the event's Overview. The same wizard, run non-linearly, is the one editor for an existing event: each Edit control on the event's Details page opens `/admin/events/<id>/setup?step=<key>`. A live preview of the real event page (phone or desktop) sits beside the form, and a signed link opens the themed draft page in a new tab. Mobile first, WCAG 2.1 AA.
@@ -116,7 +119,7 @@ Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard
 | Sales, Admission, RSVPs | `step=tickets`; a tier `&tier=<id>` |
 | Add-ons ("Edit add-ons" on Sales and RSVPs) | `step=collect-more` |
 | An application form | its flow at Form details: `setup/<flow>?step=details&form=<id>` (`formEditHref`) |
-| **Add to this event** (four tiles) | `setup/<flow>` (special guests: `?step=lineup`), `addForm(flow)` |
+| **Create registration event** (Registrations card, spec 057) | `/admin/events/new?type=registration&linked=<id>` |
 | Floor map | the vendor flow's `step=floor-map&form=<id>` while a VENDOR MAP form exists, else the Map tab |
 | Special guests (lineup card: count, first four names, hidden ones marked) | `setup/special-guests?step=lineup` |
 
