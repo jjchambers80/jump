@@ -120,6 +120,9 @@ describe('Registration events (spec 057)', () => {
     expect(list.body.events.find((e) => e.id === body.id).registrationCount).toEqual({ total: 1, toReview: 1 });
     expect((await request(app).get(`${events()}?type=LIVE`).set(...auth())).body.events.map((e) => e.id)).toContain(liveId);
     expect((await request(app).get(`${events()}?type=nope`).set(...auth())).status).toBe(400);
+    // The summary honours the type: registration events have no tickets or RSVPs.
+    const summary = await request(app).get(`${events()}/summary?type=REGISTRATION`).set(...auth());
+    expect(summary.body.registered).toEqual({ tickets: 0, rsvps: 0 });
 
     const live = await request(app).get(`${events()}/${liveId}/workspace`).set(...auth());
     expect(live.body).toMatchObject({ type: 'LIVE', linkedEvent: null });

@@ -1,5 +1,6 @@
 export function formatEventSummary(event) {
-  const ticketed = event.admissionMode !== 'RSVP';
+  // Spec 057: a registration event sells nothing on its card; people register through its form.
+  const ticketed = event.type !== 'REGISTRATION' && event.admissionMode !== 'RSVP';
   const activePrices = ticketed ? event.priceTiers.map((tier) => Number(tier.price)) : [];
   const availableTickets = ticketed ? event.priceTiers.reduce(
     (sum, tier) =>
@@ -17,6 +18,7 @@ export function formatEventSummary(event) {
     // Event image (Media section), the `original` serving URL; storefront cards.
     imageUrl: event.logoUrl ?? null,
     status: event.status,
+    type: event.type || 'LIVE',
     admissionMode: event.admissionMode || 'TICKETED',
     rsvpLimit: event.rsvpLimit ?? null,
     rsvpMaxPartySize: event.rsvpMaxPartySize ?? 1,

@@ -54,7 +54,9 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     }
   }
 
-  if (isBlank(event.description)) warnings.push(item('NO_DESCRIPTION', 'description', 'Add a description so buyers know what to expect.'));
+  if (isBlank(event.description)) {
+    warnings.push(item('NO_DESCRIPTION', 'description', `Add a description so ${registration ? 'registrants' : 'buyers'} know what to expect.`));
+  }
   if (!event.logoUrl && !event.imageId) warnings.push(item('NO_IMAGE', 'image', 'Add an event image.'));
 
   const forms = (event.applicationForms || []).filter((f) => f.status !== 'CLOSED');
@@ -62,6 +64,10 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     const step = registration ? 'registration' : stepForForm(form);
     if (form.kind === 'PAID' && !gateOn) {
       warnings.push(item('PAID_FORMS_DISABLED', step, `${form.name} charges applicants, and paid applications are not available yet. It stays closed.`, { formId: form.id }));
+    }
+    // A paid form opens only with an active option to approve people into (ApplicationFormService._assertCanOpen).
+    if (form.kind === 'PAID' && !(form.tiers || []).some((t) => t.isActive)) {
+      warnings.push(item('PAID_FORM_NO_OPTIONS', step, `${form.name} charges, but has no options yet. Add one so it can open.`, { formId: form.id }));
     }
     if (!form._count?.questions) {
       warnings.push(item('FORM_HAS_NO_QUESTIONS', step, `${form.name} has no questions.`, { formId: form.id }));
@@ -71,7 +77,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
   // Spec 057: a registration event uses the floor map of the live event it is for.
   const floorMap = registration ? event.linkedEvent?.floorMap : event.floorMap;
   if (mapForm && floorMap?.status !== 'PUBLISHED') {
-    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
+    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', registration ? 'registration' : 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
   }
   if (taxError) warnings.push(item('TAX_RATE_UNRESOLVED', 'review', `Sales tax could not be looked up: ${taxError}`));
 
@@ -92,7 +98,7 @@ class EventReadinessService {
         priceTiers: true,
         floorMap: { select: { status: true } },
         linkedEvent: { select: { floorMap: { select: { status: true } } } },
-        applicationForms: { include: { _count: { select: { questions: { where: { archivedAt: null } } } } } },
+        applicationForms: { include: { tiers: { select: { isActive: true } }, _count: { select: { questions: { where: { archivedAt: null } } } } } },
       },
     });
     if (!event) throw new NotFoundError('Event not found');

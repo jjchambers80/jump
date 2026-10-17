@@ -8,7 +8,7 @@ const { evaluate, stepForForm } = await import('../../src/services/EventReadines
 
 const now = new Date('2027-01-01T00:00:00.000Z');
 const tier = (extra = {}) => ({ isActive: true, price: 10, quantityTotal: 50, ...extra });
-const form = (extra = {}) => ({ id: 'f1', name: 'Vendors', kind: 'FREE', status: 'DRAFT', spaceSelection: 'TIERS', _count: { questions: 2 }, ...extra });
+const form = (extra = {}) => ({ id: 'f1', name: 'Vendors', kind: 'FREE', status: 'DRAFT', spaceSelection: 'TIERS', tiers: [{ isActive: true }], _count: { questions: 2 }, ...extra });
 const ready = (extra = {}) => ({
   name: 'Show',
   venue: { id: 'v1' },
@@ -74,6 +74,17 @@ describe('EventReadinessService.evaluate', () => {
       ['p2', 'vendors'],
     ]);
     expect(codes(run(ready({ applicationForms: forms }), { paymentsEnabled: true }).warnings)).toEqual([]);
+  });
+
+  it('warns for a PAID form with no active option, which cannot open (spec 057 walkthrough)', () => {
+    const ctx = { paymentsEnabled: true };
+    const none = run(ready({ applicationForms: [form({ kind: 'PAID', tiers: [] })] }), ctx);
+    expect(none.ready).toBe(true);
+    expect(none.warnings).toEqual([expect.objectContaining({ code: 'PAID_FORM_NO_OPTIONS', formId: 'f1', step: 'vendors' })]);
+    expect(codes(run(ready({ applicationForms: [form({ kind: 'PAID', tiers: [{ isActive: false }] })] }), ctx).warnings)).toEqual(['PAID_FORM_NO_OPTIONS']);
+    expect(run(ready({ applicationForms: [form({ kind: 'FREE', tiers: [] })] }), ctx).warnings).toEqual([]);
+    // A registration event's item points at its flow.
+    expect(run(ready({ type: 'REGISTRATION', applicationForms: [form({ kind: 'PAID', tiers: [] })] }), ctx).warnings[0]).toMatchObject({ step: 'registration' });
   });
 
   it('warns for a form without questions, ignoring closed forms', () => {

@@ -1206,7 +1206,7 @@ class EventService {
     const [ticketCountResult, rsvpResult] = await Promise.all([
       prisma.order.aggregate({
         where: {
-          event: { venue: { organizationId: orgId }, ...(category ? { category } : {}), ...(q ? { OR: baseWhere.OR } : {}) },
+          event: { venue: { organizationId: orgId }, ...(category ? { category } : {}), ...(type ? { type } : {}), ...(q ? { OR: baseWhere.OR } : {}) },
           kind: 'TICKET',
           status: { in: PAID_ORDER_STATUSES },
         },
@@ -1218,6 +1218,7 @@ class EventService {
           event: {
             venue: { organizationId: orgId },
             ...(category ? { category } : {}),
+            ...(type ? { type } : {}),
             ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
           },
         },
@@ -1443,11 +1444,14 @@ class EventService {
         linkedEventId: true,
         venue: { select: { name: true, timezone: true } },
         floorMap: { select: { id: true } },
+        // Spec 057: a registration event's map is its live event's.
+        linkedEvent: { select: { floorMap: { select: { id: true } } } },
         _count: { select: { applicationForms: true } },
       },
     });
     if (!event) throw new NotFoundError('Event not found');
     const toReview = await prisma.application.count({ where: { eventId, status: 'SUBMITTED' } });
+    const mapId = (event.type === 'REGISTRATION' ? event.linkedEvent?.floorMap : event.floorMap)?.id ?? null;
     return {
       id: event.id,
       name: event.name,
@@ -1458,7 +1462,7 @@ class EventService {
       admissionMode: event.admissionMode,
       ...(await this._registrationLinks(event)),
       venue: event.venue,
-      mapId: event.floorMap?.id ?? null,
+      mapId,
       formCount: event._count.applicationForms,
       toReview,
     };

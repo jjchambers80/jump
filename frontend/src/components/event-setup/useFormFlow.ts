@@ -25,9 +25,16 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const [revision, setRevision] = useState(0);
 
   const org = params.get('org');
-  const formId = params.get('form');
+  const event = data.saved;
+  // Spec 057: a registration event has one form, its `registration` flow; a live event keeps the four flows.
+  const registration = event?.type === 'REGISTRATION';
+  const formId = params.get('form') ?? (registration ? forms.forms[0]?.id ?? null : null);
   const form = (formId && forms.forms.find((f) => f.id === formId)) || null;
-  const list = flowSteps(flow, form, { maps });
+  // Spec 057: a live event takes no new forms (people register through registration events);
+  // it keeps its special guest lineup and any form it still has from before.
+  const liveWithoutForm = !!event && !registration && !form;
+  const steps = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
+  const list = liveWithoutForm && flow === 'special-guests' ? steps.filter((s) => s.key === 'lineup') : steps;
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
   const fallback = form ? list.find((step) => step.key === 'details')! : list[0];
@@ -35,22 +42,33 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const at = list.indexOf(step);
   const ready = data.load.status === 'ready' && forms.load.status === 'ready';
   const live =
-    !form && step.key === 'start' && APPLICATION_STEPS[flow].purposes.length === 1
+    flow !== 'registration' && !form && step.key === 'start' && APPLICATION_STEPS[flow].purposes.length === 1
       ? formsOnStep(flow, forms.forms).find((f) => f.status !== 'CLOSED') ?? null
       : null;
+  // The wrong flow for the event's type: its own flow (a live event has no `registration` flow).
+  const wrongFlow = ready && !!event && (registration ? flow !== 'registration' : flow === 'registration');
 
   const href = (key: FlowStepKey, id: string | null = form?.id ?? null) => formFlowHref(eventId, flow, { form: id, step: key, org });
 
   // Put the resolved step (and a form that exists) in the URL; a form of another type opens its own flow.
   const target = !ready
     ? null
-    : live
-      ? formEditHref(eventId, live, org)
-      : form && stepForPurpose(form.purpose) !== flow
-        ? formEditHref(eventId, form, org)
-        : step !== requested || (formId && !form)
-          ? href(step.key)
-          : null;
+    : wrongFlow
+      ? registration
+        ? formFlowHref(eventId, 'registration', { form: form?.id, step: form ? 'details' : undefined, org })
+        : `/admin/events/${encodeURIComponent(eventId)}`
+      : live
+        ? formEditHref(eventId, live, org)
+        : liveWithoutForm && flow !== 'special-guests'
+          ? `/admin/events/${encodeURIComponent(eventId)}`
+          : form && !registration && stepForPurpose(form.purpose) !== flow
+          ? formEditHref(eventId, form, org)
+          : registration && form && !params.get('form')
+            ? // The registration's one form exists: its Start is done, so open the step asked for or Details.
+              href(step.key === 'start' ? 'details' : step.key)
+            : step !== requested || (formId && !form)
+              ? href(step.key)
+              : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);
@@ -58,7 +76,8 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   return {
     orgId,
     data,
-    event: data.saved,
+    event,
+    registration,
     forms,
     form,
     list,
@@ -69,6 +88,8 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
     href,
     go: (key: FlowStepKey, id?: string) => router.push(href(key, id)),
     exit: (saved = false) => router.push(`/admin/events/${encodeURIComponent(eventId)}${saved ? '?saved=1' : ''}`),
+    /** Spec 057: back into the registration event's own wizard (Image before the flow, Collect more after it). */
+    toEventStep: (key: 'image' | 'collect-more') => router.push(`/admin/events/${encodeURIComponent(eventId)}/setup?step=${key}${org ? `&org=${encodeURIComponent(org)}` : ''}`),
     revision,
     /** After any save: the preview frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),

@@ -15,6 +15,7 @@ import {
 import { imageVariantUrl } from '@/lib/assets';
 import {
   Calendar,
+  ClipboardList,
   ChevronDown,
   ChevronRight,
   BarChart3,
@@ -71,6 +72,10 @@ export interface AdminEvent {
   priceTiers: PriceTier[];
   createdAt: string;
   updatedAt: string;
+  /** Spec 057: LIVE (default) or REGISTRATION. */
+  type?: 'LIVE' | 'REGISTRATION';
+  /** Spec 057: a registration event's applications. */
+  registrationCount?: { total: number; toReview: number };
   /** May be missing until 035A lands. */
   admissionMode?: AdmissionMode | null;
   /** May be missing until 035A lands. */
@@ -128,7 +133,10 @@ export default function EventListCard({
   const now = new Date();
   const eventDate = new Date(event.date);
   const isPast = eventDate < now && event.status !== 'CANCELLED';
-  const isRsvp = event.admissionMode === 'RSVP';
+  // Spec 057: a registration event counts registrations, never tickets or RSVPs.
+  const isRegistration = event.type === 'REGISTRATION';
+  const isRsvp = !isRegistration && event.admissionMode === 'RSVP';
+  const isTicketed = !isRegistration && !isRsvp;
 
   const totalSold = event.priceTiers.reduce((s, t) => s + t.quantitySold, 0);
   const totalAvailable = event.priceTiers.reduce((s, t) => s + t.quantityAvailable, 0);
@@ -270,9 +278,15 @@ export default function EventListCard({
                 </span>
               )}
               {/* Tier count chip (hidden on RSVP — no tiers; branch on admissionMode, not count) */}
-              {!isRsvp && (
+              {isTicketed && (
                 <span className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-slate-400 tabular-nums">
                   {event.priceTiers.length} tier{event.priceTiers.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              {isRegistration && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800 dark:border-sky-800/60 dark:bg-sky-900/30 dark:text-sky-200">
+                  <ClipboardList className="h-3 w-3" aria-hidden />
+                  Registration
                 </span>
               )}
             </div>
@@ -294,7 +308,7 @@ export default function EventListCard({
             )}
 
             {/* Sold / avail + sell-through bar */}
-            {!isRsvp && totalCapacity > 0 && (
+            {isTicketed && totalCapacity > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm text-gray-600 dark:text-slate-300 tabular-nums">
                   {totalSold} sold / {totalAvailable} avail
@@ -318,7 +332,13 @@ export default function EventListCard({
                 </div>
               </div>
             )}
-            {!isRsvp && totalCapacity === 0 && (
+            {isRegistration && (
+              <p className="text-sm text-gray-600 dark:text-slate-300 tabular-nums">
+                {event.registrationCount?.total ?? 0} registration{event.registrationCount?.total === 1 ? '' : 's'}
+                {(event.registrationCount?.toReview ?? 0) > 0 && ` · ${event.registrationCount!.toReview} to review`}
+              </p>
+            )}
+            {isTicketed && totalCapacity === 0 && (
               <p className="text-sm text-gray-500 dark:text-slate-400 tabular-nums">
                 {totalSold} sold / {totalAvailable} avail · No tiers yet
               </p>
@@ -370,7 +390,16 @@ export default function EventListCard({
                   RSVPs
                 </Link>
               )}
-              {!isRsvp && event.status === 'PUBLISHED' && (
+              {isRegistration && (
+                <Link
+                  href={`/admin/events/${event.id}/applications`}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                >
+                  <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+                  Registrations
+                </Link>
+              )}
+              {isTicketed && event.status === 'PUBLISHED' && (
                 <Link
                   href={`/admin/events/${event.id}/analytics`}
                   className="inline-flex min-h-9 items-center gap-1 rounded-md border border-accent-300 dark:border-accent-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-accent-700 dark:text-accent-300 hover:bg-accent-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"

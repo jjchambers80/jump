@@ -27,9 +27,9 @@ import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import { useDonationsEligible } from './useDonationsEligible';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import { salesFieldsFromSaved } from './contentSteps';
-import { legacyFlowHref } from './formFlows';
+import { formFlowHref, legacyFlowHref } from './formFlows';
 
-export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '' };
+export const EMPTY_FIELDS: SetupFields = { name: '', slug: '', venueId: '', date: '', endDate: '', type: 'LIVE', linkedEventId: '' };
 
 /** Keeps what PATCH responses do not carry (lock, tax) when the saved row is replaced. */
 export const mergeSaved = (prev: SavedEvent | null, next: SavedEvent): SavedEvent => ({
@@ -46,6 +46,8 @@ export function fieldsFromSaved(saved: SavedEvent, zone: string | null): SetupFi
     venueId: saved.venueId,
     date: instantToZonedInput(saved.date, zone),
     endDate: instantToZonedInput(saved.endDate, zone),
+    type: saved.type ?? 'LIVE',
+    linkedEventId: saved.linkedEventId ?? '',
     ...salesFieldsFromSaved(saved),
   };
 }
@@ -74,11 +76,15 @@ export function useSetupFlow(eventId: string | null) {
     else {
       const draft = readSessionDraft(orgId);
       const preset = params.get('venueId') ?? '';
+      // Spec 057: "Create registration event" on a live event opens `?type=registration&linked=<id>`.
+      const typed = params.get('type') === 'registration'
+        ? { type: 'REGISTRATION' as const, linkedEventId: params.get('linked') ?? '' }
+        : {};
       if (draft) {
         const { step, requestKey: _key, ...rest } = draft;
-        setFields({ ...EMPTY_FIELDS, ...rest });
+        setFields({ ...EMPTY_FIELDS, ...rest, ...typed });
         setDraftStep(step);
-      } else if (venues.some((v) => v.id === preset)) setFields({ ...EMPTY_FIELDS, venueId: preset });
+      } else setFields({ ...EMPTY_FIELDS, ...(venues.some((v) => v.id === preset) && { venueId: preset }), ...typed });
     }
     setInitialised(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,7 +109,10 @@ export function useSetupFlow(eventId: string | null) {
   const rawStep = params.get('step');
   const redirect = eventId && rawStep && FORMER_STEPS.has(rawStep)
     ? legacyFlowHref(eventId, rawStep, params.get('form'), forms.forms, params.get('org'))
-    : null;
+    : saved && current === 'registration'
+      // Spec 057: the registration form is set up in its flow (Start, or the form's details).
+      ? formFlowHref(saved.id, 'registration', { form: forms.forms[0]?.id, step: forms.forms[0] ? 'details' : undefined, org: params.get('org') })
+      : null;
 
   // Each step is a URL (§11.4): put the resolved step in it, so Back works.
   useEffect(() => {
@@ -177,6 +186,7 @@ export function useSetupFlow(eventId: string | null) {
   // No description overlay: ContentHtml renders only server-sanitised HTML
   // (gotcha 20), so the preview shows it after the save, from preview-payload.
   if (saved && fields.admissionMode && fields.admissionMode !== saved.admissionMode) overlay.admissionMode = fields.admissionMode;
+  if (!saved && fields.type) overlay.type = fields.type;
   const preview: PreviewMessage = {
     type: PREVIEW_MESSAGE, orgId: orgId ?? '', eventId: saved?.id ?? null, overlay, revision, anchor: step.anchor,
   };

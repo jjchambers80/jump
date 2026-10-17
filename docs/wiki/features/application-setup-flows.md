@@ -17,7 +17,9 @@ Event setup and application setup are separate tasks. The event wizard covers th
 
 **Preview chrome (both wizards).** No "Preview" header bar: the Phone / Desktop choice is an icon radio pair centred above the device on the dotted stage (names in sr-only text, `title` tooltips); on phones the preview sheet keeps a Close button at its top right.
 
-Organizers start a flow from **Add to this event** on the event's Overview, from **What's next** on the wizard's Done screen, or from **Add a form** on the event's Applications tab. Editing an existing form opens its flow at Form details.
+> **Since spec 057** a form belongs to a [registration event](registration-events.md) and is set up in its `registration` flow, inside the event wizard. Live events take no new forms: Add to this event and Add a form are gone, the four flows below only edit forms a live event still has (none after the 057 backfill), and `special-guests` on a live event is the lineup step alone.
+
+Organizers started a flow from **Add to this event** on the event's Overview, from **What's next** on the wizard's Done screen, or from **Add a form** on the event's Applications tab (all removed in spec 057). Editing an existing form opens its flow at Form details.
 
 ## Flows
 

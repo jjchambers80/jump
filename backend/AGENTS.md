@@ -53,6 +53,8 @@ Loads when agent touches `backend/` files. For root-level commands and env vars,
 
 ## Applications (spec 011)
 
+Spec 057: forms belong to **registration events** (`Event.type = REGISTRATION`, one form each, 409 `FORM_EXISTS`), optionally linked to a live event (`linkedEventId`). A registration's floor map and lineup are its live event's: map, booth, space-selection and lineup code resolves them only through `services/mapEvents.js` (`mapEventIdFor`, `eventIdsForMap`). `EventReadinessService` gives a registration `FORM_MISSING` and no ticket checks. `npm run db:backfill:057-registration-events` moved forms off live events. See `docs/wiki/features/registration-events.md`.
+
 Vendor / sponsor / press forms per event. Since spec 024 a PAID-form application **is an order** (see the next section); the rules that differ from tickets:
 
 1. **Webhook dispatch is on `metadata.applicationId`**: `routes/webhooks.js` `dispatchMoneyEvent` (platform and Connect endpoints) hands `checkout.session.*` / `setup_intent.*` / `payment_intent.*` events with that key to `ApplicationPaymentService.handleEvent` before the order switch; ticket sessions never carry it. Spec 047: `handleEvent` first refuses an `event.account` the application's organization does not own (or that differs from its payment's account); Customers, card setup, saved-card charges, pay-now sessions and receipts run on the organization's account (`_chargeAccount`, `ensureCustomer(contact, account)` keyed by `Contact.stripeCustomerAccountId`, `_sessionAccount` for expiry). `charge.refunded` is never dispatched there — every refund resolves through the order's `PaymentTransaction` in `RefundService.handleExternalRefund`, which branches on `order.kind`.

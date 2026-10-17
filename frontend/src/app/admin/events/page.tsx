@@ -17,7 +17,7 @@ import EventListCard, { type AdminEvent } from '@/components/events/EventListCar
 import EventsPagination from '@/components/events/EventsPagination';
 import CancelEventDialog from '@/components/events/CancelEventDialog';
 import EventsSummary, { type EventsSummaryData } from '@/components/events/EventsSummary';
-import EventsToolbar, { type StatusFilter, type SortOption } from '@/components/events/EventsToolbar';
+import EventsToolbar, { type StatusFilter, type SortOption, type TypeFilter } from '@/components/events/EventsToolbar';
 import DuplicateEventDialog from './DuplicateEventDialog';
 import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 
@@ -38,9 +38,11 @@ function readUrlParams(searchParams: URLSearchParams) {
   const status = (searchParams.get('status') || '') as StatusFilter;
   const q = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
+  // Spec 057: live events, registration events, or both.
+  const type = (['LIVE', 'REGISTRATION'].includes(searchParams.get('type') ?? '') ? searchParams.get('type') : '') as TypeFilter;
   const sort = (searchParams.get('sort') || DEFAULT_SORT) as SortOption;
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
-  return { status, q, category, sort, page };
+  return { status, q, category, type, sort, page };
 }
 
 // ── Inner content: uses useSearchParams ──
@@ -49,7 +51,7 @@ function EventsListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedOrgId } = useOrg();
-  const { status: statusFilter, q: searchQ, category, sort, page } = readUrlParams(searchParams);
+  const { status: statusFilter, q: searchQ, category, type, sort, page } = readUrlParams(searchParams);
 
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [blockers, setBlockers] = useState<{ eventId: string; items: ReadinessItem[] } | null>(null);
@@ -66,25 +68,26 @@ function EventsListContent() {
 
   // Build the URL-preserving params for API calls and router updates.
   const buildParams = useCallback(
-    (overrides: Partial<{ status: string; q: string; category: string; sort: string; page: number }>) => {
+    (overrides: Partial<{ status: string; q: string; category: string; type: string; sort: string; page: number }>) => {
       const params = new URLSearchParams();
       // Preserve orgId from the current URL (used by OrgContext in tests).
       const currentOrgId = searchParams.get('orgId');
       if (currentOrgId) params.set('orgId', currentOrgId);
 
-      const next = { status: statusFilter, q: searchQ, category, sort, page, ...overrides };
+      const next = { status: statusFilter, q: searchQ, category, type, sort, page, ...overrides };
       if (next.status) params.set('status', next.status);
       if (next.q) params.set('q', next.q);
       if (next.category) params.set('category', next.category);
+      if (next.type) params.set('type', next.type);
       if (next.sort && next.sort !== DEFAULT_SORT) params.set('sort', next.sort);
       if (next.page > 1) params.set('page', String(next.page));
       return params;
     },
-    [statusFilter, searchQ, category, sort, page, searchParams]
+    [statusFilter, searchQ, category, type, sort, page, searchParams]
   );
 
   const updateUrl = useCallback(
-    (overrides: Partial<{ status: string; q: string; category: string; sort: string; page: number }>) => {
+    (overrides: Partial<{ status: string; q: string; category: string; type: string; sort: string; page: number }>) => {
       const params = buildParams(overrides);
       const qs = params.toString();
       router.replace(`/admin/events${qs ? `?${qs}` : ''}`, { scroll: false });
@@ -101,6 +104,7 @@ function EventsListContent() {
       const params = new URLSearchParams();
       if (searchQ) params.set('q', searchQ);
       if (category) params.set('category', category);
+      if (type) params.set('type', type);
       const qs = params.toString();
       const data = await api.get<EventsSummaryData>(
         `/organizations/${selectedOrgId}/events/summary${qs ? `?${qs}` : ''}`
@@ -111,7 +115,7 @@ function EventsListContent() {
     } finally {
       setSummaryLoading(false);
     }
-  }, [selectedOrgId, searchQ, category]);
+  }, [selectedOrgId, searchQ, category, type]);
 
   // Fetch events list.
   const fetchEvents = useCallback(async () => {
@@ -127,6 +131,7 @@ function EventsListContent() {
       if (statusFilter) params.set('status', statusFilter);
       if (searchQ) params.set('q', searchQ);
       if (category) params.set('category', category);
+      if (type) params.set('type', type);
       const data = await api.get<EventListResponse>(
         `/organizations/${selectedOrgId}/events?${params.toString()}`
       );
@@ -138,7 +143,7 @@ function EventsListContent() {
     } finally {
       setEventsLoading(false);
     }
-  }, [selectedOrgId, page, statusFilter, searchQ, category, sort]);
+  }, [selectedOrgId, page, statusFilter, searchQ, category, type, sort]);
 
   useEffect(() => {
     fetchSummary();
@@ -165,6 +170,10 @@ function EventsListContent() {
 
   const handleCategoryChange = (cat: string) => {
     updateUrl({ category: cat, page: 1 });
+  };
+
+  const handleTypeChange = (t: TypeFilter) => {
+    updateUrl({ type: t, page: 1 });
   };
 
   const handleSortChange = (s: SortOption) => {
@@ -198,7 +207,7 @@ function EventsListContent() {
 
   // ── Derived states ──
 
-  const hasActiveFilters = statusFilter || searchQ || category || sort !== DEFAULT_SORT;
+  const hasActiveFilters = statusFilter || searchQ || category || type || sort !== DEFAULT_SORT;
 
   // Build "Showing a–b of N" line
   const showingLine = (() => {
@@ -221,6 +230,7 @@ function EventsListContent() {
           ...(statusFilter ? { status: statusFilter } : {}),
           ...(searchQ ? { q: searchQ } : {}),
           ...(category ? { category } : {}),
+          ...(type ? { type } : {}),
           ...(sort !== DEFAULT_SORT ? { sort } : {}),
         }).toString()}
       />
@@ -236,10 +246,12 @@ function EventsListContent() {
         currentStatus={statusFilter}
         currentQ={searchQ}
         currentCategory={category}
+        currentType={type}
         currentSort={sort}
         onStatusChange={handleStatusChange}
         onQChange={handleQChange}
         onCategoryChange={handleCategoryChange}
+        onTypeChange={handleTypeChange}
         onSortChange={handleSortChange}
       />
 

@@ -131,6 +131,19 @@ const summaryData = {
   categories: ['Comedy', 'Music', 'Other', 'Tech', 'Workshop'],
 };
 
+/** Spec 057: a registration event, listed only when the Type filter asks for it. */
+const registrationEvent = {
+  ...sampleEvents[0],
+  id: 'evt-reg',
+  name: 'Market Vendors',
+  slug: 'market-vendors',
+  type: 'REGISTRATION',
+  capacity: null,
+  priceTiers: [],
+  category: undefined,
+  registrationCount: { total: 7, toReview: 2 },
+};
+
 async function mockApi(page: Page) {
   // Org list for OrgContext
   await page.route(`${API}/organizations`, (route) =>
@@ -158,6 +171,9 @@ async function mockApi(page: Page) {
       );
     }
     if (category) filtered = filtered.filter((e) => e.category === category);
+    // Spec 057: type filter; the sample events are all LIVE.
+    const type = url.searchParams.get('type');
+    if (type) filtered = [...filtered, registrationEvent as unknown as (typeof sampleEvents)[number]].filter((e) => ((e as { type?: string }).type ?? 'LIVE') === type);
     return route.fulfill(
       json({
         events: filtered,
@@ -866,4 +882,21 @@ test('a wizard draft shows Continue setup at its step instead of Publish (050-I)
   const card = page.locator('article', { has: page.getByRole('heading', { name: 'Wizard Draft' }) });
   await expect(card.getByRole('link', { name: /Continue setup/ })).toHaveAttribute('href', '/admin/events/evt-wizard/setup?step=tickets');
   await expect(card.getByRole('button', { name: 'Publish' })).toHaveCount(0);
+});
+
+test('the Type filter lists registration events with their registrations (spec 057)', async ({ page }) => {
+  await mockApi(page);
+  await page.goto(`/admin/events?orgId=${ORG_ID}`);
+  const type = page.getByRole('combobox', { name: 'Filter by type' });
+  await expect(page.getByText(sampleEvents[0].name).first()).toBeVisible();
+  await expect(type).toBeVisible();
+  const request = page.waitForRequest((r) => r.url().includes('/events?') && r.url().includes('type=REGISTRATION'));
+  await type.selectOption('REGISTRATION');
+  await request;
+  await expect(page).toHaveURL(/type=REGISTRATION/);
+  const card = page.locator('article', { hasText: 'Market Vendors' });
+  await expect(card.getByText('Registration', { exact: true })).toBeVisible();
+  await expect(card.getByText('7 registrations · 2 to review')).toBeVisible();
+  await expect(card.getByRole('link', { name: 'Registrations' })).toHaveAttribute('href', '/admin/events/evt-reg/applications');
+  await expect(card.getByText(/tiers?$/)).toHaveCount(0);
 });

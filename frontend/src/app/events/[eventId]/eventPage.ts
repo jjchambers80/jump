@@ -50,6 +50,8 @@ export interface EventPageEvent {
   cancelled?: boolean;
   /** Spec 050-D: published, but checkout, RSVPs and new applications are off. */
   salesClosed?: boolean;
+  /** Spec 057: a registration event's page offers its form, never tickets or RSVPs. */
+  type?: 'LIVE' | 'REGISTRATION';
   admissionMode?: 'TICKETED' | 'RSVP';
   rsvpLimit?: number | null;
   rsvpMaxPartySize?: number;
@@ -84,20 +86,21 @@ export const tierMaximum = (tier: PriceTier) => Math.min(tier.quantityAvailable,
 
 /** What the page shows, derived once from the event (same rules as before the split). */
 export function eventPageState(event: EventPageEvent) {
-  const isRsvp = event.admissionMode === 'RSVP';
-  const activeTiers = event.priceTiers.filter((tier) => tier.isActive);
+  const isRegistration = event.type === 'REGISTRATION';
+  const isRsvp = !isRegistration && event.admissionMode === 'RSVP';
+  const activeTiers = isRegistration ? [] : event.priceTiers.filter((tier) => tier.isActive);
   const totalAvailable = isRsvp ? 0 : activeTiers.reduce((sum, tier) => sum + tier.quantityAvailable, 0);
-  const isSoldOut = !isRsvp && totalAvailable === 0;
+  const isSoldOut = !isRsvp && !isRegistration && totalAvailable === 0;
   const isPastEvent = !!event.date && new Date(event.date) < new Date();
   // An ended event says "ended", not "sales closed".
   const salesClosed = event.salesClosed === true && !isPastEvent;
-  const canBuy = !isRsvp && !isPastEvent && !isSoldOut && !salesClosed && activeTiers.some((tier) => tier.quantityAvailable > 0);
+  const canBuy = !isRsvp && !isRegistration && !isPastEvent && !isSoldOut && !salesClosed && activeTiers.some((tier) => tier.quantityAvailable > 0);
   const prices = activeTiers
     .filter((tier) => tier.quantityAvailable > 0 && tier.price != null)
     .map((tier) => computeTierAllInPrice(tier.price ?? 0, event.taxRate ?? 0, event.taxInclusivePricing === true).total);
   const fromPrice = canBuy && prices.length > 0 ? Math.min(...prices) : null;
   const rsvpFull = isRsvp && !isPastEvent && event.rsvpRemaining != null && event.rsvpRemaining <= 0;
-  return { isRsvp, activeTiers, isSoldOut, isPastEvent, salesClosed, canBuy, fromPrice, rsvpFull };
+  return { isRegistration, isRsvp, activeTiers, isSoldOut, isPastEvent, salesClosed, canBuy, fromPrice, rsvpFull };
 }
 
 export type EventPageState = ReturnType<typeof eventPageState>;

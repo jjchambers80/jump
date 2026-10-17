@@ -114,9 +114,15 @@ test.describe('desktop', () => {
   test('keyboard-only run of steps 1–3 creates the draft once', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto('/admin/events/new');
-    await expect(heading(page, 'Name your event')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 8');
+    // Spec 057: step 1 picks the type; a live event is the default.
+    await expect(heading(page, 'What do you want to create?')).toBeVisible(COLD);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 1 of 9');
     await expect(page.getByRole('button', { name: 'Exit' })).toBeVisible();
+    await expect(main(page).getByRole('radio', { name: /Live event/ })).toBeChecked();
+    await tabTo(page, page.getByRole('button', { name: 'Next' }));
+    await page.keyboard.press('Enter');
+    await expect(heading(page, 'Name your event')).toBeFocused();
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 9, Name your event');
 
     const name = main(page).getByLabel('Event name');
     await tabTo(page, name);
@@ -129,7 +135,7 @@ test.describe('desktop', () => {
     await page.keyboard.press('Enter');
 
     await expect(heading(page, 'Where is it?')).toBeFocused();
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 2 of 8, Where is it?');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 3 of 9, Where is it?');
     await expect(page).toHaveURL(/\/admin\/events\/new\?step=venue$/);
     const venue = main(page).getByLabel('Venue');
     await tabTo(page, venue);
@@ -155,20 +161,20 @@ test.describe('desktop', () => {
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=description$`), COLD);
     // The create remounts the wizard on the event's route: focus and announce anyway.
     await expect(heading(page, 'Describe it')).toBeFocused(COLD);
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 4 of 8, Describe it');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 5 of 9, Describe it');
     await expect(page.getByRole('button', { name: 'Save & exit' })).toBeVisible();
 
     expect(calls.create).toHaveLength(1);
     const create = calls.create[0];
     expect(create.headers()['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/);
     expect(create.postDataJSON()).toEqual({
-      setup: true, name: 'Spring Fair', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z', admissionMode: 'TICKETED',
+      setup: true, name: 'Spring Fair', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z', admissionMode: 'TICKETED', type: 'LIVE',
     });
   });
 
   test('a failed Next focuses the error summary, which links to the field', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/admin/events/new');
+    await page.goto('/admin/events/new?step=name');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
     await page.getByRole('button', { name: 'Next' }).click();
 
@@ -189,7 +195,7 @@ test.describe('desktop', () => {
 
   test('the date step refuses an end before the start', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/admin/events/new?venueId=v-barn');
+    await page.goto('/admin/events/new?step=name&venueId=v-barn');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
     await main(page).getByLabel('Event name').fill('Barn Dance');
     await page.getByRole('button', { name: 'Next' }).click();
@@ -205,9 +211,51 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('alert')).toContainText('End time must be after the start time');
   });
 
+  test('a registration event: type, the live event it is for, then its form flow (spec 057)', async ({ page }) => {
+    const registration = adminEvent({ type: 'REGISTRATION', linkedEventId: 'evt-live', name: 'Market Vendors' });
+    const calls = await mockApi(page, registration);
+    await page.route(`${API}/organizations/${ORG_ID}/events?*`, (route) =>
+      route.fulfill(json({
+        events: [{ id: 'evt-live', name: 'Spring Market', date: '2031-06-01T20:00:00.000Z', status: 'PUBLISHED', venue: { id: 'v-hall', timezone: 'America/New_York' } }],
+        pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
+      }))
+    );
+    await page.route(`${API}/admin/events/${EVENT_ID}/application-forms`, (route) => route.fulfill(json({ data: [] })));
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/admin/events/new');
+    await expect(heading(page, 'What do you want to create?')).toBeVisible(COLD);
+    expect(await serious(page)).toEqual([]);
+    await main(page).getByRole('radio', { name: /Registration event/ }).check();
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    await expect(heading(page, 'Name your event')).toBeVisible();
+    await main(page).getByLabel('Event name').fill('Market Vendors');
+    // Choosing the live event fills an empty venue and date from it.
+    await main(page).getByLabel(/Registering for/).selectOption('evt-live');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Where is it?')).toBeVisible();
+    await expect(main(page).getByLabel('Venue')).toHaveValue('v-hall');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'When is it?')).toBeVisible();
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    await expect(heading(page, 'Describe it')).toBeVisible(COLD);
+    expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
+    // One count across the event steps and the form flow: 6 + Start, Details, Fields + Collect more + Review.
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 11');
+    await expect(main(page).getByText('What registrants read before they apply.', { exact: false })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Add an image')).toBeVisible();
+    await page.getByRole('button', { name: /Next|Skip/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration`), COLD);
+    await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 11');
+  });
+
   test('refresh resumes from the session draft, then from setupStep', async ({ page }) => {
     await mockApi(page, adminEvent({ setupStep: 'tickets' }));
-    await page.goto('/admin/events/new');
+    await page.goto('/admin/events/new?step=name');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
     await main(page).getByLabel('Event name').fill('Spring Fair');
     await page.getByRole('button', { name: 'Next' }).click();
@@ -266,7 +314,7 @@ test.describe('desktop', () => {
   test('a replayed create that returns older values is patched to match', async ({ page }) => {
     // The first attempt's row: same key, but the organizer has since moved the start.
     const calls = await mockApi(page, adminEvent(), adminEvent({ date: '2031-06-01T18:00:00.000Z' }));
-    await page.goto('/admin/events/new');
+    await page.goto('/admin/events/new?step=name');
     await expect(heading(page, 'Name your event')).toBeVisible(COLD);
     await main(page).getByLabel('Event name').fill('Spring Fair');
     await page.getByRole('button', { name: 'Next' }).click();
@@ -284,7 +332,7 @@ test.describe('desktop', () => {
       // No fades while axe scans: a sheet mid-fade blends its colours (false contrast failure).
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await mockApi(page);
-      await page.goto('/admin/events/new');
+      await page.goto('/admin/events/new?step=name');
       await expect(heading(page, 'Name your event')).toBeVisible(COLD);
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
       await expect(preview(page).getByRole('heading', { level: 1 })).toBeVisible();
@@ -320,7 +368,7 @@ test.describe('mobile', () => {
 
     // No step menu (spec 051): the progress bar, and Back / Next move between steps.
     await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 2 of 8');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 3 of 9');
   });
 
   for (const scheme of ['light', 'dark'] as const) {
@@ -360,7 +408,7 @@ test.describe('venues turned off', () => {
       route.fulfill(json(located));
     });
 
-    await page.goto('/admin/events/new');
+    await page.goto('/admin/events/new?step=name');
     await main(page).getByLabel('Event name').fill('Spring Fair');
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(heading(page, 'Where is it?')).toBeVisible(COLD);

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import {
-  EVENT_STEPS, FIELD_IDS, isReachable, neighbours, resumeKey, stepByKey, stepPosition, visibleSteps,
+  EVENT_STEPS, FIELD_IDS, isReachable, neighbours, registrationFlowSteps, resumeKey, stepByKey, stepPosition, visibleSteps, wizardProgress,
   type SavedEvent, type StepCtx,
 } from '@/components/event-setup/steps';
 import { PREVIEW_MESSAGE, isPreviewMessage } from '@/components/event-setup/previewMessages';
@@ -37,9 +37,40 @@ describe('keys', () => {
 });
 
 describe('visible and counting', () => {
-  test('a new ticketed event has 8 steps: applications are their own flows (spec 051)', () => {
-    expect(keys(ctx())).toEqual(['name', 'venue', 'date', 'description', 'image', 'tickets', 'collect-more', 'review']);
-    expect(stepPosition('date', ctx())).toEqual({ index: 3, total: 8 });
+  test('a new live event has 9 steps: type first; applications are their own flows (spec 051)', () => {
+    expect(keys(ctx())).toEqual(['type', 'name', 'venue', 'date', 'description', 'image', 'tickets', 'collect-more', 'review']);
+    expect(stepPosition('date', ctx())).toEqual({ index: 4, total: 9 });
+  });
+
+  test('a registration event swaps tickets for its form flow (spec 057)', () => {
+    const reg = { ...fields, type: 'REGISTRATION' as const };
+    expect(keys(ctx({ fields: reg }))).toEqual(['type', 'name', 'venue', 'date', 'description', 'image', 'registration', 'collect-more', 'review']);
+    const saved = row({ type: 'REGISTRATION' });
+    expect(keys(ctx({ saved }))).toContain('registration');
+    expect(keys(ctx({ saved }))).not.toContain('tickets');
+  });
+
+  test('one count across a registration event and its form flow (spec 057)', () => {
+    const saved = row({ type: 'REGISTRATION' });
+    const free = ctx({ saved, forms: [{ id: 'f', purpose: 'VENDOR', kind: 'FREE' }] });
+    const flow = registrationFlowSteps(free).map((s) => s.key);
+    expect(flow).toEqual(['start', 'details', 'questions']);
+    // 6 event steps, 3 flow steps, Collect more, Review.
+    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 6, total: 11 });
+    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 7, total: 11 });
+    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 9, total: 11 });
+    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 11, total: 11 });
+    expect(wizardProgress(ctx(), 'review')).toEqual({ index: 9, total: 9 });
+  });
+
+  test('a registration form sells a floor map only when linked to a live event', () => {
+    const forms = [{ id: 'f', purpose: 'VENDOR' as const, kind: 'PAID', spaceSelection: 'MAP' as const }];
+    expect(registrationFlowSteps({ saved: row({ type: 'REGISTRATION' }), forms }).map((s) => s.key)).not.toContain('floor-map');
+    expect(registrationFlowSteps({ saved: row({ type: 'REGISTRATION', linkedEventId: 'live' }), forms }).map((s) => s.key)).toContain('floor-map');
+  });
+
+  test('the type step is reachable before the row', () => {
+    expect(isReachable('type', ctx())).toBe(true);
   });
 
   test('the count does not move once the row exists', () => {
@@ -65,14 +96,15 @@ describe('visible and counting', () => {
   test('neighbours skip hidden steps', () => {
     const c = ctx({ saved: row() });
     expect(neighbours('collect-more', c).next?.key).toBe('review');
-    expect(neighbours('name', c).prev).toBeNull();
+    expect(neighbours('type', c).prev).toBeNull();
+    expect(neighbours('name', c).prev?.key).toBe('type');
     expect(neighbours('review', c).next).toBeNull();
   });
 });
 
 describe('resume key', () => {
-  test('no row and no draft starts at name; a draft resumes its step', () => {
-    expect(resumeKey(ctx(), null)).toBe('name');
+  test('no row and no draft starts at type; a draft resumes its step', () => {
+    expect(resumeKey(ctx(), null)).toBe('type');
     expect(resumeKey(ctx(), 'date')).toBe('date');
   });
 
@@ -91,7 +123,7 @@ describe('resume key', () => {
   });
 
   test('an unknown key falls back to the first step', () => {
-    expect(resumeKey(ctx({ saved: row() }), 'nope')).toBe('name');
+    expect(resumeKey(ctx({ saved: row() }), 'nope')).toBe('type');
   });
 });
 

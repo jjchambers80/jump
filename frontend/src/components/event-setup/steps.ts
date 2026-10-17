@@ -9,10 +9,12 @@
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
 import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
 import type { FormPurpose } from '@/lib/applications';
+import type { EventType } from '@/lib/eventOverview';
+import { flowSteps } from './formFlows';
 
 export type StepKey =
-  | 'name' | 'venue' | 'date' | 'description' | 'image' | 'tickets' | 'attendee-questions'
-  | 'collect-more' | 'discounts' | 'reminders' | 'review' | 'done';
+  | 'type' | 'name' | 'venue' | 'date' | 'description' | 'image' | 'tickets' | 'attendee-questions'
+  | 'registration' | 'collect-more' | 'discounts' | 'reminders' | 'review' | 'done';
 
 /** R = required to publish, S = skippable ("Skip for now" when empty), C = conditional. */
 export type StepRule = 'R' | 'S' | 'C';
@@ -24,6 +26,10 @@ export interface SetupFields extends SalesFields {
   venueId: string;
   date: string;
   endDate: string;
+  /** Spec 057: chosen on the first step, fixed once the row exists (LIVE when unset). */
+  type?: EventType;
+  /** Spec 057: the live event a registration event is for ('' = none). */
+  linkedEventId?: string;
 }
 
 /** The server row as last saved (ISO instants), or null before step 3 creates it. */
@@ -35,6 +41,8 @@ export interface SavedEvent extends SalesSaved {
   date: string | null;
   endDate: string | null;
   status: string;
+  type?: EventType;
+  linkedEventId?: string | null;
   admissionMode: 'TICKETED' | 'RSVP';
   setupStep: string | null;
   setupCompletedAt: string | null;
@@ -101,6 +109,11 @@ export const FIELD_IDS = {
 const always = () => true;
 const never = () => false;
 
+/** Spec 057: the saved row's type, else the one chosen on the first step. */
+export const eventTypeOf = (ctx: Pick<StepCtx, 'saved' | 'fields'>): EventType => ctx.saved?.type ?? ctx.fields.type ?? 'LIVE';
+const registration = (ctx: StepCtx) => eventTypeOf(ctx) === 'REGISTRATION';
+const live = (ctx: StepCtx) => !registration(ctx);
+
 export const patchEvent = (client: PatchClient, { orgId, eventId }: { orgId: string; eventId: string }, body: Record<string, unknown>) =>
   client.patch(`/organizations/${orgId}/events/${eventId}`, body);
 
@@ -138,6 +151,10 @@ export function validateDates(ctx: StepCtx): FieldError[] {
 
 export const EVENT_STEPS: EventStep[] = [
   {
+    // Spec 057: a live event or a registration event; fixed once the row exists.
+    key: 'type', title: 'What do you want to create?', rule: 'R', anchor: 'event-hero', built: true, visible: always, complete: always,
+  },
+  {
     key: 'name', title: 'Name your event', rule: 'R', anchor: 'event-hero', built: true,
     // Plan §5.1 hides it in create mode once the row exists; kept visible so the
     // count never shifts under the organizer (050-I's "Start from a past event"
@@ -156,6 +173,9 @@ export const EVENT_STEPS: EventStep[] = [
       const name = ctx.fields.name.trim();
       if (name && name !== ctx.saved.name) body.name = name;
       if (ctx.fields.slug && ctx.fields.slug !== ctx.saved.slug) body.slug = ctx.fields.slug;
+      // Spec 057: a registration event's "Registering for" link.
+      const linked = ctx.fields.linkedEventId || null;
+      if (registration(ctx) && ctx.fields.linkedEventId !== undefined && linked !== (ctx.saved.linkedEventId ?? null)) body.linkedEventId = linked;
       return Object.keys(body).length ? body : null;
     },
     save: patchEvent,
@@ -181,8 +201,11 @@ export const EVENT_STEPS: EventStep[] = [
   },
   DESCRIBE_STEP,
   IMAGE_STEP,
-  TICKETS_STEP,
+  { ...TICKETS_STEP, visible: (ctx) => live(ctx) && TICKETS_STEP.visible(ctx) },
   { key: 'attendee-questions', title: 'Attendee questions', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },
+  // Spec 057: a registration event's form, set up in the `registration` form flow (formFlows.ts).
+  // Opening this step goes there; the flow's last step comes back to Collect more.
+  { key: 'registration', title: 'Registration form', rule: 'R', anchor: 'get-involved', built: true, visible: registration, complete: (ctx) => (ctx.forms?.length ?? 0) > 0 },
   { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: true,
     // Every admission mode: add-ons are also what vendor application tiers
     // offer, and the old editor showed them for RSVP events too (050-O parity).
@@ -200,8 +223,8 @@ export const EVENT_STEPS: EventStep[] = [
 /** Per-type step lists; a donation campaign type is a second key later (§5.1). */
 export const WIZARD_TYPES = { event: EVENT_STEPS } as const;
 
-/** Steps 1–3 work before the server row exists; the rest need it. */
-export const CLIENT_STEPS: StepKey[] = ['name', 'venue', 'date'];
+/** Steps 1–4 work before the server row exists; the rest need it. */
+export const CLIENT_STEPS: StepKey[] = ['type', 'name', 'venue', 'date'];
 
 export const stepByKey = (key: string | null | undefined): EventStep | undefined =>
   EVENT_STEPS.find((step) => step.key === key);
@@ -246,3 +269,27 @@ export function neighbours(key: StepKey, ctx: StepCtx) {
   const at = list.findIndex((step) => step.key === key);
   return { prev: at > 0 ? list[at - 1] : null, next: at >= 0 && at < list.length - 1 ? list[at + 1] : null };
 }
+
+/**
+ * Spec 057: "Step n of N" for one wizard across a registration event's steps
+ * and its form flow, which stands in the `registration` slot. `key` is an
+ * event step, or null inside the flow at `flowAt` of `flowTotal` steps.
+ * A live event has no slot and counts its own list.
+ */
+export function wizardProgress(ctx: StepCtx, key: StepKey | null, flowAt = 0, flowTotal = 1) {
+  const list = visibleSteps(ctx);
+  const slot = list.findIndex((step) => step.key === 'registration');
+  const extra = slot >= 0 ? flowTotal - 1 : 0;
+  if (key === null) return { index: slot + flowAt + 1, total: list.length + extra };
+  const at = list.findIndex((step) => step.key === key);
+  return { index: at + 1 + (slot >= 0 && at > slot ? extra : 0), total: list.length + extra };
+}
+
+/** The steps of a registration event's form flow for the form on it (none yet = before Start). */
+export const registrationFlowSteps = (ctx: Pick<StepCtx, 'saved' | 'forms'>, { maps = true } = {}) => {
+  const form = ctx.forms?.[0];
+  return flowSteps('registration', form ? { kind: (form.kind as 'FREE' | 'PAID') ?? 'FREE', spaceSelection: form.spaceSelection } : null, {
+    maps,
+    mapEvent: !!ctx.saved?.linkedEventId,
+  });
+};

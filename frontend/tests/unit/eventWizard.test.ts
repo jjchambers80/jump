@@ -28,14 +28,13 @@ describe('edit-mode links (050-O)', () => {
       map: null, guests: '/admin/events/e1/setup/special-guests?step=lineup',
     });
     expect(links.tier('t 1')).toBe(at('step=tickets&tier=t+1'));
-    // Spec 051: forms open their own flow at Form details; Add opens a new run.
+    // Spec 051: forms open their own flow at Form details; the lineup opens its step.
     const flow = (path: string) => `/admin/events/e1/setup/${path}`;
     expect(links.form({ id: 'f-g', purpose: 'SPECIAL_GUEST' })).toBe(flow('special-guests?step=details&form=f-g'));
     expect(links.form({ id: 'f-p', purpose: 'PRESS' })).toBe(flow('other-applications?step=details&form=f-p'));
     expect(links.form({ id: 'f-x', purpose: null })).toBe(flow('other-applications?step=details&form=f-x'));
     expect(links.form({ id: 'f-vol', purpose: 'VOLUNTEER' })).toBe(flow('volunteers?step=details&form=f-vol'));
-    expect(links.addForm('vendors')).toBe(flow('vendors'));
-    expect(links.addForm('special-guests')).toBe(flow('special-guests?step=lineup'));
+    expect(links.guests).toBe(flow('special-guests?step=lineup'));
   });
 
   it('carries the organization on wizard links only', () => {

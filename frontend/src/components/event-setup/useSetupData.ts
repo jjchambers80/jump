@@ -22,6 +22,8 @@ export function toSaved(event: OverviewEvent, addOnCount?: number): SavedEvent {
     date: event.date ?? null,
     endDate: event.endDate ?? null,
     status: event.status,
+    type: event.type ?? 'LIVE',
+    linkedEventId: event.linkedEventId ?? null,
     admissionMode: event.admissionMode ?? 'TICKETED',
     setupStep: event.setupStep ?? null,
     setupCompletedAt: event.setupCompletedAt ?? null,

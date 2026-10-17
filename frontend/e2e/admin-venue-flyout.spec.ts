@@ -50,7 +50,7 @@ const main = (page: Page) => page.locator('main');
 
 /** Step 1 → step 2 of the create wizard. */
 async function openVenueStep(page: Page) {
-  await page.goto('/admin/events/new');
+  await page.goto('/admin/events/new?step=name');
   await expect(main(page).getByRole('heading', { level: 1, name: 'Name your event' })).toBeVisible(COLD);
   await main(page).getByLabel('Event name').fill('Spring Fair');
   await page.getByRole('button', { name: 'Next' }).click();

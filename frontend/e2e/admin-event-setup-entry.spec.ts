@@ -99,7 +99,7 @@ const finishedInThisTab = (page: Page) =>
 const FINISHED = { setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' };
 
 async function openPastEventDialog(page: Page) {
-  await page.goto('/admin/events/new');
+  await page.goto('/admin/events/new?step=name');
   await expect(heading(page, 'Name your event')).toBeVisible(COLD);
   await main(page).getByRole('button', { name: 'Start from a past event' }).click();
   const dialog = page.getByRole('dialog', { name: 'Start from a past event' });
@@ -173,9 +173,9 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('link', { name: /View the event page/ })).toHaveAttribute('href', `${STORE}/events/harvest-fair-2031`);
     await expect(main(page).getByRole('link', { name: /Set up door check-in/ })).toHaveAttribute('href', `/admin/events/${COPY_ID}/check-in`);
     await expect(main(page).getByRole('link', { name: 'Go to event' })).toHaveAttribute('href', `/admin/events/${COPY_ID}`);
-    // Spec 051: applications are set up after the event, each in its own flow.
+    // Spec 057: people register through a registration event for this one.
     const next = main(page).getByRole('region', { name: "What's next" });
-    await expect(next.getByRole('link', { name: /Add a vendor application/ })).toHaveAttribute('href', new RegExp(`^/admin/events/${COPY_ID}/setup/vendors`));
+    await expect(next.getByRole('link', { name: /Create a registration event/ })).toHaveAttribute('href', `/admin/events/new?type=registration&linked=${COPY_ID}`);
     await expect(next.getByRole('link', { name: /Add special guests/ })).toHaveAttribute('href', new RegExp(`^/admin/events/${COPY_ID}/setup/special-guests\\?step=lineup`));
     await main(page).getByRole('button', { name: 'Copy the share link' }).click();
     await expect(main(page).getByRole('status')).toHaveText('Link copied to the clipboard.');

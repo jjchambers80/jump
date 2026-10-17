@@ -1,6 +1,6 @@
 // Spec 050: links into the event setup wizard, the one editor for every
 // event field (always on since 050-P), and its application flows (spec 051).
-import { formEditHref, formFlowHref, type FormFlowKey } from '@/components/event-setup/formFlows';
+import { formEditHref, formFlowHref } from '@/components/event-setup/formFlows';
 import type { FormPurpose } from '@/lib/applications';
 
 /**
@@ -49,7 +49,6 @@ export function detailsEditLinks(
     addOns: at('collect-more'),
     /** Application forms are set up in their own flows (spec 051), one form per run. */
     form: (form: { id: string; purpose?: FormPurpose | null }) => formEditHref(eventId, form, orgId),
-    addForm: (flow: FormFlowKey) => formFlowHref(eventId, flow, { org: orgId, step: flow === 'special-guests' ? 'lineup' : undefined }),
     /** The vendor flow's Floor map step exists only while a vendor form picks spaces on a map; else the Map tab. */
     map: mapForm ? formFlowHref(eventId, 'vendors', { form: mapForm.id, step: 'floor-map', org: orgId }) : null,
     listing: at('description'),
