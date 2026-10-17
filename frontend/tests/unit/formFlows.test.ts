@@ -3,48 +3,37 @@ import { flowSteps, formEditHref, formFlowHref, legacyFlowHref, type FlowForm } 
 
 const keys = (flow: Parameters<typeof flowSteps>[0], form: FlowForm | null) => flowSteps(flow, form).map((s) => s.key);
 
-describe('application flows (spec 051)', () => {
-  it('walks a vendor form: spaces only when it charges, the floor map only on MAP', () => {
-    expect(keys('vendors', null)).toEqual(['start', 'details', 'options', 'payment', 'questions', 'review']);
-    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['start', 'details', 'options', 'payment', 'questions', 'review']);
-    expect(keys('vendors', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['start', 'details', 'options', 'payment', 'floor-map', 'questions', 'review']);
-    // Maps off or hidden for the role: no floor-map step even on a MAP form.
-    expect(flowSteps('vendors', { kind: 'PAID', spaceSelection: 'MAP' }, { maps: false }).map((s) => s.key)).not.toContain('floor-map');
-    expect(keys('vendors', { kind: 'FREE', spaceSelection: null })).toEqual(['start', 'details', 'questions', 'review']);
+describe('setup flows (spec 051, 057)', () => {
+  it('walks a registration form: options and payment only when it charges, the floor map only on MAP', () => {
+    expect(keys('registration', null)).toEqual(['start', 'details', 'questions']);
+    expect(keys('registration', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['start', 'details', 'options', 'payment', 'questions']);
+    expect(keys('registration', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['start', 'details', 'options', 'payment', 'floor-map', 'questions']);
+    // Maps off or hidden for the role, or no linked live event: no floor-map step even on a MAP form.
+    expect(flowSteps('registration', { kind: 'PAID', spaceSelection: 'MAP' }, { maps: false }).map((s) => s.key)).not.toContain('floor-map');
+    expect(flowSteps('registration', { kind: 'PAID', spaceSelection: 'MAP' }, { mapEvent: false }).map((s) => s.key)).not.toContain('floor-map');
   });
 
-  it('starts special guests at the lineup; volunteers have no shifts step', () => {
-    expect(keys('special-guests', null)).toEqual(['lineup', 'start', 'details', 'questions', 'review']);
-    expect(keys('volunteers', { kind: 'FREE' })).toEqual(['start', 'details', 'questions', 'review']);
-    expect(keys('other-applications', { kind: 'FREE' })).toEqual(['start', 'details', 'questions', 'review']);
+  it('special guests is the lineup only, which never needs a form', () => {
+    expect(flowSteps('special-guests', null).map((s) => [s.key, s.needsForm])).toEqual([['lineup', false]]);
   });
 
-  it('needs the form row after Start, but never for the lineup', () => {
-    const needs = Object.fromEntries(flowSteps('special-guests', null).map((s) => [s.key, s.needsForm]));
-    expect(needs).toEqual({ lineup: false, start: false, details: true, questions: true, review: true });
-  });
-
-  it('builds flow links', () => {
-    expect(formFlowHref('e 1', 'vendors')).toBe('/admin/events/e%201/setup/vendors');
-    expect(formFlowHref('e1', 'volunteers', { step: 'questions', form: 'f1', org: 'o1' })).toBe('/admin/events/e1/setup/volunteers?step=questions&form=f1&org=o1');
-    expect(formEditHref('e1', { id: 'f1', purpose: 'SPONSOR' })).toBe('/admin/events/e1/setup/other-applications?step=details&form=f1');
+  it('builds flow links; a form is edited in the registration flow', () => {
+    expect(formFlowHref('e 1', 'registration')).toBe('/admin/events/e%201/setup/registration');
+    expect(formFlowHref('e1', 'registration', { step: 'questions', form: 'f1', org: 'o1' })).toBe('/admin/events/e1/setup/registration?step=questions&form=f1&org=o1');
+    expect(formEditHref('e1', { id: 'f1' })).toBe('/admin/events/e1/setup/registration?step=details&form=f1');
   });
 });
 
 describe('legacyFlowHref', () => {
-  const forms = [
-    { id: 'v1', purpose: 'VENDOR' as const, kind: 'PAID', spaceSelection: 'MAP' },
-    { id: 'g1', purpose: 'SPECIAL_GUEST' as const, kind: 'FREE' },
-  ];
-  it('sends the old application step links to the form flow', () => {
-    expect(legacyFlowHref('e1', 'vendors', 'g1', forms, 'o1')).toBe('/admin/events/e1/setup/special-guests?step=details&form=g1&org=o1');
-    expect(legacyFlowHref('e1', 'volunteers', null, forms)).toBe('/admin/events/e1/setup/volunteers');
-    expect(legacyFlowHref('e1', 'special-guests', null, forms)).toBe('/admin/events/e1/setup/special-guests?step=lineup');
-    expect(legacyFlowHref('e1', 'floor-map', null, forms)).toBe('/admin/events/e1/setup/vendors?step=floor-map&form=v1');
-    expect(legacyFlowHref('e1', 'floor-map', null, [])).toBe('/admin/events/e1/setup/vendors');
+  it('sends the old application step links to the registration flow, special guests to the lineup', () => {
+    expect(legacyFlowHref('e1', 'vendors', 'f1', 'o1')).toBe('/admin/events/e1/setup/registration?step=details&form=f1&org=o1');
+    expect(legacyFlowHref('e1', 'volunteers', null)).toBe('/admin/events/e1/setup/registration');
+    expect(legacyFlowHref('e1', 'special-guests', null)).toBe('/admin/events/e1/setup/special-guests?step=lineup');
+    expect(legacyFlowHref('e1', 'special-guests', 'g1')).toBe('/admin/events/e1/setup/registration?step=details&form=g1');
+    expect(legacyFlowHref('e1', 'floor-map', 'v1')).toBe('/admin/events/e1/setup/registration?step=floor-map&form=v1');
   });
   it('leaves event steps alone', () => {
-    expect(legacyFlowHref('e1', 'tickets', null, forms)).toBeNull();
-    expect(legacyFlowHref('e1', null, null, forms)).toBeNull();
+    expect(legacyFlowHref('e1', 'tickets', null)).toBeNull();
+    expect(legacyFlowHref('e1', null, null)).toBeNull();
   });
 });

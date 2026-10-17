@@ -1,15 +1,16 @@
-// Application setup flows (spec 051): each application type is its own task,
-// walked one form at a time in the setup wizard's shell, out of the event
-// wizard. `/admin/events/<id>/setup/<flow>?step=<key>&form=<id>`.
+// Setup flows in the setup wizard's shell (spec 051):
+// `/admin/events/<id>/setup/<flow>?step=<key>&form=<id>`. Two are left:
+// `registration`, a registration event's one form (spec 057), and
+// `special-guests`, a live event's lineup. Forms have no type, so the per-type
+// flows (vendors, volunteers, other applications) are gone; their old links
+// open the registration flow.
 //
-// Pure module: the registry, its links and the redirect of the event wizard's
-// old application step keys (`setup?step=vendors&form=…`).
+// Pure module: the registry, its links and the redirect of old step keys
+// (`setup?step=vendors&form=…`).
 
-import type { FormPurpose } from '@/lib/applications';
-import { isApplicationStep, stepForPurpose, type ApplicationStepKey } from './applicationSteps';
-
-/** Spec 057: `registration` is a registration event's one form, set up inside its event wizard. */
-export type FormFlowKey = ApplicationStepKey | 'registration';
+export type FormFlowKey = 'special-guests' | 'registration';
+/** Flows from before forms lost their type: `/setup/<one>` redirects to `/setup/registration`. */
+export const LEGACY_FLOWS = new Set(['vendors', 'volunteers', 'other-applications']);
 export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
@@ -34,7 +35,6 @@ export interface FlowStep {
 }
 
 const always = () => true;
-const paid = (form: FlowForm | null) => !form || form.kind === 'PAID';
 const onMap = (form: FlowForm | null) => !!form && form.spaceSelection === 'MAP';
 /** Spec 057: a registration form starts free, so before it exists it counts as free. */
 const paidForm = (form: FlowForm | null) => !!form && form.kind === 'PAID';
@@ -45,43 +45,12 @@ const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowSte
 
 const details = s('details', 'Form details', 'What applicants see first, and when the form takes applications.', { formAnchor: 'apply-top' });
 const questions = s('questions', 'Fields', 'Email is always asked. Add any other fields you need.', { formAnchor: 'step-questions' });
-const review = s('review', 'Review and open', 'Check the form, then decide when it takes applications.', { formAnchor: 'apply-top' });
 
 export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] }> = {
-  vendors: {
-    title: 'Vendor application',
-    steps: [
-      s('start', 'Start a vendor application', 'Vendors apply for a space. You review each one, then they choose a space and pay.', { formAnchor: 'apply-top' }),
-      details,
-      s('options', 'Options and pricing', 'What vendors can be approved for: a price and a number of spots for each.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
-      s('payment', 'How vendors choose and pay', 'Vendors apply for free. Once you approve them, they choose a space and pay.', { visible: paid, formAnchor: 'apply-summary', preview: 'space' }),
-      s('floor-map', 'Floor map', 'Vendors pick their spot on this map.', { visible: onMap, anchor: 'floor-map' }),
-      questions,
-      review,
-    ],
-  },
+  // A live event's lineup: guests are added by hand, or from an approved application (AddToLineup).
   'special-guests': {
     title: 'Special guests',
-    steps: [
-      s('lineup', 'Special guest lineup', 'Add the guests you have booked. The lineup shows on the event page.', { anchor: 'guests' }),
-      s('start', 'Application form', 'Optional. Let artists, creators and celebrities apply to appear.', { anchor: 'guests', formAnchor: 'apply-top' }),
-      { ...details, anchor: 'guests' },
-      { ...questions, anchor: 'guests' },
-      { ...review, anchor: 'guests' },
-    ],
-  },
-  volunteers: {
-    title: 'Volunteer application',
-    steps: [
-      s('start', 'Start a volunteer application', 'People sign up to help run your event.', { formAnchor: 'apply-top' }),
-      details,
-      questions,
-      review,
-    ],
-  },
-  'other-applications': {
-    title: 'Application',
-    steps: [s('start', 'Start an application', 'Sponsors, press, panels and anything else people apply for.', { formAnchor: 'apply-top' }), details, questions, review],
+    steps: [s('lineup', 'Special guest lineup', 'Add the guests you have booked. The lineup shows on the event page.', { anchor: 'guests' })],
   },
   // Spec 057: between the event's Image and Collect more steps; the event wizard's Review publishes.
   registration: {
@@ -97,7 +66,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   },
 };
 
-export const isFormFlow = (key: string): key is FormFlowKey => key === 'registration' || isApplicationStep(key);
+export const isFormFlow = (key: string): key is FormFlowKey => key === 'registration' || key === 'special-guests';
 
 /**
  * `maps: false` (Maps off or hidden for the role) drops the floor-map step, and so does
@@ -120,32 +89,18 @@ export function formFlowHref(
   return `/admin/events/${encodeURIComponent(eventId)}/setup/${flow}${q ? `?${q}` : ''}`;
 }
 
-/** The flow that edits a form, at Form details. A registration event's form is its `registration` flow (spec 057). */
-export const formEditHref = (
-  eventId: string,
-  form: { id: string; purpose?: FormPurpose | null },
-  org?: string | null,
-  eventType?: 'LIVE' | 'REGISTRATION'
-) => formFlowHref(eventId, eventType === 'REGISTRATION' ? 'registration' : stepForPurpose(form.purpose), { form: form.id, step: 'details', org });
+/** The flow that edits a form, at Form details: a registration event's `registration` flow (spec 057). */
+export const formEditHref = (eventId: string, form: { id: string }, org?: string | null) =>
+  formFlowHref(eventId, 'registration', { form: form.id, step: 'details', org });
 
 /**
  * The event wizard's old application step keys (spec 050), still in emails,
  * bookmarks and readiness items: where they live now. Null for any other key.
- * `floor-map` needs a vendor form on a map; without one it opens a new vendor form.
+ * Special guests without a form is the lineup; everything else is the
+ * registration flow (a live event's is redirected back to the event).
  */
-export function legacyFlowHref(
-  eventId: string,
-  step: string | null,
-  formId: string | null,
-  forms: { id: string; purpose?: FormPurpose | null; kind?: string; spaceSelection?: string | null }[],
-  org?: string | null
-): string | null {
-  if (step === 'floor-map') {
-    const map = forms.find((f) => f.id === formId) ?? forms.find((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP');
-    return formFlowHref(eventId, 'vendors', map ? { form: map.id, step: 'floor-map', org } : { org });
-  }
-  if (!step || !isFormFlow(step)) return null;
-  const form = forms.find((f) => f.id === formId);
-  if (form) return formEditHref(eventId, form, org);
-  return formFlowHref(eventId, step, { org, step: step === 'special-guests' ? 'lineup' : undefined });
+export function legacyFlowHref(eventId: string, step: string | null, formId: string | null, org?: string | null): string | null {
+  if (!step || !(step === 'floor-map' || isFormFlow(step) || LEGACY_FLOWS.has(step))) return null;
+  if (step === 'special-guests' && !formId) return formFlowHref(eventId, 'special-guests', { step: 'lineup', org });
+  return formFlowHref(eventId, 'registration', { form: formId, step: formId ? (step === 'floor-map' ? 'floor-map' : 'details') : undefined, org });
 }

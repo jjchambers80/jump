@@ -10,11 +10,6 @@ import { paymentsEnabled } from './ApplicationFormService.js';
 import connectService from './ConnectService.js';
 import taxService from './TaxService.js';
 
-// The spec 050 step key of a form's purpose. Since spec 051 forms are set up in
-// their own flows; the frontend (readinessHref) maps these keys and `formId` there.
-const FORM_STEP = { VENDOR: 'vendors', SPECIAL_GUEST: 'special-guests', VOLUNTEER: 'volunteers' };
-export const stepForForm = (form) => (form.purpose ? FORM_STEP[form.purpose] || 'other-applications' : 'vendors');
-
 const item = (code, step, message, extra) => ({ code, step, message, ...extra });
 const isBlank = (html) => !String(html || '').replace(/<[^>]*>|&nbsp;/g, '').trim();
 
@@ -60,8 +55,9 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
   if (!event.logoUrl && !event.imageId) warnings.push(item('NO_IMAGE', 'image', 'Add an event image.'));
 
   const forms = (event.applicationForms || []).filter((f) => f.status !== 'CLOSED');
+  // Form items open the form's flow (readinessHref turns `registration` + formId into it).
+  const step = 'registration';
   for (const form of forms) {
-    const step = registration ? 'registration' : stepForForm(form);
     if (form.kind === 'PAID' && !gateOn) {
       warnings.push(item('PAID_FORMS_DISABLED', step, `${form.name} charges applicants, and paid applications are not available yet. It stays closed.`, { formId: form.id }));
     }
@@ -77,7 +73,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
   // Spec 057: a registration event uses the floor map of the live event it is for.
   const floorMap = registration ? event.linkedEvent?.floorMap : event.floorMap;
   if (mapForm && floorMap?.status !== 'PUBLISHED') {
-    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', registration ? 'registration' : 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
+    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'registration', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
   }
   if (taxError) warnings.push(item('TAX_RATE_UNRESOLVED', 'review', `Sales tax could not be looked up: ${taxError}`));
 

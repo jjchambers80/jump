@@ -1,5 +1,7 @@
 # Application Setup Flows
 
+> **Superseded.** Forms no longer have a type. The per-type flows on this page (`vendors`, `volunteers`, `other-applications`, and the form steps of `special-guests`) were removed. A form is set up in a registration event's `registration` flow ([registration events](registration-events.md)), and `special-guests` is a live event's lineup only. Old `/setup/<flow>` and `setup?step=<flow>` links open the registration flow. The rest of this page is history.
+
 **Status**: Implemented (spec 051; blank start and Fields step: PR #466; volunteer shifts removed: PR #465; spec 056 simplification: PRs #468–#471, templates removed)
 **Last Updated**: 2026-10-12
 

@@ -91,8 +91,8 @@ describe('Registration events (spec 057)', () => {
   it('holds exactly one form', async () => {
     const { body } = await createRegistration();
     const forms = `/admin/events/${body.id}/application-forms`;
-    expect((await request(app).post(forms).set(...auth()).send({ kind: 'FREE', purpose: 'VENDOR', name: 'Vendors', setup: true })).status).toBe(201);
-    const second = await request(app).post(forms).set(...auth()).send({ kind: 'FREE', purpose: 'VOLUNTEER', name: 'Helpers', setup: true });
+    expect((await request(app).post(forms).set(...auth()).send({ kind: 'FREE', name: 'Vendors', setup: true })).status).toBe(201);
+    const second = await request(app).post(forms).set(...auth()).send({ kind: 'FREE', name: 'Helpers', setup: true });
     expect(second.status).toBe(409);
     expect(second.body.code).toBe('FORM_EXISTS');
   });
@@ -133,7 +133,7 @@ describe('Registration events (spec 057)', () => {
 
   it("offers a published registration's form on the live event's page", async () => {
     const { body } = await createRegistration({ name: 'Sponsors', linkedEventId: liveId });
-    await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: body.id, kind: 'FREE', purpose: 'SPONSOR', name: 'Sponsors', slug: 'sponsors', status: 'OPEN' } });
+    await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: body.id, kind: 'FREE', name: 'Sponsors', slug: 'sponsors', status: 'OPEN' } });
     const before = await request(app).get(`/events/${liveId}/applications/forms`);
     expect(before.body.data.map((f) => f.slug)).not.toContain('sponsors');
     await prisma.event.update({ where: { id: body.id }, data: { status: 'PUBLISHED' } });

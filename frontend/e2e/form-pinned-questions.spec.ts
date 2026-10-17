@@ -74,7 +74,7 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
     const create = path.match(/^\/admin\/events\/([^/]+)\/application-forms$/);
     if (create && method === 'POST') {
       seq += 1;
-      const b = body as { name: string; kind: string; purpose?: string };
+      const b = body as { name: string; kind: string };
       const form = {
         ...vendorForm,
         id: `form-new-${seq}`,
@@ -82,7 +82,6 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
         name: b.name,
         kind: b.kind,
         slug: b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        purpose: b.purpose ?? 'OTHER',
         tiers: [],
         questions: [],
       };
@@ -118,7 +117,8 @@ async function mockAdmin(page: Page, baseURL: string, role: 'ADMIN' | 'ORGANIZER
 async function mockWizard(page: Page, event: { id: string; name: string; date: string; status: string }) {
   const venue = { id: 'v1', name: 'RCC', address: '500 S Salisbury St', timezone: 'America/New_York' };
   const adminEvent = {
-    ...event, slug: event.id, description: null, logoUrl: null, endDate: null, capacity: 100, category: null, admissionMode: 'TICKETED',
+    // Spec 057: forms live on registration events and are edited in the registration flow.
+    ...event, type: 'REGISTRATION', linkedEventId: null, slug: event.id, description: null, logoUrl: null, endDate: null, capacity: 100, category: null, admissionMode: 'TICKETED',
     setupStep: null, setupCompletedAt: '2026-01-01T00:00:00.000Z', rsvpLimit: null, rsvpMaxPartySize: 1, rsvpRemaining: null,
     tax: { rate: 0, source: null, region: null }, taxInclusivePricing: false, organizationId: ORG_ID, venue, priceTiers: [],
   };
@@ -137,7 +137,7 @@ test('wizard form editor: pin a second question as a list column; the third togg
   test.setTimeout(120000);
   const { calls } = await mockAdmin(page, baseURL!);
   await mockWizard(page, EXPO);
-  await page.goto(`/admin/events/${EXPO.id}/setup/other-applications?step=questions&form=${vendorForm.id}`);
+  await page.goto(`/admin/events/${EXPO.id}/setup/registration?step=questions&form=${vendorForm.id}`);
   await expect(page.getByTestId('question-pinned-q1')).toHaveText('List column', COLD);
   await expect(page.getByTestId('question-pinned-q2')).toHaveCount(0);
 

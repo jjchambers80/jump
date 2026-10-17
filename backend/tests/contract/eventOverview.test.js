@@ -179,8 +179,9 @@ describe('Event overview API', () => {
     expect(f.approvedSettled).toBe(1);
     expect(f.approvedAwaitingPayment).toBe(1);
     expect(f.paid).toBe(true);
-    // Spec 050-O: purpose and space selection place the form's Edit link in the wizard.
-    expect(f).toMatchObject({ purpose: expect.any(String), spaceSelection: expect.any(String) });
+    // Spec 050-O: space selection places the map card's Edit link in the wizard.
+    expect(f).toMatchObject({ spaceSelection: expect.any(String) });
+    expect(f).not.toHaveProperty('purpose');
     expect(f.tiers[0]).toMatchObject({ name: '10x10', price: 100, quantityTotal: 4, booths: 2 });
 
     expect(body.map).toMatchObject({ id: map.id, status: 'PUBLISHED', boothTotal: 3, unassignedBooths: 1 });

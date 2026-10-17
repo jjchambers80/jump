@@ -8,7 +8,6 @@
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
 import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
-import type { FormPurpose } from '@/lib/applications';
 import type { EventType } from '@/lib/eventOverview';
 import { flowSteps } from './formFlows';
 
@@ -63,7 +62,7 @@ export interface StepCtx {
   zone: string | null;
   savedZone: string | null;
   /** Forms on the event: old application step links resolve to their flow (spec 051). */
-  forms?: { id: string; purpose?: FormPurpose | null; kind?: string; spaceSelection?: 'TIERS' | 'MAP' | null }[];
+  forms?: { id: string; kind?: string; spaceSelection?: 'TIERS' | 'MAP' | null }[];
   donationsEligible?: boolean;
   now?: Date;
 }

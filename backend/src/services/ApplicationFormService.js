@@ -14,7 +14,6 @@ import { ConflictError, NotFoundError, ValidationError } from '../middleware/err
 import { BUSINESS_FIELDS, CHOICE_TYPES, MAX_OPTIONS, MAX_PINNED_QUESTIONS, QUESTION_TYPES } from '../config/applications.js';
 import feeService from './FeeService.js';
 import logger from '../utils/logger.js';
-import { FORM_PURPOSES } from './applicationFormDefaults.js';
 import { assertPaymentsReady } from './paymentReadiness.js';
 import { mapEventIdFor } from './mapEvents.js';
 
@@ -119,8 +118,6 @@ const FORM_INCLUDE = {
   tiers: { orderBy: { displayOrder: 'asc' }, include: { addOns: { select: { addOnId: true } } } },
   questions: { where: { archivedAt: null }, orderBy: { displayOrder: 'asc' } },
   _count: { select: { applications: true } },
-  // Spec 050-L: one submitted application is enough to fix the purpose (updateForm's PURPOSE_LOCKED rule).
-  applications: { where: { status: { not: 'DRAFT' } }, select: { id: true }, take: 1 },
 };
 
 class ApplicationFormService {
@@ -184,7 +181,6 @@ class ApplicationFormService {
       event: f.event ? { id: f.event.id, name: f.event.name, date: f.event.date, status: f.event.status, timezone: f.event.venue?.timezone ?? null } : null,
       ...(organizationId ? {} : { organization: f.organization }),
       kind: f.kind,
-      purpose: f.purpose,
       name: f.name,
       slug: f.slug,
       status: f.status,
@@ -233,10 +229,8 @@ class ApplicationFormService {
         : { collectBusiness: body.kind === 'PAID' };
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
-    // The setup flows (`setup: true`) keep one live form per purpose on an event.
-    // Spec 057: a registration event is its one form; a live event's setup flows keep one live form per purpose.
+    // Spec 057: a registration event is its one form.
     if (event.type === 'REGISTRATION') await this._assertNoForm(eventId);
-    else if (setup && (data.status ?? 'DRAFT') !== 'CLOSED') await this._assertOnePerPurpose(eventId, data.purpose ?? 'OTHER');
     data.slug = await this._uniqueSlug(eventId, body.slug || data.name);
     if (body.tiers !== undefined) {
       if (body.kind === 'FREE' && body.tiers.length > 0) throw new ValidationError('FREE forms cannot have tiers');
@@ -335,7 +329,6 @@ class ApplicationFormService {
           // Spec 039: the copy's map starts as a draft, so a MAP form cannot
           // open until that map is published (see _assertCanOpen).
           spaceSelection: f.spaceSelection,
-          purpose: f.purpose,
           businessFields: f.businessFields,
           collectName: f.collectName,
           displayOrder: f.displayOrder,
@@ -359,10 +352,6 @@ class ApplicationFormService {
     if (!existing) throw new NotFoundError('Application form not found');
     if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
     const data = this._validateFormFields(body, existing.kind, existing);
-    if (data.purpose !== undefined && data.purpose !== existing.purpose) {
-      const submitted = await prisma.application.count({ where: { formId, status: { not: 'DRAFT' } } });
-      if (submitted > 0) throw coded(new ConflictError('Purpose cannot change once the form has submissions'), 'PURPOSE_LOCKED');
-    }
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.spaceSelection !== undefined && data.spaceSelection !== existing.spaceSelection) {
       await this._assertSpaceSelectionChangeable(formId);
@@ -731,10 +720,6 @@ class ApplicationFormService {
       }
       data.businessFields = BUSINESS_FIELDS.filter((f) => body.businessFields.includes(f));
     }
-    if (body.purpose !== undefined) {
-      if (!FORM_PURPOSES.has(body.purpose)) throw new ValidationError(`purpose must be one of ${[...FORM_PURPOSES].join(', ')}`);
-      data.purpose = body.purpose;
-    }
     for (const [key, max] of [['buttonLabel', 80], ['successMessage', 2000]]) {
       if (body[key] !== undefined) {
         if (body[key] !== null && typeof body[key] !== 'string') throw new ValidationError(`${key} must be a string`);
@@ -787,15 +772,6 @@ class ApplicationFormService {
   async _assertNoForm(eventId) {
     const other = await prisma.applicationForm.findFirst({ where: { eventId }, select: { name: true } });
     if (other) throw coded(new ConflictError(`This registration event already has its form: ${other.name}`), 'FORM_EXISTS');
-  }
-
-  /** One live (not CLOSED) form per purpose per live event: the setup flows edit that one. */
-  async _assertOnePerPurpose(eventId, purpose, excludeId = null) {
-    const other = await prisma.applicationForm.findFirst({
-      where: { eventId, purpose, status: { not: 'CLOSED' }, ...(excludeId && { id: { not: excludeId } }) },
-      select: { id: true, name: true },
-    });
-    if (other) throw coded(new ConflictError(`This event already has a ${purpose.toLowerCase().replace('_', ' ')} form: ${other.name}. Close it first.`), 'FORM_EXISTS');
   }
 
   async _assertCanOpen(form) {
@@ -922,7 +898,6 @@ class ApplicationFormService {
       eventId: form.eventId,
       organizationId: form.organizationId,
       kind: form.kind,
-      purpose: form.purpose,
       name: form.name,
       slug: form.slug,
       intro: form.intro,
@@ -945,7 +920,6 @@ class ApplicationFormService {
       acceptance: this.acceptance(form),
       paymentsEnabled: paymentsEnabled(),
       applicationCount: form._count?.applications ?? 0,
-      purposeLocked: (form.applications?.length ?? 0) > 0,
       tiers: event ? (form.tiers || []).map((t) => this._serializeTier(t, form, event, addOns)) : [],
       questions: (form.questions || []).map((q) => this._serializeQuestion(q)),
       timezone: event?.venue?.timezone ?? null,
@@ -963,7 +937,6 @@ class ApplicationFormService {
       // Spec 057: the event the form belongs to (a linked registration event on a live event's page).
       eventId: form.eventId,
       kind: form.kind,
-      purpose: form.purpose,
       name: form.name,
       slug: form.slug,
       intro: form.intro,

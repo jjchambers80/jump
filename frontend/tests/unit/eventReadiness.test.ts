@@ -24,16 +24,12 @@ describe('readinessHref', () => {
     expect(readinessHref(item(code, step), 'e1', 'o1')).toBe(href);
   });
 
-  // Spec 051: application items open the form's flow.
+  // Spec 057: form items open the form's registration flow at the step that fixes them.
   it.each([
-    ['FORM_HAS_NO_QUESTIONS', 'vendors', 'f1', `${base}/vendors?step=details&form=f1&org=o1`],
-    ['PAID_FORMS_DISABLED', 'special-guests', 'f2', `${base}/special-guests?step=details&form=f2&org=o1`],
-    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'f1', `${base}/vendors?step=floor-map&form=f1&org=o1`],
-    ['FORM_HAS_NO_QUESTIONS', 'other-applications', undefined, `${base}/other-applications?org=o1`],
-    // Spec 057: a paid form without options opens Options and pricing; a registration event's items open its flow.
-    ['PAID_FORM_NO_OPTIONS', 'vendors', 'f1', `${base}/vendors?step=options&form=f1&org=o1`],
-    ['PAID_FORM_NO_OPTIONS', 'registration', 'f1', `${base}/registration?step=options&form=f1&org=o1`],
     ['FORM_HAS_NO_QUESTIONS', 'registration', 'f1', `${base}/registration?step=details&form=f1&org=o1`],
+    ['PAID_FORMS_DISABLED', 'registration', 'f2', `${base}/registration?step=details&form=f2&org=o1`],
+    ['PAID_FORM_NO_OPTIONS', 'registration', 'f1', `${base}/registration?step=options&form=f1&org=o1`],
+    ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'registration', 'f1', `${base}/registration?step=floor-map&form=f1&org=o1`],
   ])('%s on %s opens the form flow', (code, step, formId, href) => {
     expect(readinessHref(item(code, step, formId), 'e1', 'o1')).toBe(href);
   });

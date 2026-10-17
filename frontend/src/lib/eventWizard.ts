@@ -1,7 +1,6 @@
 // Spec 050: links into the event setup wizard, the one editor for every
 // event field (always on since 050-P), and its application flows (spec 051).
 import { formEditHref, formFlowHref } from '@/components/event-setup/formFlows';
-import type { FormPurpose } from '@/lib/applications';
 
 /**
  * "Continue setup" target (spec 050 §4): a DRAFT whose create flow has not
@@ -33,11 +32,11 @@ export function withOrg(href: string, orgId: string | null | undefined): string 
 /** Where each Details section's Edit control opens the wizard. */
 export function detailsEditLinks(
   eventId: string,
-  forms: { id: string; purpose?: FormPurpose | null; spaceSelection?: string | null }[],
+  forms: { id: string; spaceSelection?: string | null }[],
   orgId?: string | null
 ) {
   const at = (step: string, extra?: Record<string, string>) => withOrg(wizardStepHref(eventId, step, extra), orgId);
-  const mapForm = forms.find((f) => f.purpose === 'VENDOR' && f.spaceSelection === 'MAP');
+  const mapForm = forms.find((f) => f.spaceSelection === 'MAP');
   return {
     name: at('name'),
     venue: at('venue'),
@@ -47,10 +46,10 @@ export function detailsEditLinks(
     tickets: at('tickets'),
     tier: (tierId: string) => at('tickets', { tier: tierId }),
     addOns: at('collect-more'),
-    /** Application forms are set up in their own flows (spec 051), one form per run. */
-    form: (form: { id: string; purpose?: FormPurpose | null }) => formEditHref(eventId, form, orgId),
-    /** The vendor flow's Floor map step exists only while a vendor form picks spaces on a map; else the Map tab. */
-    map: mapForm ? formFlowHref(eventId, 'vendors', { form: mapForm.id, step: 'floor-map', org: orgId }) : null,
+    /** A form is set up in the registration flow (spec 057). */
+    form: (form: { id: string }) => formEditHref(eventId, form, orgId),
+    /** The Floor map step exists only while a form picks spaces on a map; else the Map tab. */
+    map: mapForm ? formFlowHref(eventId, 'registration', { form: mapForm.id, step: 'floor-map', org: orgId }) : null,
     listing: at('description'),
     guests: formFlowHref(eventId, 'special-guests', { step: 'lineup', org: orgId }),
   };

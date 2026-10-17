@@ -11,6 +11,8 @@ import { BASE_URL, signInAsStaff } from './helpers/session';
 const API = 'http://localhost:3002';
 const ORG_ID = 'org-map';
 const EVENT_ID = 'evt-map';
+// Spec 057: a registration event's floor map is the one of the live event it is for.
+const LIVE_ID = 'evt-map-live';
 const expect = baseExpect.configure({ timeout: 15000 });
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 const VENUE = { id: 'v-hall', name: 'Union Hall', address: '1 Main St', timezone: 'America/New_York', city: 'Raleigh', state: 'NC' };
@@ -18,7 +20,8 @@ const VENUE = { id: 'v-hall', name: 'Union Hall', address: '1 Main St', timezone
 const EVENT = {
   id: EVENT_ID, slug: 'spring-fair', name: 'Spring Fair', description: null, logoUrl: null,
   date: '2031-06-01T20:00:00.000Z', endDate: null, capacity: 100, category: null, status: 'DRAFT',
-  admissionMode: 'TICKETED', setupStep: 'vendors', setupCompletedAt: null, rsvpLimit: null, rsvpMaxPartySize: 1,
+  type: 'REGISTRATION', linkedEventId: LIVE_ID, linkedEvent: { id: LIVE_ID, name: 'Spring Fair Live', slug: 'spring-fair-live', status: 'PUBLISHED', date: '2031-06-01T20:00:00.000Z' },
+  admissionMode: 'TICKETED', setupStep: 'registration', setupCompletedAt: null, rsvpLimit: null, rsvpMaxPartySize: 1,
   rsvpRemaining: null, taxRate: 0, tax: { rate: 0, source: null, region: null }, taxInclusivePricing: false,
   organizationId: ORG_ID, organizationName: 'Map Org',
   venue: { id: VENUE.id, name: VENUE.name, address: VENUE.address, timezone: VENUE.timezone }, priceTiers: [],
@@ -27,7 +30,7 @@ const EVENT = {
 function form(patch: Record<string, any>) {
   const id = patch.id;
   return {
-    id, eventId: EVENT_ID, kind: 'PAID', purpose: 'VENDOR', name: 'Vendor booths', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
+    id, eventId: EVENT_ID, kind: 'PAID', name: 'Vendor booths', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
     chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW', reserveOnApproval: true,
     spaceSelection: 'TIERS', displayOrder: 0, createdFromTemplateId: null, acceptance: { accepting: true, reason: null },
     paymentsEnabled: true, applicationCount: 0, collectBusiness: true, tiers: [], addOns: [], questions: [],
@@ -41,7 +44,7 @@ const PLANS = [
 
 function mapDetail(patch: Record<string, any> = {}) {
   return {
-    id: 'map-1', organizationId: ORG_ID, eventId: EVENT_ID, name: 'Spring Fair floor map', status: 'DRAFT', unit: 'ft', gridSize: 5,
+    id: 'map-1', organizationId: ORG_ID, eventId: LIVE_ID, name: 'Spring Fair floor map', status: 'DRAFT', unit: 'ft', gridSize: 5,
     width: 100, height: 60, underlayFileId: null, underlayOpacity: 0.5, layout: { version: 1, elements: [] },
     publishedAt: null, createdAt: '2031-01-01T00:00:00Z', updatedAt: '2031-01-01T00:00:00Z', booths: [], tiers: [],
     ...patch,
@@ -89,7 +92,7 @@ async function mockApi(page: Page, { forms: initial, map: initialMap = null, cre
     Object.assign(target, route.request().postDataJSON());
     return route.fulfill(json(target));
   });
-  await page.route(`${API}/admin/events/${EVENT_ID}/map`, (route) =>
+  await page.route(`${API}/admin/events/${LIVE_ID}/map`, (route) =>
     route.fulfill(map ? json({ mapId: map.id }) : json({ error: 'NotFoundError', message: 'No map for this event' }, 404))
   );
   await page.route(`${API}/admin/maps/templates`, (route) => route.fulfill(json(PLANS)));
@@ -117,8 +120,8 @@ test.use({ contextOptions: { reducedMotion: 'reduce' } });
 const COLD = { timeout: 30000 };
 test.describe.configure({ timeout: 90000 });
 const STAFF = { id: 'map-organizer', email: 'map-organizer@test.com', role: 'ORGANIZER' as const };
-// Spec 051: the floor map is a step of the vendor application flow.
-const flowUrl = (query: string) => `/admin/events/${EVENT_ID}/setup/vendors?${query}`;
+// The floor map is a step of the registration flow (spec 057).
+const flowUrl = (query: string) => `/admin/events/${EVENT_ID}/setup/registration?${query}`;
 const MAP_STEP = flowUrl('step=floor-map&form=form-map');
 const RETURN_TO = encodeURIComponent(MAP_STEP);
 
@@ -129,7 +132,7 @@ const serious = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''));
 const MAP_FORM = form({ id: 'form-map', spaceSelection: 'MAP' });
 const builderUrl = `/admin/maps/map-1?returnTo=${RETURN_TO}`;
-const wizardMapStep = new RegExp(`/admin/events/${EVENT_ID}/setup/vendors\\?step=floor-map&form=form-map$`);
+const wizardMapStep = new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=floor-map&form=form-map$`);
 const done = (page: Page) => page.getByTestId('map-builder').getByRole('button', { name: /^(Done|Saving…)$/ });
 
 // Compile the wizard route and the preview frame once, before any timed step.
@@ -165,7 +168,7 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ })).toBeVisible();
     await main(page).getByRole('button', { name: 'Create a blank map' }).click();
     await expect.poll(() => calls.createMap.length).toBe(1);
-    expect(calls.createMap[0].postDataJSON()).toEqual({ eventId: EVENT_ID });
+    expect(calls.createMap[0].postDataJSON()).toEqual({ eventId: LIVE_ID });
     const summary = main(page).getByTestId('setup-map-summary');
     await expect(summary.getByRole('heading', { name: /Spring Fair floor map/ })).toBeFocused();
     await expect(main(page).getByRole('status').filter({ hasText: 'Spring Fair floor map created.' })).toBeVisible();
@@ -200,7 +203,7 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Floor map')).toBeVisible(COLD);
     await main(page).getByRole('button', { name: /Use floor plan Union Hall layout/ }).click();
     await expect.poll(() => calls.createMap.length).toBe(1);
-    expect(calls.createMap[0].postDataJSON()).toEqual({ eventId: EVENT_ID, templateId: 'plan-hall' });
+    expect(calls.createMap[0].postDataJSON()).toEqual({ eventId: LIVE_ID, templateId: 'plan-hall' });
     await expect(main(page).getByTestId('setup-map-summary').getByRole('heading')).toBeFocused();
   });
 

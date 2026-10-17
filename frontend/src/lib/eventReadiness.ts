@@ -1,8 +1,7 @@
 // Event readiness (spec 050 §7.2): the shape GET …/readiness returns and the
 // blockers a 422 EVENT_NOT_READY publish carries in `details`.
 
-import { FORMER_STEPS } from '@/components/event-setup/steps';
-import { formFlowHref, type FormFlowKey } from '@/components/event-setup/formFlows';
+import { formFlowHref } from '@/components/event-setup/formFlows';
 
 export interface ReadinessItem {
   code: string;
@@ -43,15 +42,10 @@ export function readinessSettingsFix(item: ReadinessItem): { permission: string;
 export function readinessHref(item: ReadinessItem, eventId: string, orgId: string | null = null): string {
   const fix = SETTINGS_FIX[item.code]?.href;
   if (fix) return fix;
-  // Application items name the spec 050 step; the form is fixed in its flow (spec 051).
-  if (FORMER_STEPS.has(item.step)) {
-    const flow = item.step === 'floor-map' ? 'vendors' : (item.step as FormFlowKey);
-    const at = item.step === 'floor-map' ? 'floor-map' : item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : 'details';
-    return formFlowHref(eventId, flow, { form: item.formId, step: item.formId ? at : undefined, org: orgId });
-  }
-  // Spec 057: a registration event's form items open its flow; a paid form without options opens Options and pricing.
+  // Spec 057: form items open the form's flow at the step that fixes them.
   if (item.step === 'registration' && item.formId) {
-    return formFlowHref(eventId, 'registration', { form: item.formId, step: item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : 'details', org: orgId });
+    const at = item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : item.code === 'MAP_FORM_WITHOUT_PUBLISHED_MAP' ? 'floor-map' : 'details';
+    return formFlowHref(eventId, 'registration', { form: item.formId, step: at, org: orgId });
   }
   const org = orgId ? `&org=${encodeURIComponent(orgId)}` : '';
   return `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}${org}`;

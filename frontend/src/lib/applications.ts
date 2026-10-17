@@ -109,9 +109,6 @@ export interface AdminTier {
   addOns: TierAddOnOption[];
 }
 
-/** Spec 050 §6.2: what a form is for. Only places forms from before spec 057 in a live event's wizard step; registration forms are always OTHER. */
-export type FormPurpose = 'VENDOR' | 'SPONSOR' | 'PRESS' | 'PANEL' | 'SPECIAL_GUEST' | 'VOLUNTEER' | 'OTHER';
-
 /** Business-profile fields a form can ask one by one (backend `BUSINESS_FIELDS`). */
 export const BUSINESS_FIELDS = ['businessName', 'description', 'website', 'socials', 'photos'] as const;
 export type BusinessField = (typeof BUSINESS_FIELDS)[number];
@@ -134,7 +131,6 @@ export interface AdminForm {
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: FormKind;
-  purpose: FormPurpose;
   name: string;
   slug: string;
   intro: string | null;
@@ -154,8 +150,6 @@ export interface AdminForm {
   acceptance: Acceptance;
   paymentsEnabled: boolean;
   applicationCount: number;
-  /** Spec 050-L: a submitted (non-DRAFT) application fixes the purpose. */
-  purposeLocked?: boolean;
   tiers: AdminTier[];
   questions: Question[];
   /** Every application add-on of the event (spec 012), for the tier dialog. */
@@ -183,7 +177,6 @@ export interface PublicForm {
   eventId?: string | null;
   kind: FormKind;
   /** Spec 050 §6.2. Optional so older payloads still render (they label as OTHER). */
-  purpose?: FormPurpose;
   name: string;
   slug: string;
   intro: string | null;
@@ -486,7 +479,7 @@ export interface AdminApplication {
   /** The application's order (spec 024); null on FREE forms. */
   orderId: string | null;
   orderRef: string | null;
-  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD'; reserveOnApproval?: boolean; spaceSelection?: 'TIERS' | 'MAP' | null; purpose?: FormPurpose };
+  form: { id: string; name: string; slug: string; kind: FormKind; chargeTiming: 'SUBMIT' | 'APPROVAL'; feeMode: string; paymentDueDays: number; overduePolicy: 'WITHDRAW' | 'HOLD'; reserveOnApproval?: boolean; spaceSelection?: 'TIERS' | 'MAP' | null };
   /** Spec 050 §7.6: the event lineup row made from this application, if any. */
   lineupGuestId?: string | null;
   lineupEventId?: string | null;

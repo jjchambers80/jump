@@ -28,11 +28,11 @@ function eventResponse() {
   };
 }
 
-// [purpose, name, buttonLabel, expected pill]: the purpose never shows.
-const FORMS: [string, string, string | null, string][] = [
-  ['VENDOR', 'Market hall 2027', 'Sell at the market', 'Sell at the market'],
-  ['OTHER', 'Member renewal', null, 'Member renewal'],
-  ['SPECIAL_GUEST', 'Celebrity row', '  ', 'Celebrity row'],
+// [name, buttonLabel, expected pill]
+const FORMS: [string, string | null, string][] = [
+  ['Market hall 2027', 'Sell at the market', 'Sell at the market'],
+  ['Member renewal', null, 'Member renewal'],
+  ['Celebrity row', '  ', 'Celebrity row'],
 ];
 
 async function mockEvent(page: Page) {
@@ -44,8 +44,8 @@ async function mockEvent(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        data: FORMS.map(([purpose, name, buttonLabel], i) => ({
-          id: `f-${i}`, purpose, name, buttonLabel, slug: `form-${i}`, kind: 'FREE', intro: null,
+        data: FORMS.map(([name, buttonLabel], i) => ({
+          id: `f-${i}`, name, buttonLabel, slug: `form-${i}`, kind: 'FREE', intro: null,
           acceptance: { open: true, reason: null }, chargeTiming: null, feeMode: null, tiers: [], questions: [],
         })),
       }),
@@ -62,7 +62,7 @@ test('pill labels are the button label, else the form name', async ({ page }) =>
 
   const strip = page.getByTestId('get-involved').filter({ visible: true }).first();
   await expect(strip).toBeVisible({ timeout: 30000 });
-  for (const [, name, , label] of FORMS) {
+  for (const [name, , label] of FORMS) {
     const link = strip.getByRole('link', { name: label === name ? name : `${label}: ${name}`, exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveText(label);

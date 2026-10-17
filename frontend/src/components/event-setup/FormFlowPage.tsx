@@ -1,9 +1,9 @@
 'use client';
 
-// An application flow (spec 051): one vendor, special guest, volunteer or
-// other application form, set up step by step in the event wizard's shell
-// (header, progress bar, footer, live preview). Started from the
-// event's Overview. Cards save explicitly: Next submits a step's settings and
+// A setup flow (spec 051) in the event wizard's shell (header, progress bar,
+// footer, live preview): a registration event's one form (spec 057), set up
+// step by step inside its event wizard, or a live event's special guest
+// lineup. Cards save explicitly: Next submits a step's settings and
 // moves on only when the save succeeded; list editors (tiers,
 // questions, the lineup) save each change themselves.
 
@@ -19,17 +19,15 @@ import SetupFooter from './SetupFooter';
 import PreviewPane from './PreviewPane';
 import LoadingFields from './LoadingFields';
 import { PREVIEW_MESSAGE, draftPreviewForm, previewForm, type DraftForm } from './previewMessages';
-import { APPLICATION_STEPS, PURPOSE_LABEL, REGISTRATION_CONFIG, formsOnStep } from './applicationSteps';
-import { FORM_FLOWS, flowSteps, formEditHref, type FormFlowKey } from './formFlows';
+import { FORM_FLOWS, flowSteps, type FormFlowKey } from './formFlows';
 import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import { wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
 import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
-import ReviewFormStep, { REVIEW_FORM_ID } from './steps/ReviewFormStep';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
-import { hintClass, inputClass, labelClass, secondaryButton } from './ui';
+import { hintClass, secondaryButton } from './ui';
 
 const SETTINGS_FORM_ID = 'flow-settings-form';
 const alertClass = 'rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200';
@@ -38,7 +36,6 @@ const noop = () => {};
 export default function FormFlowPage({ eventId, flow }: { eventId: string; flow: FormFlowKey }) {
   const f = useFormFlow(eventId, flow);
   const { form, step, list, at, event } = f;
-  const config = flow === 'registration' ? REGISTRATION_CONFIG : APPLICATION_STEPS[flow];
   const api = useApplicationsApi(eventId);
   const canEdit = useCan('applications.forms');
   const maps = useCan('maps');
@@ -52,7 +49,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const { selectedOrg } = useOrg();
   // Unsaved name and intro from Form details: the preview shows them as they are typed.
   const [typed, setTyped] = useState<{ name?: string; intro?: string | null; buttonLabel?: string | null }>({});
-  // Start, before the form exists: what is being set up (name, purpose, paid).
+  // Start, before the form exists: what is being set up (name, paid).
   const [draft, setDraft] = useState<DraftForm | null>(null);
 
   // Every step change (and arrival: the organizer came from a link) focuses the h1 and announces the step.
@@ -126,11 +123,10 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   // Next: submit the step's own form when it has one, else just move on.
   const settingsStep = canEdit && !!form && (step.key === 'details' || step.key === 'payment');
   const nextForm =
-    step.key === 'start' && !form ? (canEdit ? START_FORM_ID : undefined) : settingsStep ? SETTINGS_FORM_ID : step.key === 'review' && canEdit ? REVIEW_FORM_ID : undefined;
+    step.key === 'start' && !form ? (canEdit ? START_FORM_ID : undefined) : settingsStep ? SETTINGS_FORM_ID : undefined;
   const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : finish;
   const nextLabel =
     step.key === 'start' && !form ? (busy ? 'Creating…' : 'Create form') : next || inWizard ? (busy ? 'Saving…' : 'Next') : busy ? 'Saving…' : 'Save and finish';
-  const guestSkip = flow === 'special-guests' && step.key === 'start' && !form;
 
   // Steps that shape the form preview the form: the saved one, or Start's draft before it exists.
   const previewing = !step.formAnchor
@@ -186,10 +182,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           {step.key === 'lineup' && <GuestLineupEditor orgId={f.orgId ?? ''} eventId={eventId} refreshPreview={f.refreshPreview} />}
           {step.key === 'start' && !form && canEdit && (
             <StartFormStep
-              config={config}
-              live={(flow === 'registration' ? [] : formsOnStep(flow, f.forms.forms))
-                .filter((x) => x.status !== 'CLOSED')
-                .map((x) => ({ purpose: x.purpose ?? 'OTHER', name: x.name, href: formEditHref(eventId, x, f.orgId) }))}
               onBusyChange={setBusy}
               onDraftChange={setDraft}
               eventName={event.name}
@@ -200,28 +192,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             <p className={hintClass}>
               {form.name} is set up. Continue to its details, or go back to the event to add another.
             </p>
-          )}
-          {form && step.key === 'details' && flow === 'other-applications' && (
-            <div>
-              <label htmlFor="flow-form-purpose" className={labelClass}>What is this form for?</label>
-              <select
-                id="flow-form-purpose"
-                value={form.purpose ?? 'OTHER'}
-                disabled={!canEdit || !!form.purposeLocked}
-                aria-describedby={form.purposeLocked ? 'flow-form-purpose-lock' : undefined}
-                onChange={(e) => void run('Purpose saved.', () => api.updateForm(form.id, { purpose: e.target.value }))}
-                className={inputClass}
-              >
-                {config.purposes.map((p) => (
-                  <option key={p} value={p}>{PURPOSE_LABEL[p]}</option>
-                ))}
-              </select>
-              {form.purposeLocked && (
-                <p id="flow-form-purpose-lock" className={hintClass}>
-                  Fixed: this form already has applications.
-                </p>
-              )}
-            </div>
           )}
           {form && (step.key === 'details' || step.key === 'payment') && (
             <SettingsCard
@@ -257,26 +227,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onToggleBuiltIn={(patch) => run('Fields saved.', async () => f.forms.upsert(await api.updateForm(form.id, patch))).then(noop)}
             />
           )}
-          {form && step.key === 'review' && (
-            <ReviewFormStep
-              form={form}
-              steps={list}
-              stepHref={(key) => f.href(key)}
-              canEdit={canEdit}
-              eventDraft={event.status === 'DRAFT'}
-              onSaveStatus={saveAndContinue}
-              onRemove={async (action) => {
-                if (action === 'close') return void (await run(`${form.name} closed.`, () => api.updateForm(form.id, { status: 'CLOSED' })));
-                // No reload: the form is gone, and this flow would restart without it.
-                try {
-                  await api.deleteForm(form.id);
-                  f.exit(true);
-                } catch (err) {
-                  setError((err as Error)?.message || "Couldn't delete the form");
-                }
-              }}
-            />
-          )}
         </div>
       </div>
     );
@@ -298,8 +248,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
         show && (
           <SetupFooter
             onBack={prev ? () => f.go(prev.key) : inWizard ? () => f.toEventStep('image') : undefined}
-            onSkip={guestSkip ? () => f.exit(true) : undefined}
-            skipLabel="Finish without a form"
             onNext={onNext}
             nextForm={nextForm}
             nextLabel={nextLabel}

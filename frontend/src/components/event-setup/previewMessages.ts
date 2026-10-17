@@ -47,14 +47,12 @@ export interface PreviewMessage {
 export interface DraftForm {
   name: string;
   kind: PublicForm['kind'];
-  purpose: NonNullable<PublicForm['purpose']>;
 }
 
 export function draftPreviewForm(draft: DraftForm, organizationName?: string | null): PublicForm {
   return {
     id: 'draft',
     kind: draft.kind,
-    purpose: draft.purpose,
     name: draft.name.trim() || 'Untitled application',
     slug: 'draft',
     intro: null,
@@ -80,7 +78,6 @@ export function previewForm(form: AdminForm, overlay: { name?: string; intro?: s
   return {
     id: form.id,
     kind: form.kind,
-    purpose: form.purpose,
     name: overlay.name?.trim() || form.name,
     buttonLabel: overlay.buttonLabel !== undefined ? overlay.buttonLabel : form.buttonLabel ?? null,
     slug: form.slug,

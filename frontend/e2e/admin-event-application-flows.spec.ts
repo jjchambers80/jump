@@ -31,10 +31,9 @@ const EVENT = {
 let seq = 0;
 function form(patch: Record<string, any> = {}) {
   const id = patch.id ?? `form-${++seq}`;
-  const purpose = patch.purpose ?? 'OTHER';
   const paid = patch.kind === 'PAID';
   return {
-    id, eventId: EVENT_ID, kind: 'FREE', purpose, name: 'Form', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
+    id, eventId: EVENT_ID, kind: 'FREE', name: 'Form', slug: id, intro: null, status: 'DRAFT', opensAt: null, closesAt: null,
     chargeTiming: 'APPROVAL', feeMode: 'PASS', taxable: false, paymentDueDays: 7, overduePolicy: 'WITHDRAW', reserveOnApproval: true,
     spaceSelection: paid ? 'TIERS' : null, displayOrder: 0, createdFromTemplateId: null, acceptance: { accepting: true, reason: null },
     paymentsEnabled: true, applicationCount: 0, collectBusiness: false, collectName: false, tiers: [], addOns: [],
@@ -119,7 +118,7 @@ test.beforeAll(async ({ browser }) => {
   test.setTimeout(180000);
   const page = await browser.newPage({ baseURL: BASE_URL, viewport: { width: 1440, height: 900 } });
   await signInAsStaff(page, STAFF, BASE_URL);
-  await mockApi(page, [form({ id: 'warm', purpose: 'VENDOR', kind: 'PAID', name: 'Warm-up' })]);
+  await mockApi(page, [form({ id: 'warm', kind: 'PAID', name: 'Warm-up' })]);
   for (const url of [flowUrl('registration', 'step=details&form=warm'), `/admin/events/${EVENT_ID}/setup?step=name`]) {
     await page.goto(url, { timeout: 120000 });
     await expect(page.locator('main h1')).toBeVisible({ timeout: 120000 });
@@ -153,7 +152,7 @@ test.describe('desktop', () => {
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', purpose: 'OTHER', setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', setup: true });
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-/);
     await expect(heading(page, 'Form details')).toBeFocused();
     await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 8 of 13, Form details');
@@ -198,7 +197,7 @@ test.describe('desktop', () => {
   });
 
   test('the preview shows the form and follows what is typed; the device switch keeps it', async ({ page }) => {
-    const calls = await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths', intro: 'Bring a table.' })]);
+    const calls = await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths', intro: 'Bring a table.' })]);
     await page.goto(flowUrl('registration', 'step=details&form=form-paid'));
     await expect(heading(page, 'Form details')).toBeVisible(COLD);
     const pane = page.getByRole('region', { name: 'Live preview of the application form' });
@@ -221,7 +220,7 @@ test.describe('desktop', () => {
   });
 
   test('a registration event has one form: the flow opens it instead of starting another', async ({ page }) => {
-    const calls = await mockApi(page, [form({ id: 'form-live', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths', status: 'CLOSED' })]);
+    const calls = await mockApi(page, [form({ id: 'form-live', kind: 'PAID', name: 'Vendor booths', status: 'CLOSED' })]);
     await page.goto(flowUrl('registration'));
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-live/, COLD);
     await expect(heading(page, 'Form details')).toBeVisible();
@@ -244,7 +243,7 @@ test.describe('desktop', () => {
 
   test('Options and pricing: the preview is the registrant choosing a space; extras link to Collect more', async ({ page }) => {
     const tier = { id: 'tier-corner', name: 'Corner booth', description: 'Two sides open', price: 150, quantityTotal: 4, quantityApproved: 0, quantityReserved: 0, remaining: 4, displayOrder: 0, isActive: true, amounts: {}, addOns: [] };
-    await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths', tiers: [tier] })]);
+    await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths', tiers: [tier] })]);
     await page.goto(flowUrl('registration', 'step=options&form=form-paid'));
     await expect(main(page).getByTestId('form-tiers').getByRole('link', { name: 'Collect more step' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/setup?step=collect-more`, COLD);
     await expect(formPreview(page).getByTestId('choose-space')).toBeVisible(COLD);
@@ -259,7 +258,7 @@ test.describe('desktop', () => {
     await main(page).getByLabel('Name').fill('Crew sign-up');
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toMatchObject({ name: 'Crew sign-up', kind: 'FREE', purpose: 'OTHER' });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Crew sign-up', kind: 'FREE', setup: true });
     await expect(heading(page, 'Form details')).toBeVisible();
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeVisible();
@@ -281,7 +280,7 @@ test.describe('desktop', () => {
   });
 
   test('old application links on a registration event open its registration flow', async ({ page }) => {
-    await mockApi(page, [form({ id: 'form-sponsor', purpose: 'SPONSOR', name: 'Sponsors' })]);
+    await mockApi(page, [form({ id: 'form-sponsor', name: 'Sponsors' })]);
     await page.goto(flowUrl('vendors', 'step=details&form=form-sponsor'));
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-sponsor/, COLD);
     await expect(heading(page, 'Form details')).toBeVisible();
@@ -314,7 +313,7 @@ test.describe('desktop', () => {
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
       await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);
-      await mockApi(page, [form({ id: 'form-paid', purpose: 'VENDOR', kind: 'PAID', name: 'Vendor booths' })]);
+      await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths' })]);
       await page.goto(flowUrl('registration', 'step=options&form=form-paid'));
       await expect(main(page).getByTestId('form-tiers')).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);

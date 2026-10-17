@@ -28,8 +28,8 @@ describe('backfill-057-registration-events', () => {
     const date = new Date(Date.now() + 30 * 86_400_000);
     live = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Market`, date, status: 'PUBLISHED', capacity: 100, category: 'Market', taxRate: 0.0725 } });
     deleted = await prisma.event.create({ data: { venueId: venue.id, name: `${TAG} Old`, date, status: 'CANCELLED', capacity: 10, deletedAt: new Date() } });
-    vendors = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: live.id, kind: 'PAID', purpose: 'VENDOR', name: `${TAG} Vendors`, slug: 'vendors', status: 'OPEN' } });
-    volunteers = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: live.id, kind: 'FREE', purpose: 'VOLUNTEER', name: `${TAG} Helpers`, slug: 'helpers', status: 'DRAFT' } });
+    vendors = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: live.id, kind: 'PAID', name: `${TAG} Vendors`, slug: 'vendors', status: 'OPEN' } });
+    volunteers = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: live.id, kind: 'FREE', name: `${TAG} Helpers`, slug: 'helpers', status: 'DRAFT' } });
     orphan = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: deleted.id, kind: 'FREE', name: `${TAG} Old form`, slug: 'old', status: 'OPEN' } });
     tier = await prisma.applicationTier.create({ data: { formId: vendors.id, name: '10x10', price: 100, quantityTotal: 10 } });
 
