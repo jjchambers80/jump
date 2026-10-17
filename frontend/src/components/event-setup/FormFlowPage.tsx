@@ -19,10 +19,12 @@ import SetupFooter from './SetupFooter';
 import PreviewPane from './PreviewPane';
 import LoadingFields from './LoadingFields';
 import { PREVIEW_MESSAGE, draftPreviewForm, previewForm, type DraftForm } from './previewMessages';
-import { APPLICATION_STEPS, PURPOSE_LABEL, formsOnStep } from './applicationSteps';
+import { APPLICATION_STEPS, PURPOSE_LABEL, REGISTRATION_CONFIG, formsOnStep } from './applicationSteps';
 import { FORM_FLOWS, flowSteps, formEditHref, type FormFlowKey } from './formFlows';
 import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
+import { wizardProgress } from './steps';
+import { EMPTY_FIELDS } from './useSetupFlow';
 import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import ReviewFormStep, { REVIEW_FORM_ID } from './steps/ReviewFormStep';
 import FloorMapStep from './steps/FloorMapStep';
@@ -36,7 +38,7 @@ const noop = () => {};
 export default function FormFlowPage({ eventId, flow }: { eventId: string; flow: FormFlowKey }) {
   const f = useFormFlow(eventId, flow);
   const { form, step, list, at, event } = f;
-  const config = APPLICATION_STEPS[flow];
+  const config = flow === 'registration' ? REGISTRATION_CONFIG : APPLICATION_STEPS[flow];
   const api = useApplicationsApi(eventId);
   const canEdit = useCan('applications.forms');
   const maps = useCan('maps');
@@ -62,7 +64,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     setError(null);
     setNotice('');
     headingRef.current?.focus();
-    setAnnouncement(`Step ${at + 1} of ${list.length}, ${step.title}`);
+    setAnnouncement(`Step ${progress.index} of ${progress.total}, ${step.title}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.key, show]);
   useEffect(() => {
@@ -71,6 +73,12 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
 
   const prev = at > 0 ? list[at - 1] : null;
   const next = at < list.length - 1 ? list[at + 1] : null;
+  // Spec 057: a registration event's flow sits inside its event wizard, between Image and Collect more.
+  const inWizard = flow === 'registration';
+  const finish = () => (inWizard ? f.toEventStep('collect-more') : f.exit(true));
+  const progress = inWizard && event
+    ? wizardProgress({ saved: event, fields: EMPTY_FIELDS, zone: null, savedZone: null, forms: f.forms.forms }, null, at, list.length)
+    : { index: at + 1, total: list.length };
   const saved = () => {
     f.forms.reload();
     f.refreshPreview();
@@ -104,7 +112,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     const steps = flowSteps(flow, updated, { maps });
     const after = steps[steps.findIndex((s) => s.key === step.key) + 1];
     if (after) f.go(after.key);
-    else f.exit(true);
+    else finish();
   };
   const create = async (body: NewFormBody) => {
     const created = await api.createForm({ ...body, setup: true });
@@ -119,8 +127,9 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const settingsStep = canEdit && !!form && (step.key === 'details' || step.key === 'payment');
   const nextForm =
     step.key === 'start' && !form ? (canEdit ? START_FORM_ID : undefined) : settingsStep ? SETTINGS_FORM_ID : step.key === 'review' && canEdit ? REVIEW_FORM_ID : undefined;
-  const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : () => f.exit(true);
-  const nextLabel = step.key === 'start' && !form ? (busy ? 'Creating…' : 'Create form') : next ? (busy ? 'Saving…' : 'Next') : busy ? 'Saving…' : 'Save and finish';
+  const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : finish;
+  const nextLabel =
+    step.key === 'start' && !form ? (busy ? 'Creating…' : 'Create form') : next || inWizard ? (busy ? 'Saving…' : 'Next') : busy ? 'Saving…' : 'Save and finish';
   const guestSkip = flow === 'special-guests' && step.key === 'start' && !form;
 
   // Steps that shape the form preview the form: the saved one, or Start's draft before it exists.
@@ -178,7 +187,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           {step.key === 'start' && !form && canEdit && (
             <StartFormStep
               config={config}
-              live={formsOnStep(flow, f.forms.forms)
+              live={(flow === 'registration' ? [] : formsOnStep(flow, f.forms.forms))
                 .filter((x) => x.status !== 'CLOSED')
                 .map((x) => ({ purpose: x.purpose ?? 'OTHER', name: x.name, href: formEditHref(eventId, x, f.orgId) }))}
               onBusyChange={setBusy}
@@ -192,7 +201,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               {form.name} is set up. Continue to its details, or go back to the event to add another.
             </p>
           )}
-          {form && step.key === 'details' && flow === 'other-applications' && (
+          {form && step.key === 'details' && (flow === 'other-applications' || flow === 'registration') && (
             <div>
               <label htmlFor="flow-form-purpose" className={labelClass}>What is this form for?</label>
               <select
@@ -236,7 +245,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onSetAddOns={(tierId, ids) => run('Add-ons saved.', () => api.setTierAddOns(form.id, tierId, ids)).then(noop)}
             />
           )}
-          {form && step.key === 'floor-map' && <FloorMapStep eventId={eventId} returnTo={f.href('floor-map')} refreshPreview={f.refreshPreview} onMapStatus={noop} />}
+          {form && step.key === 'floor-map' && <FloorMapStep eventId={(inWizard && event?.linkedEventId) || eventId} returnTo={f.href('floor-map')} refreshPreview={f.refreshPreview} onMapStatus={noop} />}
           {form && step.key === 'questions' && (
             <QuestionsCard
               form={form}
@@ -284,11 +293,11 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           onExit={() => f.exit()}
         />
       }
-      progress={show && <SetupProgress index={at + 1} total={list.length} />}
+      progress={show && <SetupProgress index={progress.index} total={progress.total} />}
       footer={
         show && (
           <SetupFooter
-            onBack={prev ? () => f.go(prev.key) : undefined}
+            onBack={prev ? () => f.go(prev.key) : inWizard ? () => f.toEventStep('image') : undefined}
             onSkip={guestSkip ? () => f.exit(true) : undefined}
             skipLabel="Finish without a form"
             onNext={onNext}

@@ -8,7 +8,8 @@
 import type { FormPurpose } from '@/lib/applications';
 import { isApplicationStep, stepForPurpose, type ApplicationStepKey } from './applicationSteps';
 
-export type FormFlowKey = ApplicationStepKey;
+/** Spec 057: `registration` is a registration event's one form, set up inside its event wizard. */
+export type FormFlowKey = ApplicationStepKey | 'registration';
 export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
@@ -35,6 +36,8 @@ export interface FlowStep {
 const always = () => true;
 const paid = (form: FlowForm | null) => !form || form.kind === 'PAID';
 const onMap = (form: FlowForm | null) => !!form && form.spaceSelection === 'MAP';
+/** Spec 057: a registration form starts free, so before it exists it counts as free. */
+const paidForm = (form: FlowForm | null) => !!form && form.kind === 'PAID';
 
 const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowStep> = {}): FlowStep => ({
   key, title, intro, needsForm: key !== 'start' && key !== 'lineup', visible: always, anchor: 'get-involved', formAnchor: null, ...rest,
@@ -80,13 +83,28 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
     title: 'Application',
     steps: [s('start', 'Start an application', 'Sponsors, press, panels and anything else people apply for.', { formAnchor: 'apply-top' }), details, questions, review],
   },
+  // Spec 057: between the event's Image and Collect more steps; the event wizard's Review publishes.
+  registration: {
+    title: 'Registration form',
+    steps: [
+      s('start', 'Who registers?', 'Vendors, sponsors, volunteers or anyone you choose. Decide if they pay.', { formAnchor: 'apply-top' }),
+      details,
+      s('options', 'Options and pricing', 'What registrants can be approved for: a price and a number of spots for each.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
+      s('payment', 'How registrants choose and pay', 'Registration is free. Once you approve someone, they choose and pay.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
+      s('floor-map', 'Floor map', 'Registrants pick their spot on the floor map of the event this is for.', { visible: onMap, anchor: 'floor-map' }),
+      questions,
+    ],
+  },
 };
 
-export const isFormFlow = isApplicationStep;
+export const isFormFlow = (key: string): key is FormFlowKey => key === 'registration' || isApplicationStep(key);
 
-/** `maps: false` (Maps off or hidden for the role) drops the floor-map step. */
-export const flowSteps = (flow: FormFlowKey, form: FlowForm | null, { maps = true } = {}) =>
-  FORM_FLOWS[flow].steps.filter((step) => step.visible(form) && (maps || step.key !== 'floor-map'));
+/**
+ * `maps: false` (Maps off or hidden for the role) drops the floor-map step, and so does
+ * `mapEvent: false`: a registration event not linked to a live event has no map to sell.
+ */
+export const flowSteps = (flow: FormFlowKey, form: FlowForm | null, { maps = true, mapEvent = true } = {}) =>
+  FORM_FLOWS[flow].steps.filter((step) => step.visible(form) && ((maps && mapEvent) || step.key !== 'floor-map'));
 
 /** `/admin/events/<id>/setup/<flow>?step=&form=&org=`. */
 export function formFlowHref(
@@ -102,9 +120,13 @@ export function formFlowHref(
   return `/admin/events/${encodeURIComponent(eventId)}/setup/${flow}${q ? `?${q}` : ''}`;
 }
 
-/** The flow that edits a form, at Form details. */
-export const formEditHref = (eventId: string, form: { id: string; purpose?: FormPurpose | null }, org?: string | null) =>
-  formFlowHref(eventId, stepForPurpose(form.purpose), { form: form.id, step: 'details', org });
+/** The flow that edits a form, at Form details. A registration event's form is its `registration` flow (spec 057). */
+export const formEditHref = (
+  eventId: string,
+  form: { id: string; purpose?: FormPurpose | null },
+  org?: string | null,
+  eventType?: 'LIVE' | 'REGISTRATION'
+) => formFlowHref(eventId, eventType === 'REGISTRATION' ? 'registration' : stepForPurpose(form.purpose), { form: form.id, step: 'details', org });
 
 /**
  * The event wizard's old application step keys (spec 050), still in emails,

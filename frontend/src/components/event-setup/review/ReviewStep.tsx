@@ -152,7 +152,7 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         }
       />
       <BrandSummary />
-      <DonationSuggestion eventId={saved.id} />
+      {saved.type !== 'REGISTRATION' && <DonationSuggestion eventId={saved.id} />}
       <ReviewActions
         status={saved.status}
         createMode={createMode}

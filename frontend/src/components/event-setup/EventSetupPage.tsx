@@ -14,7 +14,8 @@ import SetupFooter from './SetupFooter';
 import SaveIndicator from './SaveIndicator';
 import PreviewPane from './PreviewPane';
 import StepContent from './StepContent';
-import { type StepKey } from './steps';
+import { registrationFlowSteps, wizardProgress, type StepKey } from './steps';
+import { useCan } from '@/components/OrgContext';
 import { useSetupFlow } from './useSetupFlow';
 import { useSetupActions } from './useSetupActions';
 import { focusAfterStepChange, takeStepFocus } from './stepFocus';
@@ -50,8 +51,11 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const [announcement, setAnnouncement] = useState('');
   const firstStep = useRef(true);
 
+  // One count across a registration event's steps and its form flow (spec 057).
+  const maps = useCan('maps');
+  const progress = wizardProgress(ctx, current, 0, registrationFlowSteps(ctx, { maps }).length);
   // Edit mode is non-linear (050-O): no "Step n of N", just the step's name.
-  const position = mode === 'edit' ? 'Editing' : `Step ${at + 1} of ${list.length}`;
+  const position = mode === 'edit' ? 'Editing' : `Step ${progress.index} of ${progress.total}`;
   // Step change: focus the h1 (or the field an error link named) and announce
   // the step (§11.4). Not on a plain first load, but after the create, which
   // remounts this page on the event's own route.
@@ -152,7 +156,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
       }
       progress={
         ready && !done && (
-          <SetupProgress index={at + 1} total={list.length} />
+          <SetupProgress index={progress.index} total={progress.total} />
         )
       }
       footer={

@@ -7,6 +7,8 @@ import type { FormPurpose } from './applications';
 
 export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
 export type AdmissionMode = 'TICKETED' | 'RSVP';
+/** Spec 057: LIVE = tickets or RSVPs (admissionMode); REGISTRATION = one application form. */
+export type EventType = 'LIVE' | 'REGISTRATION';
 
 export interface OverviewTier {
   id: string;
@@ -46,6 +48,10 @@ export interface OverviewEvent {
   /** Spec 050-D: published but checkout, RSVPs and new applications are off. */
   salesClosed?: boolean;
   salesClosedAt?: string | null;
+  /** Spec 057; older payloads omit it (LIVE). */
+  type?: EventType;
+  /** Spec 057: the live event a registration event is for. */
+  linkedEventId?: string | null;
   admissionMode: AdmissionMode;
   rsvpLimit: number | null;
   rsvpMaxPartySize: number;

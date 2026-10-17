@@ -71,7 +71,7 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
   // Spec 057: a registration event uses the floor map of the live event it is for.
   const floorMap = registration ? event.linkedEvent?.floorMap : event.floorMap;
   if (mapForm && floorMap?.status !== 'PUBLISHED') {
-    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
+    warnings.push(item('MAP_FORM_WITHOUT_PUBLISHED_MAP', registration ? 'registration' : 'floor-map', 'Vendors choose spots on the floor map, but the map is not published.', { formId: mapForm.id }));
   }
   if (taxError) warnings.push(item('TAX_RATE_UNRESOLVED', 'review', `Sales tax could not be looked up: ${taxError}`));
 

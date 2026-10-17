@@ -21,7 +21,7 @@ function normalizeSlug(req, next) {
  * old step keys are gone; a row that still holds one resumes at review.
  */
 export const EVENT_SETUP_STEPS = [
-  'name', 'venue', 'date', 'description', 'image', 'tickets', 'collect-more', 'review', 'done',
+  'type', 'name', 'venue', 'date', 'description', 'image', 'tickets', 'registration', 'collect-more', 'review', 'done',
 ];
 
 const isInstant = (value) => typeof value === 'string' && !isNaN(new Date(value).getTime());

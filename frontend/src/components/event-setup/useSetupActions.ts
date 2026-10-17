@@ -8,7 +8,10 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import { clearSessionDraft, ensureRequestKey } from './sessionDraft';
-import { FIELD_IDS, sameInstant, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
+import { FIELD_IDS, eventTypeOf, registrationFlowSteps, sameInstant, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
+import { formFlowHref } from './formFlows';
+import { LINKED_EVENT_FIELD } from './steps/LinkedEventField';
+import { useCan } from '@/components/OrgContext';
 import { focusAfterStepChange } from './stepFocus';
 import type { SetupFlow } from './useSetupFlow';
 import { toSaved } from './useSetupData';
@@ -20,6 +23,7 @@ const SERVER_FIELDS: Record<string, string> = {
   venueId: FIELD_IDS.venueId,
   date: FIELD_IDS.date,
   endDate: FIELD_IDS.endDate,
+  linkedEventId: LINKED_EVENT_FIELD,
 };
 
 /** API error → summary entries; a taken URL sends the organizer back to the Name step. */
@@ -69,6 +73,7 @@ const clientErrors = (ctx: SetupFlow['ctx']) =>
 export function useSetupActions(flow: SetupFlow) {
   const { orgId, ctx, current, step, list, at, saveState, router, urlFor, fields, iso, mode } = flow;
   const saved = ctx.saved;
+  const maps = useCan('maps');
   const [showErrors, setShowErrors] = useState(false);
   const [apiErrors, setApiErrors] = useState<FieldError[]>([]);
   const [creating, setCreating] = useState(false);
@@ -109,12 +114,15 @@ export function useSetupActions(flow: SetupFlow) {
     setCreating(true);
     const requestKey = ensureRequestKey(orgId, { ...fields, step: 'date' });
     const sent = { name: fields.name.trim(), venueId: fields.venueId, date: iso.date, endDate: iso.endDate };
+    const type = eventTypeOf(ctx);
     try {
       const created = await api.post<CreatedRow>(
         `/organizations/${orgId}/events`,
         {
           setup: true, name: sent.name, slug: fields.slug || undefined, venueId: sent.venueId,
           date: sent.date, ...(sent.endDate ? { endDate: sent.endDate } : {}), admissionMode: 'TICKETED',
+          // Spec 057: the type chosen on step 1, and a registration's live event.
+          type, ...(type === 'REGISTRATION' && fields.linkedEventId ? { linkedEventId: fields.linkedEventId } : {}),
         },
         { headers: { 'Idempotency-Key': requestKey } }
       );
@@ -173,7 +181,16 @@ export function useSetupActions(flow: SetupFlow) {
     go,
     onNext,
     onExit,
-    onBack: prev ? () => go(prev.key) : undefined,
+    // Back from Collect more into a registration event's form flow lands on its last step.
+    onBack: prev
+      ? prev.key === 'registration' && saved
+        ? () => {
+            if (saved.status === 'DRAFT') void saveState.flush();
+            const last = registrationFlowSteps(ctx, { maps }).at(-1);
+            router.push(formFlowHref(saved.id, 'registration', { form: ctx.forms?.[0]?.id, step: ctx.forms?.[0] ? last?.key : undefined }));
+          }
+        : () => go(prev.key)
+      : undefined,
     onSkip: next && step.rule !== 'R' && !step.complete(ctx) ? () => go(next.key) : undefined,
     onSave: saved && saved.status === 'PUBLISHED' ? () => void saveState.flush() : undefined,
     nextLabel: creating ? 'Creating…' : next ? 'Next' : 'Save & exit',
