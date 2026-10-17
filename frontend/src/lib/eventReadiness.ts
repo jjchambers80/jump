@@ -46,7 +46,12 @@ export function readinessHref(item: ReadinessItem, eventId: string, orgId: strin
   // Application items name the spec 050 step; the form is fixed in its flow (spec 051).
   if (FORMER_STEPS.has(item.step)) {
     const flow = item.step === 'floor-map' ? 'vendors' : (item.step as FormFlowKey);
-    return formFlowHref(eventId, flow, { form: item.formId, step: item.formId ? (item.step === 'floor-map' ? 'floor-map' : 'details') : undefined, org: orgId });
+    const at = item.step === 'floor-map' ? 'floor-map' : item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : 'details';
+    return formFlowHref(eventId, flow, { form: item.formId, step: item.formId ? at : undefined, org: orgId });
+  }
+  // Spec 057: a registration event's form items open its flow; a paid form without options opens Options and pricing.
+  if (item.step === 'registration' && item.formId) {
+    return formFlowHref(eventId, 'registration', { form: item.formId, step: item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : 'details', org: orgId });
   }
   const org = orgId ? `&org=${encodeURIComponent(orgId)}` : '';
   return `/admin/events/${eventId}/setup?step=${encodeURIComponent(item.step)}${org}`;

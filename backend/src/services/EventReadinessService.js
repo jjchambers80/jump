@@ -65,6 +65,10 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     if (form.kind === 'PAID' && !gateOn) {
       warnings.push(item('PAID_FORMS_DISABLED', step, `${form.name} charges applicants, and paid applications are not available yet. It stays closed.`, { formId: form.id }));
     }
+    // A paid form opens only with an active option to approve people into (ApplicationFormService._assertCanOpen).
+    if (form.kind === 'PAID' && !(form.tiers || []).some((t) => t.isActive)) {
+      warnings.push(item('PAID_FORM_NO_OPTIONS', step, `${form.name} charges, but has no options yet. Add one so it can open.`, { formId: form.id }));
+    }
     if (!form._count?.questions) {
       warnings.push(item('FORM_HAS_NO_QUESTIONS', step, `${form.name} has no questions.`, { formId: form.id }));
     }
@@ -94,7 +98,7 @@ class EventReadinessService {
         priceTiers: true,
         floorMap: { select: { status: true } },
         linkedEvent: { select: { floorMap: { select: { status: true } } } },
-        applicationForms: { include: { _count: { select: { questions: { where: { archivedAt: null } } } } } },
+        applicationForms: { include: { tiers: { select: { isActive: true } }, _count: { select: { questions: { where: { archivedAt: null } } } } } },
       },
     });
     if (!event) throw new NotFoundError('Event not found');

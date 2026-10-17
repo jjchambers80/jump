@@ -12,7 +12,7 @@ const STATUS: Record<OverviewForm['status'], string> = { DRAFT: 'Draft', OPEN: '
 
 /** Why a draft form can't open on publish, from the readiness warnings; null when it can. */
 export function formLockReason(form: OverviewForm, warnings: ReadinessItem[]): string | null {
-  return warnings.find((w) => w.code === 'PAID_FORMS_DISABLED' && w.formId === form.id)?.message ?? null;
+  return warnings.find((w) => (w.code === 'PAID_FORMS_DISABLED' || w.code === 'PAID_FORM_NO_OPTIONS') && w.formId === form.id)?.message ?? null;
 }
 
 interface Props {
