@@ -4,7 +4,7 @@
 // is derived from the name on the server; organizers never see or edit it.
 // Client state until the date step creates the row; a PATCH after that.
 
-import { SALES_FIELD_IDS } from '../contentSteps';
+import { EVENT_CATEGORIES, SALES_FIELD_IDS } from '../contentSteps';
 import { FIELD_IDS } from '../steps';
 import { describedBy, errorText, hintClass, inputClass, labelClass } from '../ui';
 import type { StepFormProps } from './types';
@@ -14,6 +14,9 @@ export default function NameStep({ fields, onChange, errors }: StepFormProps) {
   const id = FIELD_IDS.name;
   const categoryId = SALES_FIELD_IDS.category;
   const categoryError = errors[categoryId];
+  const category = fields.category ?? '';
+  // An event saved before the list keeps its own value as an extra option.
+  const legacyCategory = category && !(EVENT_CATEGORIES as readonly string[]).includes(category) ? category : null;
 
   return (
     <div className="space-y-5">
@@ -46,17 +49,22 @@ export default function NameStep({ fields, onChange, errors }: StepFormProps) {
         <label htmlFor={categoryId} className={labelClass}>
           Category (optional)
         </label>
-        <input
+        <select
           id={categoryId}
-          type="text"
-          value={fields.category ?? ''}
+          value={category}
           onChange={(e) => onChange({ category: e.target.value })}
-          placeholder="e.g. Music, Sports, Conference"
-          maxLength={100}
           aria-invalid={!!categoryError || undefined}
           aria-describedby={describedBy(categoryId, { hint: true, error: categoryError })}
           className={inputClass}
-        />
+        >
+          <option value="">No category</option>
+          {legacyCategory && <option value={legacyCategory}>{legacyCategory}</option>}
+          {EVENT_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
         <p id={`${categoryId}-hint`} className={hintClass}>
           Helps people find the event in listings.
         </p>
