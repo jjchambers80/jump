@@ -110,10 +110,11 @@ test('application forms show as short links in the event header', async ({ page 
   await page.goto(`/events/${EVENT_ID}`);
 
   const links = page.getByTestId('get-involved');
-  const vendor = links.getByRole('link', { name: /Become a vendor/ });
+  const vendor = links.getByRole('link', { name: '2026 Ticket Tiers Vendor Application' });
   await expect(vendor).toBeVisible({ timeout: 30000 });
   await expect(vendor).toHaveAttribute('href', `/events/${EVENT_ID}/apply/vendors`);
-  await expect(vendor).toHaveAccessibleName('Become a vendor: 2026 Ticket Tiers Vendor Application');
+  // A stored button label is ignored: the pill is the form name.
+  await expect(vendor).toHaveText('2026 Ticket Tiers Vendor Application');
   // Closed forms stay visible with their status but are not links
   await expect(links).toContainText('Sponsorship Packages');
   await expect(links).toContainText('Closed');
