@@ -70,8 +70,8 @@ export default function GetInvolved({
               </span>
             ) : (
               <Link
-                // Spec 057: a linked registration event's form lives on that event.
-                href={`/events/${form.eventId ?? eventId}/apply/${form.slug}`}
+                // Spec 057: a linked registration event's form is that event's page.
+                href={form.eventId && form.eventId !== eventId ? `/events/${form.eventId}` : `/events/${eventId}/apply/${form.slug}`}
                 aria-label={label === form.name ? undefined : `${label}: ${form.name}`}
                 title={form.name}
                 className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm shadow-black/20 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/60"
