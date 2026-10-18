@@ -1,7 +1,7 @@
 # Registration Events
 
 **Status**: Implemented (spec 057, PRs #480–#484)
-**Last Updated**: 2026-10-17
+**Last Updated**: 2026-10-18
 
 ## Overview
 "Create event" is one wizard for two types. A **live event** sells tickets or takes RSVPs. A **registration event** is a page with one form that vendors, sponsors, volunteers or anyone the organizer chooses register through, free or with a fee. A registration event can be **for** a live event (the vendors of a market): it then sells spots on that event's floor map, fills its special guest lineup, and shows on its page as a Get involved pill. Application forms no longer sit on live events.
@@ -35,13 +35,13 @@ None. Registration events are part of the **`events`** catalog feature; creating
 
 ### Creating one
 1. **What do you want to create?** Live event or Registration event. `/admin/events/new?type=registration&linked=<id>` (the live event's Create registration event button) preselects both. The type is browser state until the event exists and fixed after.
-2. **Name**, with **Registering for** (optional live event; an empty venue and date are filled from it).
-3. **Venue**, 4. **Date** — the date step creates the event (`setup: true`, `type`, `linkedEventId`).
-5. **Description**, 6. **Image**.
-7. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge, creates the form; no type to pick, the form is generic) → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
-8. **Collect more** (extras like power or tables), 9. **Review** publishes the event and opens the form.
+2. **Name**, with an optional **Category** and **Registering for** (optional live event; an empty venue and date are filled from it).
+3. **Venue**, 4. **Date** — the date step creates the event (`setup: true`, `type`, `linkedEventId`, `category`) and opens **Image**.
+5. **Image**. There is no **Describe it** step (PR #496): what registrants read is the form's intro on **Form details**, so the event-level description would be a second one.
+6. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge, creates the form; no type to pick, the form is generic) → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
+7. **Collect more** (extras like power or tables), 8. **Review** publishes the event and opens the form.
 
-One progress bar counts all of it (`wizardProgress`): a free form reads 11 steps, a paid one 13.
+One progress bar counts all of it (`wizardProgress`): a free form reads 10 steps, a paid one 12.
 
 ### Pages
 - **Admin event page** (same hero, tabs and cards as a live event): stats Registrations · To review · Approved · Collected; the Registration form card; description; Date & venue; Registering for. Tabs: Overview · Registrations · Map (the linked event's) · Door check-in · History.
@@ -71,6 +71,7 @@ One progress bar counts all of it (`wizardProgress`): a free form reads 11 steps
 - One form per registration event. The `registration` flow opens the existing form; there is no Review step in it — the event wizard's Review publishes.
 - The backend still accepts a form on a live event (MCP, CLI, old contract fixtures); the UI no longer offers it. Refusing it is a follow-up.
 - Backfill tests must pass `organizationId` to `run()`: the suites share one database.
+- `DESCRIBE_STEP` is hidden for registration events, so a link to `setup?step=description` on one resumes at the next visible step. **Category** has one home for every type: the Name step (Details › Edit listing and old `#event-listing` / `#event-category` links open it). Never add it back to Describe.
 
 ## Related Features
 - [Event Setup Wizard](event-setup-wizard.md) · [Application Setup Flows](application-setup-flows.md) · [Applications](applications.md)
