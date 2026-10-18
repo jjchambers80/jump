@@ -52,9 +52,8 @@ test('a registration event offers its form with one Register button', async ({ p
   await mock(page);
   await page.goto(`/events/${REG_ID}`);
   const register = page.locator('#register');
-  await expect(register.getByRole('heading', { name: 'Register' })).toBeVisible({ timeout: 30000 });
-  await expect(register.getByText('Registering is free. Once approved, you choose and pay.')).toBeVisible();
-  await expect(register.getByRole('link', { name: /Register.*Vendor registration/ })).toHaveAttribute('href', `/events/${REG_ID}/apply/vendors`);
+  await expect(register.getByRole('link', { name: /Register.*Vendor registration/ })).toHaveAttribute('href', `/events/${REG_ID}/apply/vendors`, { timeout: 30000 });
+  await expect(register.getByText('Registering is free. Once approved, you choose and pay.')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'About this event' })).toBeVisible();
   await expect(page.locator('.jump-prose:visible strong')).toHaveText('load-in at 8am');
   // No tickets, cart, RSVP pass, Event Information dialog or Get involved pills.

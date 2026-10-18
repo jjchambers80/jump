@@ -1,7 +1,7 @@
 'use client';
 
 // A registration event's page body (spec 057): what it is about, then its
-// form with one Register button. Registering goes through the existing apply
+// form's one Register button, sticky at the bottom of the screen. Registering goes through the existing apply
 // pages; an approved registrant of a paid form chooses and pays from the
 // status page, as before. Brand tokens only (gotcha 6).
 
@@ -30,58 +30,38 @@ export default function EventRegister({ event, preview = false }: { event: Event
     };
   }, [event.id, event.previewForms]);
 
+  // One form per registration event (409 FORM_EXISTS), so one button.
+  const form = forms?.[0];
+  const closed = form && !preview ? acceptanceLine(form.acceptance) : null;
+  const BUTTON = 'flex min-h-14 w-full items-center justify-center gap-2 rounded-full px-6 text-lg font-bold shadow-lg';
+
   return (
     <div className="space-y-8">
       {(event.description || preview) && <EventAbout description={event.description} />}
-      <section id="register" aria-labelledby="register-heading" className="scroll-mt-6">
-        <h2 id="register-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-slate-400">
-          Register
-        </h2>
+      {/* Sticky in the page body: the card drops overflow-hidden for it (EventPageView) */}
+      <section id="register" aria-label="Register" className="sticky bottom-4 z-30 scroll-mt-6">
         {forms === null ? (
-          <div aria-busy="true" aria-label="Loading the registration form" className="h-28 animate-pulse rounded-2xl bg-gray-100 motion-reduce:animate-none dark:bg-slate-700/60" />
-        ) : forms.length === 0 ? (
+          <div aria-busy="true" aria-label="Loading the registration form" className="h-14 animate-pulse rounded-full bg-gray-100 motion-reduce:animate-none dark:bg-slate-700/60" />
+        ) : !form ? (
           <p className="text-base text-gray-600 dark:text-slate-300">
             {preview ? <Placeholder>Set up the registration form</Placeholder> : 'Registration is not open yet.'}
           </p>
+        ) : closed ? (
+          <span className={`${BUTTON} bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300`}>{closed}</span>
+        ) : preview ? (
+          <span className={`${BUTTON} bg-brand text-brand-fg`}>
+            Register
+            <ArrowRight className="h-5 w-5" aria-hidden />
+          </span>
         ) : (
-          <ul className="space-y-3">
-            {forms.map((form) => {
-              const closed = preview ? null : acceptanceLine(form.acceptance);
-              return (
-                <li key={form.id} className="rounded-2xl p-5 ring-1 ring-inset ring-gray-200 dark:ring-slate-700">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-lg font-bold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{form.name}</p>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-                        {form.kind === 'PAID'
-                          ? 'Registering is free. Once approved, you choose and pay.'
-                          : 'Free to register. The organizer reviews each one.'}
-                      </p>
-                    </div>
-                    {closed ? (
-                      <span className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-gray-100 px-5 text-sm font-semibold text-gray-600 dark:bg-slate-700 dark:text-slate-300">
-                        {closed}
-                      </span>
-                    ) : preview ? (
-                      <span className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-brand px-5 text-sm font-semibold text-brand-fg">
-                        Register
-                        <ArrowRight className="h-4 w-4" aria-hidden />
-                      </span>
-                    ) : (
-                      <Link
-                        href={`/events/${event.id}/apply/${form.slug}`}
-                        className="group inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-brand px-5 text-sm font-semibold text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
-                      >
-                        Register
-                        <span className="sr-only">: {form.name}</span>
-                        <ArrowRight className="h-4 w-4 motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" aria-hidden />
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <Link
+            href={`/events/${event.id}/apply/${form.slug}`}
+            className={`group ${BUTTON} bg-brand text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800`}
+          >
+            Register
+            <span className="sr-only">: {form.name}</span>
+            <ArrowRight className="h-5 w-5 motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" aria-hidden />
+          </Link>
         )}
       </section>
     </div>
