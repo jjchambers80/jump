@@ -65,6 +65,12 @@ describe('EventReadinessService.evaluate', () => {
     expect(result.warnings).toEqual([expect.objectContaining({ code, step })]);
   });
 
+  it('a registration event reads its form intro, not the hidden event description', () => {
+    const reg = (intro) => run(ready({ type: 'REGISTRATION', description: null, applicationForms: [form({ id: 'f1', intro })] }), { paymentsEnabled: true });
+    expect(codes(reg('<p>Vendors welcome</p>').warnings)).not.toContain('NO_DESCRIPTION');
+    expect(reg('').warnings).toContainEqual(expect.objectContaining({ code: 'NO_DESCRIPTION', step: 'registration', formId: 'f1' }));
+  });
+
   it('warns per PAID form while the payments gate is off, never blocking', () => {
     const forms = [form({ id: 'p1', kind: 'PAID' }), form({ id: 'p2', kind: 'PAID' }), form({ id: 'free' })];
     const off = run(ready({ applicationForms: forms }));
