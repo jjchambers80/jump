@@ -1,7 +1,8 @@
 'use client';
 
-// A registration event's page body (spec 057): what it is about, then its
-// form's one Register button, sticky at the bottom of the screen. Registering goes through the existing apply
+// A registration event's page body (spec 057): only its form's one Register
+// button, sticky at the bottom of the screen. No About section: the form's
+// intro says what the event is about. Registering goes through the apply
 // pages; an approved registrant of a paid form chooses and pays from the
 // status page, as before. Brand tokens only (gotcha 6).
 
@@ -10,7 +11,6 @@ import { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import api from '@/services/api';
 import { acceptanceLine, type PublicForm } from '@/lib/applications';
-import EventAbout from './EventAbout';
 import Placeholder from './Placeholder';
 import type { EventPageEvent } from './eventPage';
 
@@ -36,8 +36,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
   const BUTTON = 'flex min-h-14 w-full items-center justify-center gap-2 rounded-full px-6 text-lg font-bold shadow-lg';
 
   return (
-    <div className="space-y-8">
-      {(event.description || preview) && <EventAbout description={event.description} />}
+    <div>
       {/* Sticky in the page body: the card drops overflow-hidden for it (EventPageView) */}
       <section id="register" aria-label="Register" className="sticky bottom-4 z-30 scroll-mt-6">
         {forms === null ? (
