@@ -377,6 +377,32 @@ describe('Events API Contract Tests', () => {
       expect(res.body.capacity).toBe(300);
     });
 
+    it('a rename moves a draft URL but keeps a published one', async () => {
+      const createRes = await request(app)
+        .post(`/organizations/${testOrgId}/events`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          venueId: testVenueId,
+          name: 'Slug Before',
+          date: '2027-12-02T18:00:00.000Z',
+          capacity: 50,
+          priceTiers: [{ name: 'GA', price: 10.0, quantityTotal: 50 }],
+        });
+      const eventId = createRes.body.id;
+      const patch = (body) =>
+        request(app).patch(`/organizations/${testOrgId}/events/${eventId}`).set('Authorization', `Bearer ${organizerToken}`).send(body);
+
+      const draft = await patch({ name: 'Slug Draft Rename' });
+      expect(draft.body.slug).toBe('slug-draft-rename');
+
+      await request(app)
+        .post(`/organizations/${testOrgId}/events/${eventId}/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+      const live = await patch({ name: 'Slug Live Rename' });
+      expect(live.status).toBe(200);
+      expect(live.body).toMatchObject({ name: 'Slug Live Rename', slug: 'slug-draft-rename' });
+    });
+
     it('should return 403 for customers', async () => {
       const res = await request(app)
         .patch(`/organizations/${testOrgId}/events/some-id`)
