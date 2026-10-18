@@ -19,7 +19,7 @@
 | `frontend/src/components/event-setup/steps.ts` | `type` step, `registration` slot, `wizardProgress`, `registrationFlowSteps` |
 | `frontend/src/components/event-setup/steps/TypeStep.tsx` | Step 1, "What do you want to create?" |
 | `frontend/src/components/event-setup/steps/LinkedEventField.tsx` | "Registering for" on the Name step |
-| `frontend/src/components/event-setup/formFlows.ts` | The `registration` flow (Who registers? → Form details → options / payment when paid → floor map when linked → Fields) |
+| `frontend/src/components/event-setup/formFlows.ts` | The `registration` flow (Free or paid? → Form details → options / payment when paid → floor map when linked → Fields) |
 | `frontend/src/components/event-setup/useFormFlow.ts` | Registration: one form, the flow sits inside the event wizard; live events: no new forms, special guests = lineup only |
 | `frontend/src/app/admin/events/[eventId]/page.tsx` | Registration event page; live event's Registrations card |
 | `frontend/src/components/events/EventWorkspace.tsx` | Tabs per type |
@@ -38,8 +38,8 @@ None. Registration events are part of the **`events`** catalog feature; creating
 2. **Name**, with an optional **Category** and **Registering for** (optional live event; an empty venue and date are filled from it).
 3. **Venue**, 4. **Date** — the date step creates the event (`setup: true`, `type`, `linkedEventId`, `category`) and opens **Image**.
 5. **Image**. There is no **Describe it** step (PR #496): what registrants read is the form's intro on **Form details**, so the event-level description would be a second one.
-6. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge + which optional checkboxes the form offers, creates the form; no type to pick, the form is generic). Before the form exists, every step's preview shows the blank form it starts as: an email and the privacy consent → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
-7. **Collect more** (extras like power or tables), 8. **Review** publishes the event and opens the form.
+6. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Free or paid?** (two cards plus which optional checkboxes the form offers, creates the form; it is named after the event and renamed on Form details, so the name is asked once; no type to pick, the form is generic). Before the form exists, every step's preview shows the blank form it starts as: an email and the privacy consent → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
+7. **Collect more** (extras like power or tables) only for a PAID form or an event that already has add-ons (a free form sells nothing, so the flow's last step hands straight to Review), 8. **Review** publishes the event and opens the form.
 
 One progress bar counts all of it (`wizardProgress`): a free form reads 10 steps, a paid one 12.
 
