@@ -147,7 +147,7 @@ test('shows the event read-only, with an Edit link per section into the wizard',
     ['Edit description', 'step=description'],
     ['Edit date and venue', 'step=date'],
     ['Edit admission', 'step=tickets'],
-    ['Edit listing', 'step=description'],
+    ['Edit listing', 'step=name'],
   ];
   for (const [name, query] of edits) {
     await expect(page.getByRole('link', { name, exact: true }).first()).toHaveAttribute('href', setup(query));

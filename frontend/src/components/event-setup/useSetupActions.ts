@@ -121,6 +121,7 @@ export function useSetupActions(flow: SetupFlow) {
         {
           setup: true, name: sent.name, slug: fields.slug || undefined, venueId: sent.venueId,
           date: sent.date, ...(sent.endDate ? { endDate: sent.endDate } : {}), admissionMode: 'TICKETED',
+          ...(fields.category?.trim() ? { category: fields.category.trim() } : {}),
           // Spec 057: the type chosen on step 1, and a registration's live event.
           type, ...(type === 'REGISTRATION' && fields.linkedEventId ? { linkedEventId: fields.linkedEventId } : {}),
         },
@@ -129,7 +130,7 @@ export function useSetupActions(flow: SetupFlow) {
       await reconcileReplay(orgId, created, sent);
       clearSessionDraft(orgId);
       focusAfterStepChange();
-      router.replace(`/admin/events/${created.id}/setup?step=description`);
+      router.replace(`/admin/events/${created.id}/setup?step=${next?.key ?? 'review'}`);
     } catch (err) {
       setCreating(false);
       raise(serverErrors(err as never));

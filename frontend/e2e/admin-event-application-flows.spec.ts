@@ -138,8 +138,8 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
     await expect(heading(page, 'Who registers?')).toBeFocused(COLD);
-    // One count for the event wizard and the flow: 6 event steps, then Start, Details, Fields, Collect more, Review.
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 11');
+    // One count for the event wizard and the flow: 5 event steps, then Start, Details, Fields, Collect more, Review.
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 10');
     await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair');
     // Generic: no type to pick, the name says who registers.
     await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
@@ -155,7 +155,7 @@ test.describe('desktop', () => {
     expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', setup: true });
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-/);
     await expect(heading(page, 'Form details')).toBeFocused();
-    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 8 of 13, Form details');
+    await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 7 of 12, Form details');
     await expect(main(page).getByLabel('Intro shown to applicants')).toBeVisible();
     await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
     await expect(main(page).getByLabel('Button label')).toBeVisible();
@@ -301,7 +301,7 @@ test.describe('desktop', () => {
     await mockApi(page);
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await expect(heading(page, 'Collect more')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 10 of 11');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 9 of 10');
   });
 
   for (const scheme of ['light', 'dark'] as const) {

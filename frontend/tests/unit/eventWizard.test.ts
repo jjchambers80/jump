@@ -21,7 +21,7 @@ describe('edit-mode links (050-O)', () => {
     const links = detailsEditLinks('e1', [{ id: 'f-v', spaceSelection: 'TIERS' }, { id: 'f-g' }]);
     expect(links).toMatchObject({
       name: at('step=name'), venue: at('step=venue'), date: at('step=date'), description: at('step=description'),
-      image: at('step=image'), tickets: at('step=tickets'), addOns: at('step=collect-more'), listing: at('step=description'),
+      image: at('step=image'), tickets: at('step=tickets'), addOns: at('step=collect-more'), listing: at('step=name'),
       map: null, guests: '/admin/events/e1/setup/special-guests?step=lineup',
     });
     expect(links.tier('t 1')).toBe(at('step=tickets&tier=t+1'));
@@ -48,8 +48,8 @@ describe('edit-mode links (050-O)', () => {
     expect(legacyEditStep(null, '#event-add-ons')).toBe('collect-more');
     expect(legacyEditStep(null, '#event-media')).toBe('image');
     expect(legacyEditStep(null, '#event-when-where')).toBe('date');
-    expect(legacyEditStep(null, '#event-listing')).toBe('description');
-    expect(legacyEditStep(null, '#event-category')).toBe('description');
+    expect(legacyEditStep(null, '#event-listing')).toBe('name');
+    expect(legacyEditStep(null, '#event-category')).toBe('name');
     expect(legacyEditStep(null, '#event-capacity')).toBe('tickets');
     expect(legacyEditStep(null, '#event-rsvp-limit')).toBe('tickets');
     expect(legacyEditStep(null, '#event-rsvp-party-size')).toBe('tickets');

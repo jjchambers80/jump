@@ -246,18 +246,16 @@ test.describe('desktop', () => {
     await expect(heading(page, 'When is it?')).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();
 
-    await expect(heading(page, 'Describe it')).toBeVisible(COLD);
+    // No Describe step: the form's own Form details step carries the description.
+    await expect(heading(page, 'Add an image')).toBeVisible(COLD);
     expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
-    // One count across the event steps and the form flow: 6 + Start, Details, Fields + Collect more + Review.
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 11');
-    await expect(main(page).getByText('What registrants read before they apply.', { exact: false })).toBeVisible();
+    // One count across the event steps and the form flow: 5 + Start, Details, Fields + Collect more + Review.
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 10');
 
-    await page.getByRole('button', { name: 'Next' }).click();
-    await expect(heading(page, 'Add an image')).toBeVisible();
     await page.getByRole('button', { name: /Next|Skip/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration`), COLD);
     await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 11');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 10');
   });
 
   test('refresh resumes from the session draft, then from setupStep', async ({ page }) => {

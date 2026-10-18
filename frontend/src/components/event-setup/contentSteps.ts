@@ -60,12 +60,9 @@ export const modeOf = (ctx: StepCtx): AdmissionMode => ctx.fields.admissionMode 
 
 export const DESCRIBE_STEP: EventStep = {
   key: 'description', title: 'Describe it', rule: 'S', anchor: 'about', built: true,
-  visible: () => true,
+  // A registration event's form has its own description (the flow's Form details step).
+  visible: (ctx) => (ctx.saved?.type ?? ctx.fields.type ?? 'LIVE') !== 'REGISTRATION',
   complete: (ctx) => !!ctx.saved?.description,
-  validate: (ctx) =>
-    (ctx.fields.category ?? '').trim().length > 100
-      ? [{ field: SALES_FIELD_IDS.category, message: 'Keep the category under 100 characters' }]
-      : [],
   payload: (ctx) => {
     const { saved, fields } = ctx;
     if (!saved) return null;
@@ -73,7 +70,6 @@ export const DESCRIBE_STEP: EventStep = {
     // The editor sends '' when empty; the backend sanitises on write (gotcha 20).
     if (fields.description !== undefined && (fields.description || null) !== (saved.description || null))
       body.description = fields.description || null;
-    if (fields.category !== undefined && fields.category.trim() !== (saved.category ?? '')) body.category = fields.category.trim() || null;
     return orNull(body);
   },
   save: patch,
