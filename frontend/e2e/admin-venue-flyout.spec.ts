@@ -77,7 +77,6 @@ test('creates a venue from the venue step and selects it', async ({ page }) => {
   await dialog.getByLabel('City').fill('Raleigh');
   await dialog.getByLabel('State').selectOption('NC');
   await dialog.getByLabel('Postal code').fill('27601');
-  await dialog.getByLabel('URL slug').fill('Raleigh Convention Center');
   await dialog.getByLabel(/Public venue page/).uncheck();
   // Spec 033: the zone is derived from the address and shown as text. A North
   // Carolina ZIP resolves to Eastern without the organizer touching anything.
@@ -95,7 +94,6 @@ test('creates a venue from the venue step and selects it', async ({ page }) => {
     city: 'Raleigh',
     state: 'NC',
     postalCode: '27601',
-    slug: 'raleigh-convention-center',
     timezone: 'America/Chicago',
     isPublic: false,
   });

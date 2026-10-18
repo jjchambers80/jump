@@ -1,7 +1,7 @@
 'use client';
 
 // Create a venue without leaving the event form. The flyout carries every
-// field of the full venue form on Admin › Venues (name, URL slug, address,
+// field of the full venue form on Admin › Venues (name, address,
 // timezone, public page toggle, logo), so nothing has to be finished there.
 // It slides in from the right on desktop and covers the screen on phones.
 
@@ -9,7 +9,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
-import SlugField from '@/components/SlugField';
 import ImageUploader from '@/components/ImageUploader';
 import VenueTimeZoneField from '@/components/VenueTimeZoneField';
 
@@ -52,7 +51,6 @@ function defaultTimezone(): string {
 export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -64,7 +62,6 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [slugError, setSlugError] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -92,11 +89,9 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    setSlugError(null);
     try {
       const venue = await api.post<CreatedVenue>(`/organizations/${orgId}/venues`, {
         name: name.trim(),
-        slug: slug.trim() || undefined,
         address: address.trim(),
         city: city.trim() || undefined,
         state: state || undefined,
@@ -123,10 +118,7 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
 
       onCreated(venue);
     } catch (err) {
-      const status = (err as { status?: number }).status;
-      const message = (err as Error).message || 'Could not create the venue';
-      if (status === 409) setSlugError(message);
-      else setError(message);
+      setError((err as Error).message || 'Could not create the venue');
       setSaving(false);
     }
   };
@@ -193,16 +185,6 @@ export default function VenueFlyout({ orgId, onClose, onCreated }: Props) {
               autoFocus
             />
           </div>
-
-          <SlugField
-            id="venue-flyout-slug"
-            value={slug}
-            onChange={setSlug}
-            source={name}
-            prefix="/venues/"
-            baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-            error={slugError}
-          />
 
           <div>
             <label htmlFor="venue-flyout-address" className={labelClass}>

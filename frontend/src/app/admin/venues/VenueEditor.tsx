@@ -15,7 +15,6 @@ import { useOrg } from '@/components/OrgContext';
 import { resolveAssetUrl } from '@/lib/assets';
 import { StateSelect } from '@/components/StateSelect';
 import ImageUploader from '@/components/ImageUploader';
-import SlugField from '@/components/SlugField';
 import VenueTimeZoneField from '@/components/VenueTimeZoneField';
 import { EventSaveCard, jumpTo } from '@/components/events/EventEditSummary';
 import {
@@ -34,7 +33,6 @@ import type { AdminVenue } from '@/lib/venues';
 
 interface VenueForm {
   name: string;
-  slug: string;
   address: string;
   city: string;
   state: string;
@@ -44,7 +42,7 @@ interface VenueForm {
   isPublic: boolean;
 }
 
-const EMPTY: VenueForm = { name: '', slug: '', address: '', city: '', state: '', postalCode: '', timezone: null, isPublic: true };
+const EMPTY: VenueForm = { name: '', address: '', city: '', state: '', postalCode: '', timezone: null, isPublic: true };
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900';
@@ -52,7 +50,6 @@ const focusRing =
 function toForm(venue: AdminVenue): VenueForm {
   return {
     name: venue.name,
-    slug: venue.slug || '',
     address: venue.address,
     city: venue.city || '',
     state: venue.state || '',
@@ -78,7 +75,6 @@ function VenueEditorContent({ venueId }: { venueId?: string }) {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [slugError, setSlugError] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
@@ -135,7 +131,6 @@ function VenueEditorContent({ venueId }: { venueId?: string }) {
     if (!orgId) return;
     setSaving(true);
     setError(null);
-    setSlugError(null);
 
     // Spec 033: a value is the organizer's own choice (stored MANUAL). On an
     // edit, null is sent explicitly to drop a previous override and re-derive
@@ -150,8 +145,7 @@ function VenueEditorContent({ venueId }: { venueId?: string }) {
         ? await api.post<AdminVenue>(`/organizations/${orgId}/venues`, payload)
         : await api.patch<AdminVenue>(`/organizations/${orgId}/venues/${venueId}`, payload);
     } catch (err: any) {
-      if (err?.status === 409) setSlugError(err?.message || 'This URL is already taken. Choose another.');
-      else setError(err?.message || 'Failed to save the venue');
+      setError(err?.message || 'Failed to save the venue');
       setSaving(false);
       return;
     }
@@ -261,15 +255,6 @@ function VenueEditorContent({ venueId }: { venueId?: string }) {
                   className={inputClass}
                 />
               </div>
-              <SlugField
-                id="venue-slug"
-                value={form.slug}
-                onChange={(value) => set('slug', value)}
-                source={form.name}
-                prefix="/venues/"
-                baseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-                error={slugError}
-              />
             </div>
           </FormCard>
 

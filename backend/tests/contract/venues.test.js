@@ -397,7 +397,8 @@ describe('Venue Contract Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('New Venue Name');
-      expect(res.body).toMatchObject({ slug: 'new-venue-name', slugCustomized: false });
+      // A rename keeps the URL already shared.
+      expect(res.body).toMatchObject({ slug: 'old-venue-name', slugCustomized: false });
 
       const custom = await request(app)
         .patch(`/organizations/${testOrgId}/venues/${venueId}`)
