@@ -7,12 +7,12 @@
 // before. Brand tokens only (gotcha 6).
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowRight } from 'lucide-react';
 import api from '@/services/api';
 import { acceptanceLine, type PublicForm } from '@/lib/applications';
 import { ApplySteps, useApplyForm } from '@/components/applications/ApplySteps';
-import Placeholder from './Placeholder';
+import { draftPreviewForm } from '@/components/event-setup/previewMessages';
 import type { EventPageEvent } from './eventPage';
 
 const BUTTON = 'flex min-h-14 w-full items-center justify-center gap-2 rounded-full px-6 text-lg font-bold shadow-lg';
@@ -21,8 +21,10 @@ export default function EventRegister({ event, preview = false }: { event: Event
   const router = useRouter();
   const [fetched, setFetched] = useState<PublicForm[] | null>(null);
   const forms = event.previewForms ?? fetched;
-  // One form per registration event (409 FORM_EXISTS).
-  const form = forms?.[0] ?? null;
+  // One form per registration event (409 FORM_EXISTS). The setup preview shows
+  // the blank form a new one starts as (email + consent) until it exists.
+  const stub = useMemo(() => (preview ? draftPreviewForm({ name: event.name || 'Registration', kind: 'FREE' }, event.organizationName) : null), [preview, event.name, event.organizationName]);
+  const form = forms?.[0] ?? (forms ? stub : null);
   const apply = useApplyForm(form, { submitUrl: `/events/${event.id}/applications` });
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
   if (!form) {
     return (
       <p className="text-base text-gray-600 dark:text-slate-300">
-        {preview ? <Placeholder>Set up the registration form</Placeholder> : 'Registration is not open yet.'}
+        Registration is not open yet.
       </p>
     );
   }

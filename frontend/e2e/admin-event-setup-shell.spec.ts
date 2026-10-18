@@ -226,6 +226,9 @@ test.describe('desktop', () => {
     await expect(heading(page, 'What do you want to create?')).toBeVisible(COLD);
     expect(await serious(page)).toEqual([]);
     await main(page).getByRole('radio', { name: /Registration event/ }).check();
+    // Before the form exists the preview shows the blank form it starts as: an email and the consent.
+    await expect(preview(page).getByRole('textbox', { name: 'Email', exact: true })).toBeVisible(COLD);
+    await expect(preview(page).getByTestId('apply-consent')).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();
 
     await expect(heading(page, 'Name your event')).toBeVisible();

@@ -128,6 +128,9 @@ export interface AdminForm {
   businessFields?: BusinessField[];
   /** Spec 056: false = the form asks for an email only. */
   collectName?: boolean;
+  /** False = the apply form does not offer that opt-in (organizer setting on Who registers?). */
+  offerAccount?: boolean;
+  offerMarketing?: boolean;
   buttonLabel?: string | null;
   successMessage?: string | null;
   kind: FormKind;
@@ -193,6 +196,9 @@ export interface PublicForm {
   businessFields?: BusinessField[];
   /** Spec 056: false = the form asks for an email only. */
   collectName?: boolean;
+  /** False = the apply form does not offer that opt-in (organizer setting on Who registers?). */
+  offerAccount?: boolean;
+  offerMarketing?: boolean;
   /** Spec 044: standing forms' own button label and thank-you line. */
   buttonLabel?: string | null;
   successMessage?: string | null;

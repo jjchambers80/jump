@@ -38,7 +38,7 @@ None. Registration events are part of the **`events`** catalog feature; creating
 2. **Name**, with an optional **Category** and **Registering for** (optional live event; an empty venue and date are filled from it).
 3. **Venue**, 4. **Date** — the date step creates the event (`setup: true`, `type`, `linkedEventId`, `category`) and opens **Image**.
 5. **Image**. There is no **Describe it** step (PR #496): what registrants read is the form's intro on **Form details**, so the event-level description would be a second one.
-6. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge, creates the form; no type to pick, the form is generic) → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
+6. The `registration` slot hands off to `/admin/events/<id>/setup/registration`: **Who registers?** (name + charge + which optional checkboxes the form offers, creates the form; no type to pick, the form is generic). Before the form exists, every step's preview shows the blank form it starts as: an email and the privacy consent → **Form details** → **Options and pricing** and **How registrants choose and pay** (paid only) → **Floor map** (MAP forms of a linked event; edits the live event's map) → **Fields**.
 7. **Collect more** (extras like power or tables), 8. **Review** publishes the event and opens the form.
 
 One progress bar counts all of it (`wizardProgress`): a free form reads 10 steps, a paid one 12.

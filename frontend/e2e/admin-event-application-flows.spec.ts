@@ -152,7 +152,7 @@ test.describe('desktop', () => {
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', offerAccount: false, offerMarketing: false, setup: true });
     await expect(page).toHaveURL(/\/setup\/registration\?step=details&form=form-/);
     await expect(heading(page, 'Form details')).toBeFocused();
     await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 7 of 12, Form details');
@@ -238,6 +238,14 @@ test.describe('desktop', () => {
     await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
     await expect(formPreview(page).getByRole('textbox', { name: 'Email', exact: true })).toBeVisible();
     await expect(formPreview(page).getByRole('button', { name: 'Submit application' })).toBeDisabled();
+    // Opt-ins are off until the organizer offers them; consent is always asked.
+    await expect(formPreview(page).getByTestId('apply-consent')).toBeVisible();
+    await expect(formPreview(page).getByTestId('apply-opt-in-account')).toHaveCount(0);
+    await expect(formPreview(page).getByTestId('apply-opt-in-marketing')).toHaveCount(0);
+    await main(page).getByLabel('Offer to create an account').check();
+    await main(page).getByLabel('Offer to subscribe to your emails').check();
+    await expect(formPreview(page).getByTestId('apply-opt-in-account')).toBeVisible();
+    await expect(formPreview(page).getByTestId('apply-opt-in-marketing')).toBeVisible();
     expect(calls.create).toHaveLength(0);
   });
 
@@ -258,7 +266,7 @@ test.describe('desktop', () => {
     await main(page).getByLabel('Name').fill('Crew sign-up');
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Crew sign-up', kind: 'FREE', setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Crew sign-up', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true });
     await expect(heading(page, 'Form details')).toBeVisible();
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeVisible();

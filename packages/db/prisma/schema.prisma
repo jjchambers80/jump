@@ -1799,6 +1799,8 @@ model ApplicationForm {
   displayOrder          Int                   @default(0)
   businessFields        String[]              @default(["businessName", "description", "website", "socials", "photos"]) // which business-profile fields the form asks; [] = none
   collectName           Boolean               @default(true) // spec 056: false = the form asks for an email only
+  offerAccount          Boolean               @default(true) // the "create an account" opt-in is shown; false = never asked, never recorded
+  offerMarketing        Boolean               @default(true) // the "email me about future events" opt-in is shown
   buttonLabel           String?
   successMessage        String?
   spaceSelection        SpaceSelectionMode    @default(TIERS) // spec 039; PAID forms only

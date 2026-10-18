@@ -225,7 +225,7 @@ class ApplicationFormService {
     const base = body.questions !== undefined
       ? {}
       : setup
-        ? { collectBusiness: false, collectName: false }
+        ? { collectBusiness: false, collectName: false, offerAccount: false, offerMarketing: false }
         : { collectBusiness: body.kind === 'PAID' };
     const settings = { ...base, ...fields };
     const data = { eventId, organizationId: event.venue.organizationId, kind: body.kind, ...this._validateFormFields(settings, body.kind, null) };
@@ -331,6 +331,8 @@ class ApplicationFormService {
           spaceSelection: f.spaceSelection,
           businessFields: f.businessFields,
           collectName: f.collectName,
+          offerAccount: f.offerAccount,
+          offerMarketing: f.offerMarketing,
           displayOrder: f.displayOrder,
         },
         select: { id: true },
@@ -705,9 +707,11 @@ class ApplicationFormService {
       if (!Number.isInteger(body.displayOrder) || body.displayOrder < 0) throw new ValidationError('displayOrder must be a non-negative integer');
       data.displayOrder = body.displayOrder;
     }
-    if (body.collectName !== undefined) {
-      if (typeof body.collectName !== 'boolean') throw new ValidationError('collectName must be a boolean');
-      data.collectName = body.collectName;
+    for (const key of ['collectName', 'offerAccount', 'offerMarketing']) {
+      if (body[key] !== undefined) {
+        if (typeof body[key] !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
+        data[key] = body[key];
+      }
     }
     // `collectBusiness` is shorthand for every business field or none.
     if (body.collectBusiness !== undefined) {
@@ -904,6 +908,8 @@ class ApplicationFormService {
       businessFields: form.businessFields,
       collectBusiness: form.businessFields.length > 0,
       collectName: form.collectName,
+      offerAccount: form.offerAccount,
+      offerMarketing: form.offerMarketing,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       status: form.status,
@@ -943,6 +949,8 @@ class ApplicationFormService {
       businessFields: form.businessFields,
       collectBusiness: form.businessFields.length > 0,
       collectName: form.collectName,
+      offerAccount: form.offerAccount,
+      offerMarketing: form.offerMarketing,
       buttonLabel: form.buttonLabel,
       successMessage: form.successMessage,
       // Spec 050-D: an event-level sales close shuts every form without touching its status.
