@@ -6,7 +6,7 @@ import {
   capacityOverflow, duplicateTierForm, tierCreateBody, tierErrors, tierPatchBody, tierToForm, type ApiTier,
 } from '@/components/events/tierForm';
 import { DESCRIBE_STEP, TICKETS_STEP, salesFieldsFromSaved } from '@/components/event-setup/contentSteps';
-import type { SavedEvent, StepCtx } from '@/components/event-setup/steps';
+import { stepByKey, type SavedEvent, type StepCtx } from '@/components/event-setup/steps';
 
 const ZONE = 'America/New_York';
 const tier = (patch: Partial<ApiTier> = {}): ApiTier => ({
@@ -67,10 +67,9 @@ describe('steps 4–6 payloads', () => {
     }
   });
 
-  test('description and category', () => {
-    expect(DESCRIBE_STEP.payload!(ctxFor(row(), { description: '<p>Bring a chair</p>', category: ' Music ' }))).toEqual({
-      description: '<p>Bring a chair</p>', category: 'Music',
-    });
+  test('description, and category on the Name step', () => {
+    expect(DESCRIBE_STEP.payload!(ctxFor(row(), { description: '<p>Bring a chair</p>' }))).toEqual({ description: '<p>Bring a chair</p>' });
+    expect(stepByKey('name')!.payload!(ctxFor(row(), { category: ' Music ' }))).toEqual({ category: 'Music' });
     expect(DESCRIBE_STEP.payload!(ctxFor(row({ description: '<p>x</p>' }), { description: '' }))).toEqual({ description: null });
   });
 

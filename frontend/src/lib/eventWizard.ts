@@ -50,7 +50,7 @@ export function detailsEditLinks(
     form: (form: { id: string }) => formEditHref(eventId, form, orgId),
     /** The Floor map step exists only while a form picks spaces on a map; else the Map tab. */
     map: mapForm ? formFlowHref(eventId, 'registration', { form: mapForm.id, step: 'floor-map', org: orgId }) : null,
-    listing: at('description'),
+    listing: at('name'),
     guests: formFlowHref(eventId, 'special-guests', { step: 'lineup', org: orgId }),
   };
 }
@@ -63,11 +63,11 @@ const SECTION_STEP: Record<string, string> = {
   'event-when-where': 'date',
   'event-venue': 'venue',
   'event-date': 'date',
-  'event-listing': 'description',
+  'event-listing': 'name',
   'event-admission': 'tickets',
   'event-price-tiers': 'tickets',
   'event-add-ons': 'collect-more',
-  'event-category': 'description',
+  'event-category': 'name',
   'event-description': 'description',
   'event-slug': 'name',
   'event-image-tile': 'image',

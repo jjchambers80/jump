@@ -148,10 +148,9 @@ test.describe('desktop', () => {
     const editor = main(page).locator('[contenteditable="true"]');
     await editor.click();
     await page.keyboard.type('Bring a chair.');
-    await main(page).getByLabel('Category (optional)').fill('Music');
     await expect.poll(() => calls.patch.length, COLD).toBeGreaterThan(0);
     await expect.poll(() => calls.patch.map((r) => r.postDataJSON()).reduce((a, b) => ({ ...a, ...b }), {})).toEqual({
-      description: '<p>Bring a chair.</p>', category: 'Music',
+      description: '<p>Bring a chair.</p>',
     });
     // The saved, server-side description reaches the preview.
     await expect(preview(page).getByText('Bring a chair.')).toBeVisible(COLD);

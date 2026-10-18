@@ -28,10 +28,10 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 
 | Key | Title | Rule | Visible | Complete | Preview anchor | Saves |
 |---|---|---|---|---|---|---|
-| `name` | Name your event | R | always (also after the row exists, so N never shifts) | name set | `#event-hero` | create body / `PATCH {name, slug}`. "Edit URL" = `SlugField`; live-URL warning when a PUBLISHED slug changes. **Start from a past event** only before the row |
+| `name` | Name your event | R | always (also after the row exists, so N never shifts) | name set | `#event-hero` | create body / `PATCH {name, slug, category}`. Listing category (optional) lives here. "Edit URL" = `SlugField`; live-URL warning when a PUBLISHED slug changes. **Start from a past event** only before the row |
 | `venue` | Where is it? | R | always | venue chosen | `#event-venue` | `PATCH {venueId, date, endDate}`: the typed wall clock stays and moves to the new venue's zone. Zone shown read-only as text (not `VenueTimeZoneField`, which edits the venue). "New venue" = `VenueFlyout`; `?venueId=` preselects. With Venues off or hidden for the role (`useCan('venues')`), `LocationStep` asks for an address instead and resolves it with `POST …/venues/from-address` to a private venue (see [rbac](rbac.md)) |
 | `date` | When is it? | R | always | start set | `#event-date` | create: `POST …/events {setup:true}`; edit: `PATCH {date, endDate}` via `zonedInputToIso` |
-| `description` | Describe it | S | always | description saved | `#about` | `PATCH {description, category}` (`RichTextEditorField`; Listing category lives here) |
+| `description` | Describe it | S | live events only (a registration event's form has its own description on Form details) | description saved | `#about` | `PATCH {description}` (`RichTextEditorField`) |
 | `image` | Add an image | S | always | image saved | `#event-hero-image` | `EventMediaCard` → `POST/DELETE …/logo`, saves on its own |
 | `tickets` | Tickets or RSVP | R | always | see `contentSteps.ts` | `#tickets` | `PATCH {admissionMode, capacity, rsvpLimit, rsvpMaxPartySize}`; tier dialogs save on their own (`…/price-tiers`, incl. the new `DELETE`); `&tier=<id>` opens that tier's dialog |
 | `attendee-questions` | — | reserved | never | — | — | — |

@@ -154,7 +154,7 @@ const LINKS: [string, string, string][] = [
   ['Edit tier General Admission', '?step=tickets&tier=t-ga', 'Tickets or RSVP'],
   ['Edit add-ons', '?step=collect-more', 'Collect more'],
   ['Edit admission', '?step=tickets', 'Tickets or RSVP'],
-  ['Edit listing', '?step=description', 'Describe it'],
+  ['Edit listing', '?step=name', 'Name your event'],
 ];
 // A form opens the registration flow (spec 057); a live event's old form goes back to the event.
 const FORM_LINKS: [string, string][] = [
@@ -291,8 +291,8 @@ test.describe('edit mode', () => {
   test('the unsaved-changes guard asks before browser Back leaves a published edit', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(DETAILS);
-    await page.getByRole('link', { name: 'Edit description', exact: true }).click();
-    await expect(heading(page, 'Describe it')).toBeFocused(COLD);
+    await page.getByRole('link', { name: 'Edit listing', exact: true }).click();
+    await expect(heading(page, 'Name your event')).toBeFocused(COLD);
     await main(page).getByLabel('Category (optional)').fill('Craft fair');
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
     await guardArmed(page);
@@ -303,7 +303,7 @@ test.describe('edit mode', () => {
     });
     await page.goBack();
     await expect.poll(() => asked).toEqual(['You have unsaved changes. Leave without saving?']);
-    await expect(heading(page, 'Describe it')).toBeVisible();
+    await expect(heading(page, 'Name your event')).toBeVisible();
     await expect(main(page).getByLabel('Category (optional)')).toHaveValue('Craft fair');
     expect(calls.patch).toHaveLength(0);
   });

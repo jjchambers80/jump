@@ -42,9 +42,9 @@ describe('visible and counting', () => {
     expect(stepPosition('date', ctx())).toEqual({ index: 4, total: 9 });
   });
 
-  test('a registration event swaps tickets for its form flow (spec 057)', () => {
+  test('a registration event swaps tickets for its form flow and has no Describe step (spec 057)', () => {
     const reg = { ...fields, type: 'REGISTRATION' as const };
-    expect(keys(ctx({ fields: reg }))).toEqual(['type', 'name', 'venue', 'date', 'description', 'image', 'registration', 'collect-more', 'review']);
+    expect(keys(ctx({ fields: reg }))).toEqual(['type', 'name', 'venue', 'date', 'image', 'registration', 'collect-more', 'review']);
     const saved = row({ type: 'REGISTRATION' });
     expect(keys(ctx({ saved }))).toContain('registration');
     expect(keys(ctx({ saved }))).not.toContain('tickets');
@@ -55,11 +55,11 @@ describe('visible and counting', () => {
     const free = ctx({ saved, forms: [{ id: 'f', kind: 'FREE' }] });
     const flow = registrationFlowSteps(free).map((s) => s.key);
     expect(flow).toEqual(['start', 'details', 'questions']);
-    // 6 event steps, 3 flow steps, Collect more, Review.
-    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 6, total: 11 });
-    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 7, total: 11 });
-    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 9, total: 11 });
-    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 11, total: 11 });
+    // 5 event steps, 3 flow steps, Collect more, Review.
+    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 5, total: 10 });
+    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 6, total: 10 });
+    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 8, total: 10 });
+    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 10, total: 10 });
     expect(wizardProgress(ctx(), 'review')).toEqual({ index: 9, total: 9 });
   });
 

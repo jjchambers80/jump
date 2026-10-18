@@ -40,7 +40,6 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
 /** Spec 057: a registration event's steps speak to registrants, not buyers. */
 const REGISTRATION_INTRO: Partial<Record<EventStep['key'], string>> = {
   name: 'The name registrants will see.',
-  description: 'What registrants read before they apply. You can change it any time.',
   review: 'Check what registrants will see, then publish.',
   'collect-more': 'Extras registrants can add when they choose and pay, like power or a table.',
 };

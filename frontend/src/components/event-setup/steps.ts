@@ -7,7 +7,7 @@
 // Pure module: no React, no api import. Saves take the client as an argument.
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
-import { DESCRIBE_STEP, IMAGE_STEP, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
+import { DESCRIBE_STEP, IMAGE_STEP, SALES_FIELD_IDS, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
 import type { EventType } from '@/lib/eventOverview';
 import { flowSteps } from './formFlows';
 
@@ -164,6 +164,7 @@ export const EVENT_STEPS: EventStep[] = [
       const name = ctx.fields.name.trim();
       if (!name) return [{ field: FIELD_IDS.name, message: 'Enter a name for your event' }];
       if (name.length > 255) return [{ field: FIELD_IDS.name, message: 'Keep the name under 255 characters' }];
+      if ((ctx.fields.category ?? '').trim().length > 100) return [{ field: SALES_FIELD_IDS.category, message: 'Keep the category under 100 characters' }];
       return [];
     },
     payload: (ctx) => {
@@ -172,6 +173,7 @@ export const EVENT_STEPS: EventStep[] = [
       const name = ctx.fields.name.trim();
       if (name && name !== ctx.saved.name) body.name = name;
       if (ctx.fields.slug && ctx.fields.slug !== ctx.saved.slug) body.slug = ctx.fields.slug;
+      if (ctx.fields.category !== undefined && ctx.fields.category.trim() !== (ctx.saved.category ?? '')) body.category = ctx.fields.category.trim() || null;
       // Spec 057: a registration event's "Registering for" link.
       const linked = ctx.fields.linkedEventId || null;
       if (registration(ctx) && ctx.fields.linkedEventId !== undefined && linked !== (ctx.saved.linkedEventId ?? null)) body.linkedEventId = linked;
