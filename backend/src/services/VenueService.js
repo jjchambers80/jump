@@ -258,7 +258,9 @@ class VenueService {
 
     const updateData = {};
     if (data.name !== undefined) updateData.name = data.name;
-    if (data.name !== undefined || data.slug !== undefined) {
+    // A venue's page is public from creation, so a rename keeps its URL;
+    // only an explicit slug changes it.
+    if (data.slug !== undefined) {
       Object.assign(
         updateData,
         await resolveUniqueSlug(prisma.venue, {
