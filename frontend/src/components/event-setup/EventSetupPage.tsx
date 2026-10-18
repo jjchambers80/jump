@@ -47,6 +47,8 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
   const [previewOpen, setPreviewOpen] = useState(false);
   // A publish in flight holds the organizer on Review (Back waits).
   const [publishing, setPublishing] = useState(false);
+  // Review renders Publish into the footer, where Next sits on every other step.
+  const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const firstStep = useRef(true);
@@ -119,7 +121,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
         zone={flow.zone}
         readOnly={readOnly}
         event={saved}
-        review={{ createMode: mode === 'create', flush: saveState.flush, onBusyChange: setPublishing, onFinished: (row) => {
+        review={{ createMode: mode === 'create', flush: saveState.flush, onBusyChange: setPublishing, footerSlot, onFinished: (row) => {
           data.setSaved(toSaved(row));
           // Done is for the tab that just finished setup (050-I doneMarker).
           markSetupFinished(row.id);
@@ -175,6 +177,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
             onNext={current === 'review' ? undefined : () => void actions.onNext()}
             nextLabel={actions.nextLabel}
             busy={actions.creating}
+            actionsRef={current === 'review' ? setFooterSlot : undefined}
           />
         )
       }

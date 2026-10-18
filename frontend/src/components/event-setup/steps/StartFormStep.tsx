@@ -1,16 +1,18 @@
 'use client';
 
-// Start of the registration flow (spec 057): the form's name, which says
-// who registers (forms have no type), whether it charges, and which opt-ins
-// the form offers (create an account, email subscribe; both off for a new
-// form). Every form starts blank: it asks for an email only, the rest is added
-// on the Fields step. The wizard footer's Next submits this form (`START_FORM_ID`); the flow
-// then moves to the new form's details.
+// Start of the registration flow (spec 057): whether it charges, and which
+// opt-ins the form offers (create an account, email subscribe; both off for a
+// new form). The form is named after its event; the name, intro and button
+// label are edited on the next step (Form details), so they are asked once.
+// Every form starts blank: it asks for an email only, the rest is added on the
+// Fields step. The wizard footer's Next submits this form (`START_FORM_ID`);
+// the flow then moves to the new form's details.
 
 import { FormEvent, useEffect, useState } from 'react';
+import { BadgeDollarSign, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import type { DraftForm } from '../previewMessages';
 import type { FormKind } from '@/lib/applications';
-import { hintClass, inputClass, labelClass } from '../ui';
+import { hintClass, labelClass } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
 
@@ -31,15 +33,15 @@ export function OptInSettings({ value, onChange, disabled }: { value: OptInOffer
   const row = 'flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200';
   return (
     <fieldset className="space-y-1" disabled={disabled}>
-      <legend className={labelClass}>Optional checkboxes</legend>
-      <p className={hintClass}>Applicants always give their email and agree to the privacy terms. Turn these on to offer more.</p>
+      <legend className={labelClass}>Also offer registrants</legend>
+      <p className={hintClass}>Everyone gives their email and agrees to the privacy terms. These add an optional checkbox each.</p>
       <label className={row}>
         <input type="checkbox" checked={value.offerAccount} onChange={(e) => onChange({ ...value, offerAccount: e.target.checked })} className="h-5 w-5 accent-accent-600" data-testid="offer-account" />
-        Offer to create an account
+        An account, to follow their registration
       </label>
       <label className={row}>
         <input type="checkbox" checked={value.offerMarketing} onChange={(e) => onChange({ ...value, offerMarketing: e.target.checked })} className="h-5 w-5 accent-accent-600" data-testid="offer-marketing" />
-        Offer to subscribe to your emails
+        A subscription to your emails
       </label>
     </fieldset>
   );
@@ -54,8 +56,16 @@ interface Props {
   onCreate: (body: NewFormBody) => Promise<void>;
 }
 
+const KINDS: { paid: boolean; title: string; detail: string; icon: LucideIcon }[] = [
+  { paid: false, title: 'Free', detail: 'People register and you approve them. No payment.', icon: ClipboardCheck },
+  { paid: true, title: 'Charge a fee', detail: 'Registering is free. People you approve choose an option and pay.', icon: BadgeDollarSign },
+];
+
+/** A form name needs 2 characters; an event name may be shorter. */
+const formNameFor = (eventName: string) => (eventName.trim().length >= 2 ? eventName.trim() : `${eventName.trim()} registration`.trim());
+
 export default function StartFormStep({ onBusyChange, onDraftChange, eventName, onCreate }: Props) {
-  const [name, setName] = useState(eventName);
+  const name = formNameFor(eventName);
   const [paid, setPaid] = useState(false);
   const [offers, setOffers] = useState<OptInOffers>({ offerAccount: false, offerMarketing: false });
   const [busy, setBusy] = useState(false);
@@ -66,12 +76,11 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    if (name.trim().length < 2) return setError('Enter a name of at least 2 characters');
     setBusy(true);
     onBusyChange(true);
     setError(null);
     try {
-      await onCreate({ name: name.trim(), kind, ...offers });
+      await onCreate({ name, kind, ...offers });
     } catch (err) {
       setError((err as Error)?.message || "Couldn't create the form");
       setBusy(false);
@@ -80,24 +89,33 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
   };
 
   return (
-    <form id={START_FORM_ID} onSubmit={submit} noValidate aria-label="Set up the registration form" aria-busy={busy || undefined} className="space-y-4">
+    <form id={START_FORM_ID} onSubmit={submit} noValidate aria-label="Set up the registration form" aria-busy={busy || undefined} className="space-y-6">
       {error && (
         <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
           {error}
         </p>
       )}
-      <div>
-        <label htmlFor="add-form-name" className={labelClass}>Name</label>
-        <input id="add-form-name" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} className={inputClass} />
-      </div>
-      <div>
-        <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200">
-          <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="h-5 w-5 accent-accent-600" aria-describedby="add-form-paid-hint" />
-          Charge applicants
-        </label>
-        <p id="add-form-paid-hint" className={hintClass}>
-          {paid ? 'Approved applicants pay for an option you set up next.' : 'Applicants apply and are approved without paying.'}
-        </p>
+      <div role="radiogroup" aria-label="Free or paid" className="space-y-3">
+        {KINDS.map(({ paid: value, title, detail, icon: Icon }) => (
+          <label
+            key={title}
+            className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-300 bg-white p-4 hover:border-gray-400 has-[:checked]:border-accent-600 has-[:checked]:bg-accent-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 has-[:focus-visible]:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-slate-500 dark:has-[:checked]:border-accent-400 dark:has-[:checked]:bg-slate-700 dark:has-[:focus-visible]:ring-offset-slate-900"
+          >
+            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-gray-700 dark:text-slate-300" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
+              <span className="mt-0.5 block text-sm text-gray-600 dark:text-slate-300">{detail}</span>
+            </span>
+            <input
+              type="radio"
+              name="add-form-kind"
+              checked={paid === value}
+              onChange={() => setPaid(value)}
+              className="mt-1 h-5 w-5 shrink-0 accent-accent-600"
+              data-testid={value ? 'add-form-paid' : 'add-form-free'}
+            />
+          </label>
+        ))}
       </div>
       <OptInSettings value={offers} onChange={setOffers} />
     </form>

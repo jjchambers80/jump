@@ -115,6 +115,14 @@ export const eventTypeOf = (ctx: Pick<StepCtx, 'saved' | 'fields'>): EventType =
 const registration = (ctx: StepCtx) => eventTypeOf(ctx) === 'REGISTRATION';
 const live = (ctx: StepCtx) => !registration(ctx);
 
+/**
+ * Add-ons are bought with a ticket or with a paid registration's space: a
+ * free registration form has nowhere to sell them, so it skips Collect more
+ * (unless the event already has some, which stay editable).
+ */
+export const collectsMore = (ctx: Pick<StepCtx, 'saved' | 'fields' | 'forms'>) =>
+  eventTypeOf(ctx) !== 'REGISTRATION' || !!ctx.forms?.some((f) => f.kind === 'PAID') || (ctx.saved?.addOnCount ?? 0) > 0;
+
 export const patchEvent = (client: PatchClient, { orgId, eventId }: { orgId: string; eventId: string }, body: Record<string, unknown>) =>
   client.patch(`/organizations/${orgId}/events/${eventId}`, body);
 
@@ -212,7 +220,8 @@ export const EVENT_STEPS: EventStep[] = [
   { key: 'collect-more', title: 'Collect more', rule: 'S', anchor: 'add-ons', built: true,
     // Every admission mode: add-ons are also what vendor application tiers
     // offer, and the old editor showed them for RSVP events too (050-O parity).
-    visible: always,
+    // A registration event sells them only with a paid space.
+    visible: (ctx) => collectsMore(ctx),
     complete: (ctx) => (ctx.saved?.addOnCount ?? 0) > 0,
   },
   { key: 'discounts', title: 'Discount codes', rule: 'S', anchor: 'tickets', built: false, reserved: true, visible: never, complete: never },

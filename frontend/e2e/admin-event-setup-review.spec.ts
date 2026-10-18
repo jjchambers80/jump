@@ -83,6 +83,8 @@ async function mockApi(page: Page, setup: Setup = {}) {
 
 
 const main = (page: Page) => page.locator('main');
+// Publish and Save as draft live in the sticky footer, like Next on every other step.
+const footer = (page: Page) => page.locator('footer');
 const heading = (page: Page, name: string) => main(page).getByRole('heading', { level: 1, name });
 const REVIEW = `/admin/events/${EVENT_ID}/setup?step=review`;
 const STAFF = { id: 'review-admin', email: 'review-admin@test.com', role: 'ADMIN' as const };
@@ -166,7 +168,7 @@ test.describe('desktop', () => {
     await expect(previewLink).toHaveAttribute('target', '_blank');
     await expect(previewLink).toHaveAttribute('rel', 'noopener noreferrer');
 
-    await main(page).getByRole('button', { name: 'Save as draft' }).click();
+    await footer(page).getByRole('button', { name: 'Save as draft' }).click();
     await expect(heading(page, 'Saved as draft')).toBeFocused();
     expect(calls.publish).toHaveLength(0);
     expect(calls.patch.map((r) => r.postDataJSON())).toContainEqual({ setupCompleted: true });
@@ -196,7 +198,7 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Review and publish')).toBeVisible(COLD);
     await expect(main(page).getByRole('checkbox', { name: /^Open applications when I publish: / })).toHaveCount(4);
     await main(page).getByRole('checkbox', { name: 'Open applications when I publish: Volunteers' }).uncheck();
-    await main(page).getByRole('button', { name: 'Publish' }).click();
+    await footer(page).getByRole('button', { name: 'Publish' }).click();
 
     // While the publish is out, Back waits, and says why.
     const back = page.getByRole('button', { name: 'Back' });
@@ -245,7 +247,7 @@ test.describe('desktop', () => {
     });
     await page.goto(REVIEW);
     await expect(heading(page, 'Review and publish')).toBeVisible(COLD);
-    await main(page).getByRole('button', { name: 'Publish' }).click();
+    await footer(page).getByRole('button', { name: 'Publish' }).click();
     const summary = main(page).getByRole('alert').filter({ hasText: 'Fix 1 thing before publishing' });
     await expect(summary).toBeFocused();
     await expect(summary.getByRole('link', { name: /The start time has passed\./ })).toHaveAttribute("href", `/admin/events/${EVENT_ID}/setup?step=date&org=${ORG_ID}`);
@@ -257,8 +259,8 @@ test.describe('desktop', () => {
     await page.goto(REVIEW);
     await expect(heading(page, 'Review and publish')).toBeVisible(COLD);
     await expect(main(page).getByTestId('review-status')).toContainText('This event is published.');
-    await expect(main(page).getByRole('button', { name: 'Publish' })).toHaveCount(0);
-    await expect(main(page).getByRole('button', { name: 'Save as draft' })).toHaveCount(0);
+    await expect(footer(page).getByRole('button', { name: 'Publish' })).toHaveCount(0);
+    await expect(footer(page).getByRole('button', { name: 'Save as draft' })).toHaveCount(0);
   });
 });
 
@@ -279,7 +281,7 @@ test.describe('mobile 390', () => {
       await page.goto(REVIEW);
       await expect(heading(page, 'Review and publish')).toBeVisible(COLD);
       await expect(main(page).getByRole('link', { name: /Open full preview/ })).toBeVisible();
-      const publish = main(page).getByRole('button', { name: 'Publish' });
+      const publish = footer(page).getByRole('button', { name: 'Publish' });
       const box = await publish.boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(await serious(page)).toEqual([]);

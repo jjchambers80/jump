@@ -20,6 +20,7 @@ export default function SetupFooter({
   skipLabel = 'Skip for now',
   busy,
   status,
+  actionsRef,
 }: {
   onBack?: () => void;
   onSkip?: () => void;
@@ -36,6 +37,8 @@ export default function SetupFooter({
   locked?: string;
   /** A save problem worth seeing (couldn't save, invalid fields, unsaved live edits). */
   status?: React.ReactNode;
+  /** Where a step without Next renders its own primary action (Review's Publish, through a portal). */
+  actionsRef?: (el: HTMLDivElement | null) => void;
 }) {
   return (
     <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700 dark:bg-slate-900">
@@ -68,6 +71,7 @@ export default function SetupFooter({
             Save
           </button>
         )}
+        {actionsRef && <div ref={actionsRef} className="flex items-center gap-2" />}
         {(onNext || nextForm) && (
           <button type={nextForm ? 'submit' : 'button'} form={nextForm} onClick={nextForm ? undefined : onNext} disabled={busy} aria-busy={busy || undefined} className={primaryButton}>
             {nextLabel}

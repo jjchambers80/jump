@@ -53,9 +53,6 @@ export default function ImageStep({ orgId, saved, setSaved, refreshPreview }: Sa
           {error}
         </p>
       )}
-      <p className="text-sm text-gray-600 dark:text-slate-400">
-        Shown at the top of the event page and on event cards. A wide image (16:9) works best.
-      </p>
     </div>
   );
 }

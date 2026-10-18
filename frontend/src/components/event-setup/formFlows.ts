@@ -43,7 +43,7 @@ const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowSte
   key, title, intro, needsForm: key !== 'start' && key !== 'lineup', visible: always, anchor: 'get-involved', formAnchor: null, ...rest,
 });
 
-const details = s('details', 'Form details', 'What applicants see first, and when the form takes applications.', { formAnchor: 'apply-top' });
+const details = s('details', 'Form details', 'What registrants see first, and when the form takes registrations.', { formAnchor: 'apply-top' });
 const questions = s('questions', 'Fields', 'Email is always asked. Add any other fields you need.', { formAnchor: 'step-questions' });
 
 export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] }> = {
@@ -56,7 +56,7 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   registration: {
     title: 'Registration form',
     steps: [
-      s('start', 'Who registers?', 'Name the form for them (vendors, volunteers, members or anyone else) and decide if they pay.', { formAnchor: 'apply-top' }),
+      s('start', 'Free or paid?', 'Anyone can register: vendors, volunteers, members. Decide whether the people you approve pay.', { formAnchor: 'apply-top' }),
       details,
       s('options', 'Options and pricing', 'What registrants can be approved for: a price and a number of spots for each.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
       s('payment', 'How registrants choose and pay', 'Registration is free. Once you approve someone, they choose and pay.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),

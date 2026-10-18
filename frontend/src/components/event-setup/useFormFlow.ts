@@ -72,7 +72,7 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
     go: (key: FlowStepKey, id?: string) => router.push(href(key, id)),
     exit: (saved = false) => router.push(`/admin/events/${encodeURIComponent(eventId)}${saved ? '?saved=1' : ''}`),
     /** Spec 057: back into the registration event's own wizard (Image before the flow, Collect more after it). */
-    toEventStep: (key: 'image' | 'collect-more') => router.push(`/admin/events/${encodeURIComponent(eventId)}/setup?step=${key}${org ? `&org=${encodeURIComponent(org)}` : ''}`),
+    toEventStep: (key: 'image' | 'collect-more' | 'review') => router.push(`/admin/events/${encodeURIComponent(eventId)}/setup?step=${key}${org ? `&org=${encodeURIComponent(org)}` : ''}`),
     revision,
     /** After any save: the preview frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),

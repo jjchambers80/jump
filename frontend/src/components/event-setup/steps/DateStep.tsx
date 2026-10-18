@@ -13,7 +13,7 @@ import TimeZoneSelect from '@/components/TimeZoneSelect';
 import type { CreatedVenue } from '@/components/VenueFlyout';
 import { DEFAULT_ZONE, formatEventDateTime, zonedInputToInstant } from '@/lib/eventTime';
 import { FIELD_IDS } from '../steps';
-import { describedBy, errorText, hintClass, inputClass, labelClass, primaryButton, secondaryButton, textButton } from '../ui';
+import { describedBy, errorText, hintClass, inputClass, labelClass, secondaryButton, textButton } from '../ui';
 import { zoneText } from './VenueStep';
 import { browserZone, viewerTimeLine, zoneNeedsCheck } from './zoneChecks';
 import type { SetupVenue, StepFormProps } from './types';
@@ -93,7 +93,7 @@ function ZoneCheck({ orgId, venue, onVenueUpdated }: { orgId: string; venue: Set
     >
       <p id="setup-zone-check-title" className="flex items-start gap-2 font-medium">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-        Check the time zone before you sell tickets
+        Check the time zone before you publish
       </p>
       <p className="mt-1">
         {venue.timezoneSource === 'DEFAULT'
@@ -104,7 +104,8 @@ function ZoneCheck({ orgId, venue, onVenueUpdated }: { orgId: string; venue: Set
         <div className="min-w-[14rem] flex-1">
           <TimeZoneSelect id="setup-zone-check" value={choice} onChange={setChoice} label="Time zone at the venue" className={inputClass} labelClassName={labelClass} />
         </div>
-        <button type="button" onClick={confirm} disabled={saving} className={primaryButton}>
+        {/* Secondary: Next stays the step's one primary action. */}
+        <button type="button" onClick={confirm} disabled={saving} className={secondaryButton}>
           {saving ? 'Saving…' : 'Use this time zone'}
         </button>
       </div>
@@ -168,7 +169,7 @@ export default function DateStep({
             setShowEnd(true);
             requestAnimationFrame(() => document.getElementById(FIELD_IDS.endDate)?.focus());
           }}
-          className={secondaryButton}
+          className={`${textButton} -ml-3`}
         >
           <Plus className="h-4 w-4" aria-hidden />
           Add end time

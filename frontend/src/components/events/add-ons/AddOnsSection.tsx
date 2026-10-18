@@ -24,8 +24,6 @@ interface AddOnsSectionProps {
   priceTiers: TierOption[];
   taxRate: number;
   taxInclusive: boolean;
-  /** Section number on the edit page's run sheet (decorative). */
-  step?: number;
   /** Called with the reloaded list after every successful change (create, attach, edit, reorder, …). */
   onChange?: (addOns: AdminAddOn[]) => void;
 }
@@ -33,7 +31,7 @@ interface AddOnsSectionProps {
 // services/api.ts throws plain `{ status, message }` objects, not Errors.
 const describeError = (err: unknown, fallback: string) => (err as { message?: string } | null)?.message || fallback;
 
-export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive, step, onChange }: AddOnsSectionProps) {
+export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, taxInclusive, onChange }: AddOnsSectionProps) {
   const canEdit = useCan('addOns.manage');
   const base = `/organizations/${orgId}/events/${eventId}/add-ons`;
 
@@ -92,21 +90,10 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
 
   return (
     <div data-testid="add-ons-section">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 basis-64 items-baseline gap-3">
-          {step != null && (
-            <span aria-hidden className="font-mono text-xs font-medium tabular-nums text-gray-500 dark:text-slate-400">
-              {String(step).padStart(2, '0')}
-            </span>
-          )}
-          <div className="min-w-0">
-            <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold tracking-tight text-gray-900 focus:outline-none dark:text-white">Add-ons</h2>
-            <p className="text-xs text-gray-600 dark:text-slate-400">
-              Extras sold with tickets or applications — parking, power, badges. Saved immediately.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* The Collect more step's h1 and intro name this; the heading stays as the focus target after a delete. */}
+      <h2 ref={headingRef} tabIndex={-1} className="sr-only">
+        Add-ons
+      </h2>
 
       {(error || loadError) && (
         <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
