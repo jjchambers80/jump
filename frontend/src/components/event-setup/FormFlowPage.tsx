@@ -24,7 +24,7 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import { wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
-import StartFormStep, { START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
+import StartFormStep, { OptInSettings, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, secondaryButton } from './ui';
@@ -189,9 +189,16 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
             />
           )}
           {step.key === 'start' && form && (
-            <p className={hintClass}>
-              {form.name} is set up. Continue to its details, or go back to the event to add another.
-            </p>
+            <>
+              <p className={hintClass}>
+                {form.name} is set up. Continue to its details, or go back to the event to add another.
+              </p>
+              <OptInSettings
+                value={{ offerAccount: form.offerAccount !== false, offerMarketing: form.offerMarketing !== false }}
+                disabled={!canEdit}
+                onChange={(patch) => run('Saved.', async () => f.forms.upsert(await api.updateForm(form.id, patch))).then(noop)}
+              />
+            </>
           )}
           {form && (step.key === 'details' || step.key === 'payment') && (
             <SettingsCard

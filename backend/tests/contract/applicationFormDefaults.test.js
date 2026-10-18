@@ -53,8 +53,18 @@ describe('createForm starts blank', () => {
     for (const kind of ['PAID', 'FREE']) {
       const res = await request(app).post(`/admin/events/${fresh.id}/application-forms`).set('Authorization', `Bearer ${token}`).send({ kind, name: kind, setup: true });
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ collectName: false, collectBusiness: false, questions: [] });
+      expect(res.body).toMatchObject({ collectName: false, collectBusiness: false, offerAccount: false, offerMarketing: false, questions: [] });
     }
+  });
+
+  it('the opt-in offers are organizer settings', async () => {
+    const res = await create({ kind: 'FREE', name: 'Offers', setup: true, offerAccount: true });
+    expect(res.body).toMatchObject({ offerAccount: true, offerMarketing: false });
+    const upd = await request(app).patch(`${forms()}/${res.body.id}`).set('Authorization', `Bearer ${token}`).send({ offerMarketing: true });
+    expect(upd.status).toBe(200);
+    expect(upd.body).toMatchObject({ offerAccount: true, offerMarketing: true });
+    const bad = await request(app).patch(`${forms()}/${res.body.id}`).set('Authorization', `Bearer ${token}`).send({ offerAccount: 'yes' });
+    expect(bad.status).toBe(400);
   });
 
   it('an explicit collectBusiness on a FREE form wins', async () => {
