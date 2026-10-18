@@ -5,8 +5,8 @@
 import type { ReactNode } from 'react';
 
 const TONES = {
-  /** On the dark hero. */
-  hero: 'text-gray-200',
+  /** On the hero (its ink follows the image or the plain brand-tinted surface). */
+  hero: 'text-hero-soft',
   /** On the page or card surface. */
   surface: 'text-gray-600 dark:text-slate-300',
 };

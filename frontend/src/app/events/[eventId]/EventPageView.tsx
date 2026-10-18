@@ -92,7 +92,8 @@ export default function EventPageView({
           signIn={org.signInLinks !== false}
         />
       )}
-      <div className={`max-w-7xl mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${single ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
+      {/* A registration page is one form: a narrow column, so its fields can run full width */}
+      <div className={`${isRegistration ? 'max-w-3xl' : 'max-w-7xl'} mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-12 ${single ? 'lg:block' : 'lg:flex lg:gap-8 lg:items-start'}`}>
         {/* RSVP and registration drop overflow-hidden so the pass / Register button can stick; the hero clips its own corners */}
         <div className={`flex-1 min-w-0 bg-transparent sm:bg-white sm:dark:bg-slate-800 rounded-none sm:rounded-2xl sm:border sm:border-gray-200 sm:dark:border-slate-700 sm:shadow-sm sm:dark:shadow-black/20 ${isRsvp || isRegistration ? '' : 'overflow-hidden'}`}>
           <EventHero event={event} org={org} preview={preview} onShowDescription={on.onShowDescription} onShowImage={on.onShowImage} />

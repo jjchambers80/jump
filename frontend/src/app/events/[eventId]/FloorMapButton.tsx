@@ -68,10 +68,10 @@ export default function FloorMapButton({
 
   if (preview) {
     return (
-      <span id="floor-map" data-testid="floor-map-button" className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-white/70 ring-1 ring-inset ring-white/15">
+      <span id="floor-map" data-testid="floor-map-button" className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-hero-ink/70 ring-1 ring-inset ring-hero-ink/15">
         <MapIcon className="h-4 w-4" aria-hidden />
         <span>Floor map</span>
-        <span className="text-xs text-white/60">· Preview</span>
+        <span className="text-xs text-hero-ink/60">· Preview</span>
       </span>
     );
   }
@@ -88,7 +88,7 @@ export default function FloorMapButton({
         }}
         aria-haspopup="dialog"
         data-testid="floor-map-button"
-        className="inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none"
+        className="inline-flex h-9 items-center gap-2 rounded-full bg-hero-ink/10 px-4 text-sm font-semibold text-hero-ink ring-1 ring-inset ring-hero-ink/25 backdrop-blur-sm transition-colors hover:bg-hero-ink/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-ink motion-reduce:transition-none"
       >
         <MapIcon className="h-4 w-4" aria-hidden />
         <span>Floor map</span>

@@ -25,7 +25,7 @@
 | `frontend/src/components/events/EventWorkspace.tsx` | Tabs per type |
 | `frontend/src/components/events/EventOverviewSections.tsx` | `RegistrationsCard`, `LinkedEventCard`, `ApplicationsSection` title |
 | `frontend/src/components/events/EventsToolbar.tsx`, `EventListCard.tsx` | Type filter, registration card |
-| `frontend/src/app/events/[eventId]/EventRegister.tsx` | Public registration page body: the form's fields inline (`ApplySteps` + `useApplyForm`) and one sticky Register submit button, no About section |
+| `frontend/src/app/events/[eventId]/EventRegister.tsx` | Public registration page body: the form's fields inline (`ApplySteps` + `useApplyForm`) and one sticky Register submit button, no About section. The page is a narrow column (`EventPageView`: `max-w-3xl`, not `max-w-7xl`) with a smaller title (`sm:text-4xl`) so the full-width fields keep a readable length |
 | `frontend/src/components/storefront/EventStub.tsx` | Storefront list: "Registration" eyebrow, Register button |
 
 ## Configuration

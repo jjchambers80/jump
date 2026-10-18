@@ -69,7 +69,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
   }
 
   return (
-    <form id="register" onSubmit={handleSubmit} noValidate aria-label={form.name} data-testid="apply-form" className="scroll-mt-6 space-y-5">
+    <form id="register" onSubmit={handleSubmit} noValidate aria-label={form.name} data-testid="apply-form" className="scroll-mt-6 space-y-6">
       <ApplySteps form={form} apply={apply} />
       {apply.error && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
@@ -77,7 +77,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
         </p>
       )}
       {/* Sticky in the page body: the card drops overflow-hidden for it (EventPageView) */}
-      <div className="sticky bottom-4 z-30">
+      <div className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] z-30">
         <button
           type="submit"
           disabled={apply.submitting || preview}

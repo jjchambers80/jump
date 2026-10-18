@@ -18,6 +18,12 @@ module.exports = {
           fg: 'var(--brand-fg)',
           link: 'var(--brand-link)',
         },
+        // Event hero ink (globals.css): white on the poster hero, theme ink on the plain one.
+        hero: {
+          ink: 'rgb(var(--hero-ink) / <alpha-value>)',
+          soft: 'rgb(var(--hero-soft) / <alpha-value>)',
+          paper: 'rgb(var(--hero-paper) / <alpha-value>)',
+        },
         // Admin accent: Eventimus lime #c8ff00 for fills (dark text on top)
         // and dark-mode links; 600+ are darker shades that stay readable as
         // link text on white in light mode.
