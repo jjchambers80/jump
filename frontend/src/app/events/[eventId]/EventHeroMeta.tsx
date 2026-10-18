@@ -10,7 +10,7 @@ import { dateTile } from '@/lib/dateTile';
 import Placeholder from './Placeholder';
 import type { EventPageEvent } from './eventPage';
 
-const TILE = 'rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm';
+const TILE = 'hero-tile rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm';
 
 export default function EventHeroMeta({ event, preview }: { event: EventPageEvent; preview: boolean }) {
   const zone = event.venue?.timezone;

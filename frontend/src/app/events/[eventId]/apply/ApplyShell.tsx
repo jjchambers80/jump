@@ -201,7 +201,7 @@ export function ApplyFrame({
               {tile ? (
                 <div
                   aria-hidden
-                  className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-hero-ink/10 py-1 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
+                  className="flex w-12 shrink-0 flex-col items-center hero-tile rounded-xl bg-hero-ink/10 py-1 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
                 >
                   <span className="text-[9px] font-bold uppercase tracking-[0.16em] opacity-80">{tile.month}</span>
                   <span className="text-lg font-extrabold leading-none tabular-nums">{tile.day}</span>
@@ -221,7 +221,7 @@ export function ApplyFrame({
               <div className="flex items-center gap-3">
                 <div
                   aria-hidden
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center hero-tile rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
                 >
                   <MapPin className="h-5 w-5" />
                 </div>
