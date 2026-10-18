@@ -53,7 +53,7 @@ const SAVED = [
   { id: 'sa-parking', name: 'Parking pass', description: null, defaultPrice: 15, scope: 'TICKET', taxable: true, isArchived: false, eventCount: 3, onEvent: null },
 ];
 
-async function mockApi(page: Page, event = adminEvent(), opts: { addOns?: Record<string, unknown>[]; failLoads?: boolean } = {}) {
+async function mockApi(page: Page, event = adminEvent(), opts: { addOns?: Record<string, unknown>[]; failLoads?: boolean; saved?: typeof SAVED } = {}) {
   const state = { addOns: [...(opts.addOns ?? [])], attach: [] as unknown[], create: [] as unknown[], patch: [] as unknown[], previews: 0, failLoads: !!opts.failLoads };
   await page.route(`${API}/**`, (route) => route.fulfill(json({ message: 'Not found' }, 404)));
   await page.route(`${API}/organizations`, (route) =>
@@ -74,10 +74,9 @@ async function mockApi(page: Page, event = adminEvent(), opts: { addOns?: Record
     return route.fulfill(json({ event: { ...event, addOns }, organization: { id: ORG_ID, name: 'Collect Org' }, forms: [] }));
   });
   await page.route(`${API}/organizations/${ORG_ID}/saved-add-ons?**`, (route) => {
-    const q = (new URL(route.request().url()).searchParams.get('q') ?? '').toLowerCase();
     const onEvent = (id: string) => (state.addOns.some((a) => a.name === 'Parking pass') && id === 'sa-parking' ? 'addon-parking' : null);
-    const saved = SAVED.filter((s) => s.name.toLowerCase().includes(q)).map((s) => ({ ...s, onEvent: onEvent(s.id) }));
-    return route.fulfill(json({ savedAddOns: saved, suggestions: [], ...(q ? { exactMatch: null, canCreate: !saved.some((s) => s.name.toLowerCase() === q) } : {}) }));
+    const saved = (opts.saved ?? SAVED).map((s) => ({ ...s, onEvent: onEvent(s.id) }));
+    return route.fulfill(json({ savedAddOns: saved, suggestions: [] }));
   });
   const base = `${API}/organizations/${ORG_ID}/events/${EVENT_ID}/add-ons`;
   await page.route(base, (route) => {
@@ -137,10 +136,9 @@ test.beforeEach(async ({ page, baseURL }) => {
 /** Add the saved Parking pass, then attach it to the VIP tier only. */
 async function addParkingForVip(page: Page, state: Awaited<ReturnType<typeof mockApi>>) {
   const pane = main(page);
-  await expect(pane.getByRole('combobox', { name: 'Add an add-on' })).toBeVisible(COLD);
-  const picker = pane.getByRole('combobox', { name: 'Add an add-on' });
-  await picker.click();
-  await page.getByRole('listbox', { name: 'Saved add-ons' }).getByRole('option', { name: /Parking pass/ }).click();
+  const add = pane.getByRole('list', { name: 'Saved add-ons' }).getByRole('button', { name: 'Add Parking pass' });
+  await expect(add).toBeVisible(COLD);
+  await add.click();
   await expect.poll(() => state.attach).toEqual([{ productId: 'sa-parking' }]);
   const row = pane.getByTestId('admin-add-on-addon-parking');
   await expect(row).toContainText('all tiers');
@@ -187,11 +185,10 @@ test.describe('desktop', () => {
     const state = await mockApi(page);
     await page.goto(STEP_URL);
     const pane = main(page);
-    await expect(pane.getByText('No add-ons yet.')).toBeVisible(COLD);
-    await pane.getByRole('combobox', { name: 'Add an add-on' }).fill('Event T-shirt');
-    await page.getByRole('option', { name: 'Create “Event T-shirt”' }).click();
+    await expect(pane.getByText('No add-ons on this event yet.')).toBeVisible(COLD);
+    await pane.getByRole('button', { name: 'Create an add-on' }).click();
     const created = page.getByRole('dialog', { name: 'New add-on' });
-    await expect(created.getByLabel('Name')).toHaveValue('Event T-shirt');
+    await created.getByLabel('Name').fill('Event T-shirt');
     await created.getByLabel('Price ($)').fill('20');
     await created.getByLabel('Sold with').selectOption('TICKET');
     await created.getByRole('button', { name: 'Create' }).click();
@@ -205,6 +202,15 @@ test.describe('desktop', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(edit).toBeFocused();
+  });
+
+  test('with no saved add-ons, a link creates the first one', async ({ page }) => {
+    await mockApi(page, adminEvent(), { saved: [] });
+    await page.goto(STEP_URL);
+    const pane = main(page);
+    await expect(pane.getByText('You have no add-ons set up yet.')).toBeVisible(COLD);
+    await pane.getByRole('button', { name: 'Create an add-on' }).click();
+    await expect(page.getByRole('dialog', { name: 'New add-on' })).toBeVisible();
   });
 
   test('a failed load says what failed and Try again recovers', async ({ page }) => {
@@ -248,18 +254,14 @@ test.describe('desktop', () => {
     await expect(row).toContainText('reserved 1');
     await expect(row).toContainText('buyer pays $18.01');
 
-    const picker = main(page).getByRole('combobox', { name: 'Add an add-on' });
-    await picker.click();
-    const list = page.getByRole('listbox', { name: 'Saved add-ons' });
-    await expect(list.getByRole('option', { name: /Parking pass/ })).toHaveAttribute('aria-disabled', 'true');
-    // An existing name in any case offers no Create.
-    await picker.fill('parking PASS');
-    await expect(list.getByRole('option', { name: /Create/ })).toHaveCount(0);
+    // Already on the event: not listed to add again.
+    await expect(main(page).getByText('Every saved add-on is on this event.')).toBeVisible();
+    await expect(main(page).getByRole('button', { name: 'Add Parking pass' })).toHaveCount(0);
 
     // A new one limited to one tier carries those limits to the API.
-    await picker.fill('VIP lounge');
-    await list.getByRole('option', { name: 'Create “VIP lounge”' }).click();
+    await main(page).getByRole('button', { name: 'Create an add-on' }).click();
     const dialog = page.getByRole('dialog', { name: 'New add-on' });
+    await dialog.getByLabel('Name').fill('VIP lounge');
     await dialog.getByLabel('Price ($)').fill('50');
     await dialog.getByLabel('Sold with').selectOption('TICKET');
     await dialog.getByLabel('Only these tiers').check();
@@ -277,7 +279,7 @@ test.describe('desktop', () => {
     await page.goto(STEP_URL);
     const row = main(page).getByTestId('admin-add-on-addon-parking');
     await expect(row).toBeVisible(COLD);
-    await expect(main(page).getByRole('combobox', { name: 'Add an add-on' })).toHaveCount(0);
+    await expect(main(page).getByRole('heading', { name: 'Add to this event' })).toHaveCount(0);
     await expect(row.getByRole('button', { name: 'Edit' })).toHaveCount(0);
   });
 
