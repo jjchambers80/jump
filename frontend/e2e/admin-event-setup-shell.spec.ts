@@ -230,7 +230,14 @@ test.describe('desktop', () => {
 
     await expect(heading(page, 'Name your event')).toBeVisible();
     await main(page).getByLabel('Event name').fill('Market Vendors');
-    // Choosing the live event fills an empty venue and date from it.
+    // Choosing the live event fills an empty venue and date from it; unlinking
+    // takes its venue away again, so Where asks for one.
+    await main(page).getByLabel(/Registering for/).selectOption('evt-live');
+    await main(page).getByLabel(/Registering for/).selectOption('');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Where is it?')).toBeVisible();
+    await expect(main(page).getByLabel('Venue')).toHaveValue('');
+    await page.getByRole('button', { name: 'Back' }).click();
     await main(page).getByLabel(/Registering for/).selectOption('evt-live');
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(heading(page, 'Where is it?')).toBeVisible();

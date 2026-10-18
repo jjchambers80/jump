@@ -39,14 +39,19 @@ export default function LinkedEventField({ fields, onChange, orgId, hasRow }: St
 
   const choose = (id: string) => {
     const target = events?.find((e) => e.id === id);
+    const previous = events?.find((e) => e.id === fields.linkedEventId);
+    // A venue that came from the event it was registering for leaves with that
+    // event, so the Where step asks for an address again.
+    const inherited = !!fields.venueId && previous?.venue?.id === fields.venueId;
+    const venueId = inherited ? '' : fields.venueId;
     // Before the row exists, an empty venue and date come from the event (both stay editable).
     const fill = !hasRow && target
       ? {
-          ...(!fields.venueId && target.venue && { venueId: target.venue.id }),
+          ...(!venueId && target.venue && { venueId: target.venue.id }),
           ...(!fields.date && { date: instantToZonedInput(target.date, target.venue?.timezone ?? null) }),
         }
       : {};
-    onChange({ linkedEventId: id, ...fill });
+    onChange({ linkedEventId: id, ...(inherited && { venueId }), ...fill });
   };
 
   return (
