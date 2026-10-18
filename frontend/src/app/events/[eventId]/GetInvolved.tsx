@@ -11,10 +11,6 @@ import { ArrowUpRight } from 'lucide-react';
 import api from '@/services/api';
 import { acceptanceLine, type PublicForm } from '@/lib/applications';
 
-// The pill says what the organizer set as the form's button label, else the
-// form name: forms have no type, so the words are always the organizer's.
-const shortLabel = (form: PublicForm) => form.buttonLabel?.trim() || form.name;
-
 export default function GetInvolved({
   eventId,
   className = '',
@@ -49,20 +45,16 @@ export default function GetInvolved({
 
   if (forms.length === 0) return null;
 
-  // Two forms for the same role ("Apply", "Apply") would be ambiguous: fall back to the names.
-  const labels = forms.map(shortLabel);
-  const ambiguous = new Set(labels).size < labels.length;
-
   return (
     <ul id="get-involved" className={`flex flex-wrap gap-2 ${className}`} aria-label="Get involved" data-testid="get-involved">
-      {forms.map((form, i) => {
+      {forms.map((form) => {
         const closed = preview ? 'Preview' : acceptanceLine(form.acceptance);
-        const label = ambiguous ? form.name : labels[i];
+        // Event forms have no button label (it is a standing-form setting): the pill is the form name.
+        const label = form.name;
         return (
           <li key={form.id}>
             {closed ? (
               <span
-                title={form.name}
                 className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-hero-ink/70 ring-1 ring-inset ring-hero-ink/15"
               >
                 {label}
@@ -72,8 +64,6 @@ export default function GetInvolved({
               <Link
                 // Spec 057: a linked registration event's form is that event's page.
                 href={form.eventId && form.eventId !== eventId ? `/events/${form.eventId}` : `/events/${eventId}/apply/${form.slug}`}
-                aria-label={label === form.name ? undefined : `${label}: ${form.name}`}
-                title={form.name}
                 className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-hero-ink px-4 text-sm font-semibold text-hero-paper shadow-sm shadow-black/20 transition-colors hover:bg-hero-ink/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-ink focus-visible:ring-offset-2 focus-visible:ring-offset-hero-paper"
               >
                 {label}

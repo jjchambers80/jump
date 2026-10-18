@@ -1,5 +1,5 @@
-// "Get involved" pills (spec 050 §6.2, card 050-B): the label is the form's
-// button label, else its name — never a word picked from a form type. The API is mocked.
+// "Get involved" pills (spec 050 §6.2, card 050-B): the label is the form name —
+// a stored button label is ignored (event forms no longer have one). The API is mocked.
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -30,7 +30,7 @@ function eventResponse() {
 
 // [name, buttonLabel, expected pill]
 const FORMS: [string, string | null, string][] = [
-  ['Market hall 2027', 'Sell at the market', 'Sell at the market'],
+  ['Market hall 2027', 'Sell at the market', 'Market hall 2027'],
   ['Member renewal', null, 'Member renewal'],
   ['Celebrity row', '  ', 'Celebrity row'],
 ];
@@ -56,14 +56,14 @@ async function mockEvent(page: Page) {
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-test('pill labels are the button label, else the form name', async ({ page }) => {
+test('pill labels are the form name', async ({ page }) => {
   await mockEvent(page);
   await page.goto(`/events/${EVENT_ID}`);
 
   const strip = page.getByTestId('get-involved').filter({ visible: true }).first();
   await expect(strip).toBeVisible({ timeout: 30000 });
-  for (const [name, , label] of FORMS) {
-    const link = strip.getByRole('link', { name: label === name ? name : `${label}: ${name}`, exact: true });
+  for (const [, , label] of FORMS) {
+    const link = strip.getByRole('link', { name: label, exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveText(label);
   }
