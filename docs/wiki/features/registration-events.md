@@ -13,7 +13,7 @@
 | `backend/src/services/EventService.js` | `type` / `linkedEventId` on create and PATCH (`_resolveLinkedEvent`), list / summary / CSV `?type=`, `registrationCount`, `_registrationLinks` on workspace and overview |
 | `backend/src/services/ApplicationFormService.js` | One form per registration event (`_assertNoForm`, 409 `FORM_EXISTS`); `publicForms` of a live event adds its published registrations' forms (each carries `eventId`) |
 | `backend/src/services/EventReadinessService.js` | Registration: no ticket checks, blocker `FORM_MISSING`, the linked event's map for the map warning |
-| `frontend/src/app/events/[eventId]/GetInvolved.tsx` | The live event's pill for each linked registration form: its **Button label** (Form details), else its name |
+| `frontend/src/app/events/[eventId]/GetInvolved.tsx` | The live event's pill for each linked registration form: its form name (event forms have no button label; the registration event's own button always says **Register**) |
 | `backend/src/services/mapEvents.js` | `mapEventIdFor` / `eventIdsForMap`: the only place that knows a registration uses its live event's map and lineup |
 | `backend/src/scripts/backfill-057-registration-events.js` | Moves every form on a live event onto a linked registration event |
 | `frontend/src/components/event-setup/steps.ts` | `type` step, `registration` slot, `wizardProgress`, `registrationFlowSteps` |

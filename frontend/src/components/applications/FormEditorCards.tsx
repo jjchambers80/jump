@@ -261,15 +261,14 @@ export function SettingsCard({
         </div>
         )}
         </>
-        {show('details') && (
-          <div>
-            <label htmlFor="f-button" className={labelClass}>Button label</label>
-            <input id="f-button" value={state.buttonLabel} maxLength={80} placeholder={standing ? 'Apply' : state.name} disabled={!canEdit} onChange={(e) => update({ buttonLabel: e.target.value })} aria-describedby="f-button-hint" className={field} />
-            <p id="f-button-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">{standing ? 'The call to action on the pages that show this form.' : 'The button on the event page. Empty: the form name.'}</p>
-          </div>
-        )}
+        {/* Event forms keep the generic "Register" button; only standing forms label page buttons. */}
         {standing && show('details') && (
           <>
+            <div>
+              <label htmlFor="f-button" className={labelClass}>Button label</label>
+              <input id="f-button" value={state.buttonLabel} maxLength={80} placeholder="Apply" disabled={!canEdit} onChange={(e) => update({ buttonLabel: e.target.value })} aria-describedby="f-button-hint" className={field} />
+              <p id="f-button-hint" className="mt-1 text-xs text-gray-500 dark:text-slate-400">The call to action on the pages that show this form.</p>
+            </div>
             <div className="sm:col-span-2">
               <label htmlFor="f-success" className={labelClass}>Thank-you message</label>
               <textarea id="f-success" rows={3} value={state.successMessage} maxLength={2000} placeholder="Thanks — we'll review your application and email you." disabled={!canEdit} onChange={(e) => update({ successMessage: e.target.value })} className={field} />

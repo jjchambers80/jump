@@ -158,7 +158,7 @@ test.describe('desktop', () => {
     await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 7 of 12, Form details');
     await expect(main(page).getByLabel('Intro shown to applicants')).toBeVisible();
     await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
-    await expect(main(page).getByLabel('Button label')).toBeVisible();
+    await expect(main(page).getByLabel('Button label')).toHaveCount(0);
     await expect(main(page).getByRole('button', { name: 'Save settings' })).toHaveCount(0);
     await main(page).getByLabel('Intro shown to applicants').fill('Tables and power included.');
     await next(page).click();
