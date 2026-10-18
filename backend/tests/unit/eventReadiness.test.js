@@ -87,9 +87,10 @@ describe('EventReadinessService.evaluate', () => {
     expect(run(ready({ type: 'REGISTRATION', applicationForms: [form({ kind: 'PAID', tiers: [] })] }), ctx).warnings[0]).toMatchObject({ step: 'registration' });
   });
 
-  it('warns for a form without questions, ignoring closed forms', () => {
-    const result = run(ready({ applicationForms: [form({ _count: { questions: 0 } }), form({ id: 'c', status: 'CLOSED', _count: { questions: 0 } })] }));
-    expect(result.warnings).toEqual([expect.objectContaining({ code: 'FORM_HAS_NO_QUESTIONS', formId: 'f1' })]);
+  // Spec 056: a form starts with an email only, and name / business / custom
+  // fields are optional, so a form without custom questions is complete.
+  it('does not warn for a form without custom questions', () => {
+    expect(run(ready({ applicationForms: [form({ _count: { questions: 0 } })] })).warnings).toEqual([]);
   });
 
   it('warns when a MAP form has no published floor map', () => {
