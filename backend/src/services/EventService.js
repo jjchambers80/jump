@@ -419,7 +419,9 @@ class EventService {
       updateData.name = updates.name;
     }
 
-    if (updates.name !== undefined || updates.slug !== undefined) {
+    // Only a draft's URL follows its name: once published, links are out there,
+    // so a rename keeps the slug (an explicit slug still changes it).
+    if (updates.slug !== undefined || (updates.name !== undefined && existing.status === 'DRAFT')) {
       Object.assign(
         updateData,
         await resolveUniqueSlug(prisma.event, {
