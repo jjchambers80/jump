@@ -35,6 +35,27 @@ export interface SalesSaved {
   admissionLock?: string | null;
 }
 
+// Top-level listing categories organizers pick from on the Name step. Stored
+// as plain text on Event.category, so an older free-text value still loads.
+export const EVENT_CATEGORIES = [
+  'Music',
+  'Arts & Theatre',
+  'Comedy',
+  'Film',
+  'Festivals & Fairs',
+  'Markets & Vendors',
+  'Conventions & Expos',
+  'Conferences & Workshops',
+  'Sports & Fitness',
+  'Food & Drink',
+  'Gaming',
+  'Community',
+  'Charity & Fundraisers',
+  'Family & Kids',
+  'Nightlife',
+  'Other',
+] as const;
+
 export const SALES_FIELD_IDS = {
   category: 'setup-category',
   capacity: 'setup-capacity',

@@ -293,7 +293,7 @@ test.describe('edit mode', () => {
     await page.goto(DETAILS);
     await page.getByRole('link', { name: 'Edit listing', exact: true }).click();
     await expect(heading(page, 'Name your event')).toBeFocused(COLD);
-    await main(page).getByLabel('Category (optional)').fill('Craft fair');
+    await main(page).getByLabel('Category (optional)').selectOption('Festivals & Fairs');
     await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible();
     await guardArmed(page);
     const asked: string[] = [];
@@ -304,7 +304,7 @@ test.describe('edit mode', () => {
     await page.goBack();
     await expect.poll(() => asked).toEqual(['You have unsaved changes. Leave without saving?']);
     await expect(heading(page, 'Name your event')).toBeVisible();
-    await expect(main(page).getByLabel('Category (optional)')).toHaveValue('Craft fair');
+    await expect(main(page).getByLabel('Category (optional)')).toHaveValue('Festivals & Fairs');
     expect(calls.patch).toHaveLength(0);
   });
 });
