@@ -4,13 +4,14 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
-import { requireFeature, requireOrganizer } from '../../middleware/rbac.js';
+import { can, requireFeature, requireOrganizer } from '../../middleware/rbac.js';
 import { requireOrgMembership } from '../../middleware/orgScope.js';
 import { validateCreateVenue, validateUpdateVenue } from '../validators/venueValidators.js';
 import venueService from '../../services/VenueService.js';
-import { NotFoundError } from '../../middleware/errorHandler.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { uploadImage } from '../../middleware/imageUpload.js';
 import imageService from '../../services/ImageService.js';
+import { isValidTimeZone } from '../../utils/locales.js';
 import { gateByVenueParam } from '../../middleware/storefrontGate.js';
 
 const verifyOrgOwnership = requireOrgMembership('orgId');
@@ -57,7 +58,30 @@ orgRouter.post('/', requireAuth, requireFeature('venues'), verifyOrgOwnership, v
  */
 orgRouter.post('/from-address', requireAuth, requireOrganizer, verifyOrgOwnership, validateCreateVenue, async (req, res, next) => {
   try {
+    // The state or ZIP is what sets the time zone; without either it would
+    // silently fall back to Eastern.
+    if (!req.body.state && !req.body.postalCode) throw new ValidationError('Enter the state or ZIP code: it sets the time zone');
     res.json(await venueService.venueForAddress(req.params.orgId, req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /organizations/:orgId/venues/:id/time-zone
+ * The event wizard's "When is it?" check: confirm or correct a venue's zone
+ * when it was guessed (DEFAULT, or derived near a zone line). The zone becomes
+ * MANUAL. Venues on: any venue. Venues off: only the private venues the
+ * wizard's address step creates, since a public venue belongs to Venues.
+ */
+orgRouter.put('/:id/time-zone', requireAuth, requireOrganizer, verifyOrgOwnership, async (req, res, next) => {
+  try {
+    const { timezone } = req.body ?? {};
+    if (typeof timezone !== 'string' || !isValidTimeZone(timezone)) throw new ValidationError('Choose a valid time zone');
+    const venue = await venueService.getVenueById(req.params.orgId, req.params.id);
+    if (!venue) throw new NotFoundError('Venue not found');
+    if (venue.isPublic && !(await can(req, 'venues'))) throw new ForbiddenError('Your role does not have access to this');
+    res.json(await venueService.updateVenue(req.params.orgId, req.params.id, { timezone }));
   } catch (error) {
     next(error);
   }

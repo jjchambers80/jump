@@ -563,6 +563,33 @@ describe('Venue Contract Tests', () => {
       expect((await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ name: 'No address' })).status).toBe(400);
     });
 
+    it('from-address needs a state or ZIP, and a confirmed zone corrects the reused row', async () => {
+      const auth = ['Authorization', `Bearer ${organizerToken}`];
+      const noRegion = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ name: '9 Nowhere Rd', address: '9 Nowhere Rd' });
+      expect(noRegion.status).toBe(400);
+      // El Paso: Texas is split, so the derived zone (Central) is a guess.
+      const body = { name: '1 El Paso St', address: '1 El Paso St', city: 'El Paso', state: 'TX' };
+      const guessed = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send(body);
+      expect(guessed.body).toMatchObject({ timezone: 'America/Chicago', timezoneSource: 'DERIVED' });
+      const confirmed = await request(app).post(`/organizations/${testOrgId}/venues/from-address`).set(...auth).send({ ...body, timezone: 'America/Denver' });
+      expect(confirmed.body).toMatchObject({ id: guessed.body.id, timezone: 'America/Denver', timezoneSource: 'MANUAL' });
+    });
+
+    it('PUT /:id/time-zone sets a private venue’s zone with Venues off, never a public one', async () => {
+      const auth = ['Authorization', `Bearer ${organizerToken}`];
+      const venue = await request(app)
+        .post(`/organizations/${testOrgId}/venues/from-address`)
+        .set(...auth)
+        .send({ name: '2 Unknown Ave', address: '2 Unknown Ave', postalCode: '00000' });
+      expect(venue.body.timezoneSource).toBe('DEFAULT');
+      const set = await request(app).put(`/organizations/${testOrgId}/venues/${venue.body.id}/time-zone`).set(...auth).send({ timezone: 'America/Los_Angeles' });
+      expect(set.status).toBe(200);
+      expect(set.body).toMatchObject({ timezone: 'America/Los_Angeles', timezoneSource: 'MANUAL' });
+      expect((await request(app).put(`/organizations/${testOrgId}/venues/${venue.body.id}/time-zone`).set(...auth).send({ timezone: 'Mars/Base' })).status).toBe(400);
+      expect((await request(app).put(`/organizations/${testOrgId}/venues/${publicVenueId}/time-zone`).set(...auth).send({ timezone: 'America/Chicago' })).status).toBe(403);
+      expect((await request(app).put(`/organizations/${inactiveOrgId}/venues/${inactiveVenueId}/time-zone`).set(...auth).send({ timezone: 'America/Chicago' })).status).toBe(403);
+    });
+
     it('from-address is scoped to the caller’s organizations', async () => {
       const res = await request(app)
         .post(`/organizations/${inactiveOrgId}/venues/from-address`)

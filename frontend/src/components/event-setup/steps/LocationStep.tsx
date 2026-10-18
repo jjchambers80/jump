@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
+import VenueTimeZoneField from '@/components/VenueTimeZoneField';
 import type { CreatedVenue } from '@/components/VenueFlyout';
 import { FIELD_IDS } from '../steps';
 import { describedBy, errorText, hintClass, inputClass, labelClass, primaryButton, secondaryButton } from '../ui';
@@ -21,7 +22,8 @@ export default function LocationStep({
   orgId,
   venues,
   onVenueCreated,
-}: StepFormProps & { orgId: string; venues: SetupVenue[]; onVenueCreated: (venue: CreatedVenue) => void }) {
+  zoneNotice,
+}: StepFormProps & { orgId: string; venues: SetupVenue[]; onVenueCreated: (venue: CreatedVenue) => void; zoneNotice: string | null }) {
   const current = venues.find((v) => v.id === fields.venueId);
   const [editing, setEditing] = useState(!current);
   const [form, setForm] = useState(() => ({
@@ -30,7 +32,9 @@ export default function LocationStep({
     address: current?.address ?? '',
     city: current?.city ?? '',
     state: current?.state ?? '',
-    postalCode: '',
+    postalCode: current?.postalCode ?? '',
+    // Spec 033: null follows the address; a value is the organizer's own choice.
+    timezone: current?.timezoneSource === 'MANUAL' ? current.timezone : (null as string | null),
   }));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -44,6 +48,11 @@ export default function LocationStep({
       setSaveError('Enter the street address');
       return;
     }
+    // Without either the zone falls back to Eastern without a word.
+    if (!form.state && !form.postalCode.trim()) {
+      setSaveError('Enter the state or ZIP code: it sets the time zone');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -53,6 +62,7 @@ export default function LocationStep({
         city: form.city.trim() || undefined,
         state: form.state || undefined,
         postalCode: form.postalCode.trim() || undefined,
+        timezone: form.timezone ?? undefined,
       });
       onVenueCreated(venue);
       setEditing(false);
@@ -73,10 +83,16 @@ export default function LocationStep({
           </p>
           <p className={hintClass}>Times for this event are in {zoneText(current.timezone)}.</p>
         </div>
-        {status === 'PUBLISHED' && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-            This event is live. A new address keeps the start time as typed and moves it to that address&apos;s time zone.
+        {zoneNotice ? (
+          <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+            {zoneNotice}
           </p>
+        ) : (
+          status === 'PUBLISHED' && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              This event is live. A new address keeps the start time as typed and moves it to that address&apos;s time zone.
+            </p>
+          )
         )}
         <button type="button" onClick={() => setEditing(true)} className={secondaryButton}>
           Change address
@@ -155,6 +171,15 @@ export default function LocationStep({
           />
         </div>
       </div>
+      <VenueTimeZoneField
+        id="setup-location-timezone"
+        state={form.state}
+        postalCode={form.postalCode}
+        value={form.timezone}
+        onChange={(timezone) => set({ timezone })}
+        className={inputClass}
+        labelClassName={labelClass}
+      />
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={save} disabled={saving} className={primaryButton}>
           {saving ? 'Saving…' : 'Use this address'}

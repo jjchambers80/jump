@@ -147,14 +147,15 @@ test.describe('desktop', () => {
     await page.keyboard.press('Enter');
 
     await expect(heading(page, 'When is it?')).toBeFocused();
-    await expect(main(page).getByText(/Time zone: New York/)).toBeVisible();
+    // The zone came from the address with confidence: no box, no question.
+    await expect(main(page).getByText(/^Time zone:/)).toHaveCount(0);
+    await expect(main(page).getByText('Check the time zone before you sell tickets')).toHaveCount(0);
     await tabTo(page, main(page).getByLabel('Starts'));
     await page.keyboard.type('06012031');
     await page.keyboard.press('Tab');
     await page.keyboard.type('0400PM');
+    // The zone sits next to the time, abbreviated for the event's date (EDT in June), not today's.
     await expect(main(page).getByText(/Jun 1, 2031.*4:00 PM EDT at the venue/)).toBeVisible();
-    // The chip's abbreviation is the event date's (EDT in June), not today's.
-    await expect(main(page).getByText('Time zone: EDT, New York (GMT-04:00)')).toBeVisible();
 
     await tabTo(page, next);
     await page.keyboard.press('Enter');
@@ -424,9 +425,14 @@ test.describe('venues turned off', () => {
 
     await main(page).getByLabel('Street address').fill('500 Fayetteville St');
     await main(page).getByLabel('City').fill('Raleigh');
+    // Without a state or ZIP the zone would silently be Eastern.
+    await main(page).getByRole('button', { name: 'Use this address' }).click();
+    await expect(main(page).getByText('Enter the state or ZIP code: it sets the time zone')).toBeVisible();
+    expect(fromAddress).toHaveLength(0);
+    await main(page).getByLabel('ZIP code').fill('27601');
     await main(page).getByRole('button', { name: 'Use this address' }).click();
     await expect(main(page).getByText('500 Fayetteville St, Raleigh, NC')).toBeVisible();
-    expect(fromAddress[0].postDataJSON()).toMatchObject({ name: '500 Fayetteville St', address: '500 Fayetteville St', city: 'Raleigh' });
+    expect(fromAddress[0].postDataJSON()).toMatchObject({ name: '500 Fayetteville St', address: '500 Fayetteville St', city: 'Raleigh', postalCode: '27601' });
     expect(await serious(page)).toEqual([]);
 
     await page.getByRole('button', { name: 'Next' }).click();
@@ -435,5 +441,40 @@ test.describe('venues turned off', () => {
     await page.getByRole('button', { name: 'Next' }).click();
     await expect.poll(() => calls.create.length).toBe(1);
     expect(calls.create[0].postDataJSON().venueId).toBe('v-loc');
+  });
+
+  test('a guessed zone is checked on step 3, and confirming it makes it the venue’s', async ({ page }) => {
+    await mockApi(page);
+    await page.route(`${API}/admin/permissions`, (route) =>
+      route.fulfill(json({ granted: ['dashboard', 'events', 'orders', 'settings'], hiddenPaths: ['/admin/venues'] }))
+    );
+    // El Paso: Texas is split, so the derived Central zone is a guess.
+    const located = { id: 'v-elp', name: '1 Civic Center Plaza', address: '1 Civic Center Plaza', city: 'El Paso', state: 'TX', postalCode: null, timezone: 'America/Chicago', timezoneSource: 'DERIVED', isPublic: false };
+    await page.route(`${API}/organizations/${ORG_ID}/venues/from-address`, (route) => route.fulfill(json(located)));
+    const zoneSaves: Request[] = [];
+    await page.route(`${API}/organizations/${ORG_ID}/venues/v-elp/time-zone`, (route) => {
+      zoneSaves.push(route.request());
+      route.fulfill(json({ ...located, timezone: route.request().postDataJSON().timezone, timezoneSource: 'MANUAL' }));
+    });
+
+    await page.goto('/admin/events/new?step=name');
+    await main(page).getByLabel('Event name').fill('Border Bash');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(heading(page, 'Where is it?')).toBeVisible(COLD);
+    await main(page).getByLabel('Street address').fill('1 Civic Center Plaza');
+    await main(page).getByLabel('State').selectOption('TX');
+    await main(page).getByRole('button', { name: 'Use this address' }).click();
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    await expect(heading(page, 'When is it?')).toBeVisible(COLD);
+    const check = main(page).getByRole('group', { name: 'Check the time zone before you sell tickets' });
+    await expect(check).toBeVisible();
+    expect(await serious(page)).toEqual([]);
+    await check.getByLabel('Time zone at the venue').selectOption('America/Denver');
+    await check.getByRole('button', { name: 'Use this time zone' }).click();
+    await expect(check).toHaveCount(0);
+    expect(zoneSaves[0].postDataJSON()).toEqual({ timezone: 'America/Denver' });
+    await main(page).getByLabel('Starts').fill('2031-06-01T16:00');
+    await expect(main(page).getByText(/4:00 PM MDT at the venue/)).toBeVisible();
   });
 });

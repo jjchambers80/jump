@@ -53,6 +53,8 @@ export interface SavedEvent extends SalesSaved {
   addOnCount?: number;
   /** The event's floor map (overview `map`; null = none; kept current by the Floor map step). */
   mapStatus?: 'DRAFT' | 'PUBLISHED' | null;
+  /** Tickets issued (not voided) or GOING RSVPs (overview): people who already hold the start time. */
+  holders?: number;
 }
 
 export interface StepCtx {

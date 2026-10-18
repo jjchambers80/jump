@@ -8,6 +8,10 @@ export interface SetupVenue {
   timezone: string | null;
   city?: string | null;
   state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  /** Where the zone came from (spec 033): DEFAULT or a near-the-line DERIVED is a guess. */
+  timezoneSource?: 'DERIVED' | 'MANUAL' | 'DEFAULT' | null;
 }
 
 export interface StepFormProps {

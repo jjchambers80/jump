@@ -23,7 +23,9 @@ export interface CreatedVenue {
   city: string | null;
   state: string | null;
   postalCode: string | null;
+  country?: string | null;
   timezone: string;
+  timezoneSource?: 'DERIVED' | 'MANUAL' | 'DEFAULT' | null;
   isPublic: boolean;
   logoUrl?: string | null;
 }

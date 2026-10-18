@@ -11,6 +11,8 @@ import api from '@/services/api';
 import PublishBlockers from '@/components/events/PublishBlockers';
 import EventTaxSummary from '@/components/events/EventTaxSummary';
 import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
+import { formatEventDateTime } from '@/lib/eventTime';
+import { timeZoneLabel } from '@/lib/timeZones';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { secondaryButton } from '../ui';
@@ -129,6 +131,17 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         </p>
       )}
       <ReadinessChecklist readiness={readiness} eventId={saved.id} />
+      {event.date && (
+        <section aria-labelledby="review-when" className={card}>
+          <h2 id="review-when" className="text-base font-semibold text-gray-900 dark:text-white">
+            When
+          </h2>
+          <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
+            Starts {formatEventDateTime(event.date, event.venue?.timezone)}
+            {event.venue?.timezone && ` (${timeZoneLabel(event.venue.timezone, new Date(event.date))})`}
+          </p>
+        </section>
+      )}
       {event.admissionMode === 'TICKETED' && event.tax && (
         <section aria-labelledby="review-tax" className={card}>
           <h2 id="review-tax" className="text-base font-semibold text-gray-900 dark:text-white">
