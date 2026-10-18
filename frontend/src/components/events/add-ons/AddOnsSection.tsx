@@ -6,7 +6,7 @@
 // the setup wizard's Collect more step (050-K), which passes `onChange` to
 // refresh its preview after every save.
 // Spec 037 D2/D9: add-ons come from the organization's saved add-ons through
-// `SavedAddOnPicker`; "Create '<name>'" opens AddOnDialog, which saves a new
+// `SavedAddOnPicker` (listed under the event's own); "Create an add-on" opens AddOnDialog, which saves a new
 // saved add-on and its offering here in one call. Price stays per event.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -106,11 +106,6 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
             </p>
           </div>
         </div>
-        {canEdit && (
-          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-            <SavedAddOnPicker orgId={orgId} eventId={eventId} onAttached={changed} onCreateNew={(name) => setDraft(emptyDraft(name))} />
-          </div>
-        )}
       </div>
 
       {(error || loadError) && (
@@ -132,7 +127,7 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
 
       {addOns && addOns.length === 0 && (
         <p className="py-4 text-center text-sm text-gray-600 dark:text-slate-400">
-          No add-ons yet. {canEdit ? 'Search your saved add-ons above, or type a new name.' : ''}
+          No add-ons on this event yet.
         </p>
       )}
 
@@ -160,6 +155,16 @@ export default function AddOnsSection({ orgId, eventId, priceTiers, taxRate, tax
             />
           ))}
         </ul>
+      )}
+
+      {canEdit && addOns && (
+        <SavedAddOnPicker
+          orgId={orgId}
+          eventId={eventId}
+          reloadKey={addOns.map((a) => a.id).join(',')}
+          onAttached={changed}
+          onCreateNew={(name) => setDraft(emptyDraft(name))}
+        />
       )}
 
       {draft && (
