@@ -25,7 +25,7 @@
 | `frontend/src/components/events/EventWorkspace.tsx` | Tabs per type |
 | `frontend/src/components/events/EventOverviewSections.tsx` | `RegistrationsCard`, `LinkedEventCard`, `ApplicationsSection` title |
 | `frontend/src/components/events/EventsToolbar.tsx`, `EventListCard.tsx` | Type filter, registration card |
-| `frontend/src/app/events/[eventId]/EventRegister.tsx` | Public registration page body: the form's one Register button (no About section) |
+| `frontend/src/app/events/[eventId]/EventRegister.tsx` | Public registration page body: the form's fields inline (`ApplySteps` + `useApplyForm`) and one sticky Register submit button, no About section |
 | `frontend/src/components/storefront/EventStub.tsx` | Storefront list: "Registration" eyebrow, Register button |
 
 ## Configuration
@@ -47,7 +47,7 @@ One progress bar counts all of it (`wizardProgress`): a free form reads 10 steps
 - **Admin event page** (same hero, tabs and cards as a live event): stats Registrations · To review · Approved · Collected; the Registration form card; description; Date & venue; Registering for. Tabs: Overview · Registrations · Map (the linked event's) · Door check-in · History.
 - **Live event page**: a Registrations card lists its registration events with form state and a Review link, and **Create registration event**. No Add to this event tiles.
 - **Events list**: Type filter (All · Live · Registration); registration cards count registrations.
-- **Storefront**: listed with a Registration eyebrow and **Register**; the page is just the form's one Register button (no About section; the form's intro says what the event is about) into the existing apply pages. Approved registrants of a paid form choose and pay from the status page as before. A live event's Get involved pills link to its registrations' forms.
+- **Storefront**: listed with a Registration eyebrow and **Register**; the page is the form itself: its intro, its fields and one sticky **Register** button that submits it (no About section, no separate apply page step). A successful registration opens the status page. `/events/<id>/apply/<slug>` still works for old links. Approved registrants of a paid form choose and pay from the status page as before. A live event's Get involved pills link to the registration event's page.
 
 ### Moving existing forms (backfill)
 `cd backend && npm run db:backfill:057-registration-events` (dry run) then `DRY_RUN=false …`. Per form on a non-deleted live event, in one transaction: a REGISTRATION event (form name; venue, date, image, tax rate, category from the live event; PUBLISHED when the live event is and the form is not a draft, CANCELLED with a cancelled event), then the form, its applications and their APPLICATION orders move to it. Add-ons: an application-only one that only this form offers moves; a BOTH add-on stays for tickets and is copied application-only; one shared between forms is reported and the form is left for a look. Forms on deleted events are skipped. Idempotent; runs as the audited system job `backfill:057`.

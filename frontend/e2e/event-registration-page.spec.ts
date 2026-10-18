@@ -1,6 +1,6 @@
-// Registration event page (spec 057): the description inline, then the form
-// with one Register button, no tickets, cart or RSVP pass. A live event's
-// page offers a linked registration event's form as a pill pointing there.
+// Registration event page (spec 057): the form's fields inline with one
+// Register button, no About section, tickets, cart or RSVP pass. A live
+// event's page offers a linked registration event as a pill pointing there.
 // The API is mocked; no backend needed.
 
 import AxeBuilder from '@axe-core/playwright';
@@ -51,9 +51,9 @@ test('a registration event offers its form with one Register button', async ({ p
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await mock(page);
   await page.goto(`/events/${REG_ID}`);
-  const register = page.locator('#register');
-  await expect(register.getByRole('link', { name: /Register.*Vendor registration/ })).toHaveAttribute('href', `/events/${REG_ID}/apply/vendors`, { timeout: 30000 });
-  await expect(register.getByText('Registering is free. Once approved, you choose and pay.')).toHaveCount(0);
+  const register = page.locator('form#register');
+  await expect(register.getByLabel('Email', { exact: true })).toBeVisible({ timeout: 30000 });
+  await expect(register.getByRole('button', { name: 'Register' })).toBeEnabled();
   // No About section: the form's intro says what the event is about.
   await expect(page.getByRole('heading', { name: 'About this event' })).toHaveCount(0);
   // No tickets, cart, RSVP pass, Event Information dialog or Get involved pills.
@@ -62,6 +62,23 @@ test('a registration event offers its form with one Register button', async ({ p
   await expect(page.getByRole('button', { name: 'Event Information' })).toHaveCount(0);
   await expect(page.getByTestId('get-involved')).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations.filter((v) => ['serious', 'critical'].includes(v.impact || ''))).toEqual([]);
+});
+
+test('registering submits the inline form and opens the status page', async ({ page }) => {
+  await mock(page);
+  let posted = false;
+  await page.route(`${API}/events/${REG_ID}/applications`, (route) => {
+    posted = route.request().method() === 'POST';
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ applicationId: 'app-1', statusUrl: 'http://localhost/events/x/apply/status/app-1?token=t' }) });
+  });
+  await page.route('**/events/x/apply/status/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>status</p>' }));
+  await page.goto(`/events/${REG_ID}`);
+  const register = page.locator('form#register');
+  await register.getByLabel('Email', { exact: true }).fill('vendor@example.com', { timeout: 30000 });
+  await register.getByTestId('apply-consent').check();
+  await register.getByRole('button', { name: 'Register' }).click();
+  await expect(page).toHaveURL(/\/events\/x\/apply\/status\/app-1\?token=t/);
+  expect(posted).toBe(true);
 });
 
 test('a closed registration says so instead of linking', async ({ page }) => {
@@ -78,5 +95,5 @@ test("a live event's pill opens a linked registration event's form there", async
   await mock(page);
   await page.goto(`/events/${LIVE_ID}`);
   const pills = page.getByTestId('get-involved');
-  await expect(pills.getByRole('link', { name: /Vendor registration/ })).toHaveAttribute('href', `/events/${REG_ID}/apply/vendors`, { timeout: 30000 });
+  await expect(pills.getByRole('link', { name: /Vendor registration/ })).toHaveAttribute('href', `/events/${REG_ID}`, { timeout: 30000 });
 });
