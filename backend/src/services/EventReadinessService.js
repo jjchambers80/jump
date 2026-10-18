@@ -14,8 +14,8 @@ const item = (code, step, message, extra) => ({ code, step, message, ...extra })
 const isBlank = (html) => !String(html || '').replace(/<[^>]*>|&nbsp;/g, '').trim();
 
 /**
- * @param {object} event  Event with venue, priceTiers, applicationForms (tiers,
- *   _count.questions) and floorMap.
+ * @param {object} event  Event with venue, priceTiers, applicationForms (tiers)
+ *   and floorMap.
  * @param {object} ctx  { now, paymentsEnabled, paymentsUnavailable, taxError }
  * @returns {{ ready: boolean, blockers: object[], warnings: object[] }}
  */
@@ -65,9 +65,6 @@ export function evaluate(event, { now = new Date(), paymentsEnabled: gateOn = fa
     if (form.kind === 'PAID' && !(form.tiers || []).some((t) => t.isActive)) {
       warnings.push(item('PAID_FORM_NO_OPTIONS', step, `${form.name} charges, but has no options yet. Add one so it can open.`, { formId: form.id }));
     }
-    if (!form._count?.questions) {
-      warnings.push(item('FORM_HAS_NO_QUESTIONS', step, `${form.name} has no questions.`, { formId: form.id }));
-    }
   }
   const mapForm = forms.find((f) => f.kind === 'PAID' && f.spaceSelection === 'MAP');
   // Spec 057: a registration event uses the floor map of the live event it is for.
@@ -94,7 +91,7 @@ class EventReadinessService {
         priceTiers: true,
         floorMap: { select: { status: true } },
         linkedEvent: { select: { floorMap: { select: { status: true } } } },
-        applicationForms: { include: { tiers: { select: { isActive: true } }, _count: { select: { questions: { where: { archivedAt: null } } } } } },
+        applicationForms: { include: { tiers: { select: { isActive: true } } } },
       },
     });
     if (!event) throw new NotFoundError('Event not found');
