@@ -99,8 +99,9 @@ const finishedInThisTab = (page: Page) =>
 const FINISHED = { setupStep: 'review', setupCompletedAt: '2026-10-10T00:00:00Z' };
 
 async function openPastEventDialog(page: Page) {
-  await page.goto('/admin/events/new?step=name');
-  await expect(heading(page, 'Name your event')).toBeVisible(COLD);
+  // Offered on the first step, before anything is typed: a copy skips the rest.
+  await page.goto('/admin/events/new?step=type');
+  await expect(heading(page, 'What do you want to create?')).toBeVisible(COLD);
   await main(page).getByRole('button', { name: 'Start from a past event' }).click();
   const dialog = page.getByRole('dialog', { name: 'Start from a past event' });
   await expect(dialog).toBeVisible();

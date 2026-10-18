@@ -12,7 +12,6 @@ import PublishBlockers from '@/components/events/PublishBlockers';
 import EventTaxSummary from '@/components/events/EventTaxSummary';
 import { publishBlockers, type ReadinessItem } from '@/lib/eventReadiness';
 import { formatEventDateTime } from '@/lib/eventTime';
-import { timeZoneLabel } from '@/lib/timeZones';
 import type { OverviewEvent } from '@/lib/eventOverview';
 import type { SavedEvent } from '../steps';
 import { secondaryButton } from '../ui';
@@ -34,6 +33,8 @@ export interface ReviewStepProps {
   onFinished: (row: OverviewEvent) => void;
   /** True while Publish / Save as draft is in flight: the shell holds Back and the step menu. */
   onBusyChange?: (busy: boolean) => void;
+  /** The wizard footer's action slot for Publish / Save as draft. */
+  footerSlot?: HTMLElement | null;
 }
 
 const card = 'rounded-lg border border-gray-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800 sm:p-6';
@@ -48,7 +49,7 @@ function Skeleton() {
   );
 }
 
-export default function ReviewStep({ orgId, saved, createMode, flush, onFinished, onBusyChange }: ReviewStepProps) {
+export default function ReviewStep({ orgId, saved, createMode, flush, onFinished, onBusyChange, footerSlot }: ReviewStepProps) {
   const { load, preview, reload, reloadPreview } = useReviewData(orgId, saved.id);
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [blockers, setBlockers] = useState<ReadinessItem[]>([]);
@@ -131,25 +132,41 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         </p>
       )}
       <ReadinessChecklist readiness={readiness} eventId={saved.id} />
-      {event.date && (
-        <section aria-labelledby="review-when" className={card}>
-          <h2 id="review-when" className="text-base font-semibold text-gray-900 dark:text-white">
-            When
+      {/* At a glance: when, where and, for a ticketed live event, the tax its tiers carry (gotcha 44: type first). */}
+      {(event.date || event.venue) && (
+        <section aria-labelledby="review-details" className={card}>
+          <h2 id="review-details" className="text-base font-semibold text-gray-900 dark:text-white">
+            Details
           </h2>
-          <p className="mt-1 text-sm text-gray-700 dark:text-slate-300">
-            Starts {formatEventDateTime(event.date, event.venue?.timezone)}
-            {event.venue?.timezone && ` (${timeZoneLabel(event.venue.timezone, new Date(event.date))})`}
-          </p>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+            {event.date && (
+              <>
+                <dt className="text-gray-600 dark:text-slate-400">When</dt>
+                <dd className="text-gray-900 dark:text-white">
+                  {formatEventDateTime(event.date, event.venue?.timezone)}
+                  {event.endDate && ` – ${formatEventDateTime(event.endDate, event.venue?.timezone)}`}
+                </dd>
+              </>
+            )}
+            {event.venue && (
+              <>
+                <dt className="text-gray-600 dark:text-slate-400">Where</dt>
+                <dd className="text-gray-900 dark:text-white">{event.venue.name}</dd>
+              </>
+            )}
+            {saved.type !== 'REGISTRATION' && event.admissionMode === 'TICKETED' && event.tax && (
+              <>
+                <dt className="text-gray-600 dark:text-slate-400">Sales tax</dt>
+                <dd>
+                  <EventTaxSummary tax={event.tax} className="text-sm" />
+                </dd>
+              </>
+            )}
+          </dl>
         </section>
       )}
-      {event.admissionMode === 'TICKETED' && event.tax && (
-        <section aria-labelledby="review-tax" className={card}>
-          <h2 id="review-tax" className="text-base font-semibold text-gray-900 dark:text-white">
-            Sales tax
-          </h2>
-          <EventTaxSummary tax={event.tax} className="mt-1 text-sm" />
-        </section>
-      )}
+      {/* Live events take no forms since spec 057: only list forms that exist. */}
+      {forms.length > 0 && (
       <ReviewForms
         title={saved.type === 'REGISTRATION' ? 'Registration form' : undefined}
         forms={forms}
@@ -165,6 +182,7 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
           })
         }
       />
+      )}
       <BrandSummary />
       {saved.type !== 'REGISTRATION' && <DonationSuggestion eventId={saved.id} />}
       <ReviewActions
@@ -176,6 +194,7 @@ export default function ReviewStep({ orgId, saved, createMode, flush, onFinished
         preview={preview}
         onRetryPreview={reloadPreview}
         eventId={saved.id}
+        footerSlot={footerSlot}
       />
     </div>
   );

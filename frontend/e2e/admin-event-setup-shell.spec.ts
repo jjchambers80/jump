@@ -149,7 +149,7 @@ test.describe('desktop', () => {
     await expect(heading(page, 'When is it?')).toBeFocused();
     // The zone came from the address with confidence: no box, no question.
     await expect(main(page).getByText(/^Time zone:/)).toHaveCount(0);
-    await expect(main(page).getByText('Check the time zone before you sell tickets')).toHaveCount(0);
+    await expect(main(page).getByText('Check the time zone before you publish')).toHaveCount(0);
     await tabTo(page, main(page).getByLabel('Starts'));
     await page.keyboard.type('06012031');
     await page.keyboard.press('Tab');
@@ -253,13 +253,13 @@ test.describe('desktop', () => {
     // No Describe step: the form's own Form details step carries the description.
     await expect(heading(page, 'Add an image')).toBeVisible(COLD);
     expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
-    // One count across the event steps and the form flow: 5 + Start, Details, Fields + Collect more + Review.
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 10');
+    // One count across the event steps and the form flow: 5 + Start, Details, Fields + Review (free: no Collect more).
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 9');
 
     await page.getByRole('button', { name: /Next|Skip/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration`), COLD);
-    await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 10');
+    await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 9');
   });
 
   test('refresh resumes from the session draft, then from setupStep', async ({ page }) => {
@@ -467,7 +467,7 @@ test.describe('venues turned off', () => {
     await page.getByRole('button', { name: 'Next' }).click();
 
     await expect(heading(page, 'When is it?')).toBeVisible(COLD);
-    const check = main(page).getByRole('group', { name: 'Check the time zone before you sell tickets' });
+    const check = main(page).getByRole('group', { name: 'Check the time zone before you publish' });
     await expect(check).toBeVisible();
     expect(await serious(page)).toEqual([]);
     await check.getByLabel('Time zone at the venue').selectOption('America/Denver');

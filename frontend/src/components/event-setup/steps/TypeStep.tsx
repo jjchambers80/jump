@@ -38,7 +38,7 @@ export default function TypeStep({ fields, onChange, locked }: StepFormProps & {
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-gray-700 dark:text-slate-300" aria-hidden />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-              <span className="mt-0.5 block text-sm text-gray-600 dark:text-slate-400">{detail}</span>
+              <span className="mt-0.5 block text-sm text-gray-600 dark:text-slate-300">{detail}</span>
             </span>
             <input
               type="radio"

@@ -1,13 +1,12 @@
 'use client';
 
-// Media card on the admin event edit page. One image for now (the event logo),
+// The setup wizard's Add an image step (the step's h1 names it). One image for now (the event logo),
 // laid out like a media grid: the image tile, then a dashed drop tile that
 // replaces it. Empty state is a single dashed drop zone.
 
 import { useCallback, useRef, useState } from 'react';
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { ALLOWED_TYPES, MAX_SIZE_BYTES, MAX_SIZE_MB } from '@/components/ImageUploader';
-import { FormCard } from './EventFormLayout';
 
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800';
@@ -20,9 +19,7 @@ export function EventMediaCard({
   uploading,
   onFileSelect,
   onRemove,
-  step,
 }: {
-  step?: number;
   preview: string | null;
   eventName: string;
   uploading: boolean;
@@ -70,7 +67,7 @@ export function EventMediaCard({
     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-slate-600 dark:hover:border-slate-500 dark:hover:bg-slate-700/40';
 
   return (
-    <FormCard id="event-media" title="Media" step={step}>
+    <section id="event-media" aria-label="Event image">
       <input
         ref={inputRef}
         type="file"
@@ -148,7 +145,7 @@ export function EventMediaCard({
         </p>
       )}
       {preview && <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">{acceptsHint}</p>}
-    </FormCard>
+    </section>
   );
 }
 

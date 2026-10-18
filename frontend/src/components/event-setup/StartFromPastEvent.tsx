@@ -1,6 +1,6 @@
 'use client';
 
-// "Start from a past event" on the Name step (spec 050 §3 decision 14, §7.7),
+// "Start from a past event" on the first step (spec 050 §3 decision 14, §7.7),
 // shown only before the draft row exists. Copies the chosen event with a new
 // name and a date typed in the SOURCE event's venue zone (the copy keeps that
 // venue, gotcha 28), as a draft mid-setup: POST …/duplicate {setup:true}, then

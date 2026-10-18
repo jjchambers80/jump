@@ -137,15 +137,16 @@ test.describe('desktop', () => {
   test('a paid registration, step by step: who registers, details, spaces, fields, then the event wizard', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
-    await expect(heading(page, 'Who registers?')).toBeFocused(COLD);
-    // One count for the event wizard and the flow: 5 event steps, then Start, Details, Fields, Collect more, Review.
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 10');
-    await expect(main(page).getByLabel('Name')).toHaveValue('Spring Fair');
-    // Generic: no type to pick, the name says who registers.
+    await expect(heading(page, 'Free or paid?')).toBeFocused(COLD);
+    // One count for the event wizard and the flow: 5 event steps, then Start, Details, Fields, Review
+    // (a free registration sells no add-ons, so no Collect more).
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 9');
+    // The form is named after the event: its name is asked once, on Form details.
+    await expect(main(page).getByLabel('Name')).toHaveCount(0);
     await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
     // A registration starts free; charging adds the options and payment steps.
-    await expect(main(page).getByLabel('Charge applicants')).not.toBeChecked();
-    await main(page).getByLabel('Charge applicants').check();
+    await expect(main(page).getByRole('radio', { name: /Free/ })).toBeChecked();
+    await main(page).getByRole('radio', { name: /Charge a fee/ }).check();
     await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
     await expect(page.getByRole('region', { name: 'Live preview of the application form' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Setup steps' })).toHaveCount(0);
@@ -227,12 +228,11 @@ test.describe('desktop', () => {
     expect(calls.create).toHaveLength(0);
   });
 
-  test('Start previews the form being set up: the name as it is typed, no business step', async ({ page }) => {
+  test('Start previews the form being set up: named after the event, no business step', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
-    await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await main(page).getByLabel('Name').fill('Crew sign-up');
-    await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Crew sign-up' })).toBeVisible(COLD);
+    await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
+    await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
     await expect(formPreview(page).getByRole('heading', { name: /Your details/ })).toBeVisible();
     await expect(formPreview(page).getByRole('heading', { name: /Your business/ })).toHaveCount(0);
     await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
@@ -242,8 +242,8 @@ test.describe('desktop', () => {
     await expect(formPreview(page).getByTestId('apply-consent')).toBeVisible();
     await expect(formPreview(page).getByTestId('apply-opt-in-account')).toHaveCount(0);
     await expect(formPreview(page).getByTestId('apply-opt-in-marketing')).toHaveCount(0);
-    await main(page).getByLabel('Offer to create an account').check();
-    await main(page).getByLabel('Offer to subscribe to your emails').check();
+    await main(page).getByLabel('An account, to follow their registration').check();
+    await main(page).getByLabel('A subscription to your emails').check();
     await expect(formPreview(page).getByTestId('apply-opt-in-account')).toBeVisible();
     await expect(formPreview(page).getByTestId('apply-opt-in-marketing')).toBeVisible();
     expect(calls.create).toHaveLength(0);
@@ -262,16 +262,16 @@ test.describe('desktop', () => {
   test('a free registration, then fields', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
-    await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
-    await main(page).getByLabel('Name').fill('Crew sign-up');
+    await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Crew sign-up', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true });
     await expect(heading(page, 'Form details')).toBeVisible();
     await next(page).click();
     await expect(heading(page, 'Fields')).toBeVisible();
     const questions = main(page).getByTestId('form-questions');
-    await expect(questions.getByText('Email is always asked.', { exact: false })).toBeVisible();
+    // The step's intro says it once; the embedded list keeps Email, locked.
+    await expect(main(page).getByText('Email is always asked.', { exact: false })).toBeVisible();
     await expect(formPreview(page).getByLabel('First name')).toHaveCount(0);
     await main(page).getByTestId('question-add-open').click();
     await main(page).getByTestId('builtin-add').getByRole('button', { name: '+ Name' }).click();
@@ -306,10 +306,19 @@ test.describe('desktop', () => {
   });
 
   test('the event wizard counts the form flow in its slot', async ({ page }) => {
-    await mockApi(page);
+    // Paid: 5 event steps + Start, Details, Options, Payment, Fields + Collect more + Review.
+    await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths' })]);
     await page.goto(`/admin/events/${EVENT_ID}/setup?step=collect-more`);
     await expect(heading(page, 'Collect more')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 9 of 10');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 11 of 12');
+  });
+
+  test('a free registration has no Collect more: the flow hands back to Review', async ({ page }) => {
+    await mockApi(page, [form({ id: 'form-free', name: 'Crew sign-up' })]);
+    await page.goto(flowUrl('registration', 'step=questions&form=form-free'));
+    await expect(heading(page, 'Fields')).toBeVisible(COLD);
+    await next(page).click();
+    await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=review`), COLD);
   });
 
   for (const scheme of ['light', 'dark'] as const) {
@@ -317,7 +326,7 @@ test.describe('desktop', () => {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
       await mockApi(page);
       await page.goto(flowUrl('registration'));
-      await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
+      await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
       if (scheme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
       await expect(formPreview(page).getByRole('heading', { level: 1, name: 'Spring Fair' })).toBeVisible(COLD);
       expect(await serious(page)).toEqual([]);
@@ -339,7 +348,7 @@ test.describe('mobile', () => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await mockApi(page);
       await page.goto(flowUrl('registration'));
-      await expect(heading(page, 'Who registers?')).toBeVisible(COLD);
+      await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
       const create = next(page, 'Create form');
       expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       expect(await noOverflow(page)).toBe(0);

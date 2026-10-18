@@ -253,8 +253,9 @@ export function SettingsCard({
             <label htmlFor="f-closes" className={labelClass}>Closes</label>
             <input id="f-closes" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.closesAt} disabled={!canEdit} onChange={(e) => update({ closesAt: e.target.value })} className={field} />
           </div>
+          {/* Span only where the grid has two columns: a col-span-2 in one column adds a phantom track that overflows on phones. */}
           {form.timezone && (
-            <p id="f-window-zone" className="col-span-2 text-xs text-gray-600 dark:text-slate-400">
+            <p id="f-window-zone" className={`${section ? 'sm:col-span-2' : 'col-span-2'} text-xs text-gray-600 dark:text-slate-400`}>
               Times are the venue&apos;s clock: {timeZoneLabel(form.timezone)}.
             </p>
           )}
@@ -548,6 +549,7 @@ export function QuestionsCard({
   onRemove,
   onReorder,
   onToggleBuiltIn,
+  embedded = false,
 }: {
   form: EditorForm;
   canEdit: boolean;
@@ -555,6 +557,8 @@ export function QuestionsCard({
   onUpdate: (id: string, body: Record<string, unknown>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onReorder: (ids: string[]) => Promise<void>;
+  /** Inside a setup step whose h1 and intro already say this: no card, heading for screen readers only. */
+  embedded?: boolean;
   /** Adds or removes the built-in fields (Name, business fields); without it they are read-only. */
   onToggleBuiltIn?: (patch: BuiltInPatch) => Promise<void>;
 }) {
@@ -632,10 +636,10 @@ export function QuestionsCard({
   );
 
   return (
-    <div className={card} data-testid="form-questions">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Fields</h2>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Email is always asked. Add any other fields you need.</p>
-      <ol className="mt-3 divide-y divide-gray-200 dark:divide-slate-700" data-testid="form-builtin-fields">
+    <div className={embedded ? undefined : card} data-testid="form-questions">
+      <h2 className={embedded ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Fields</h2>
+      {!embedded && <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">Email is always asked. Add any other fields you need.</p>}
+      <ol className={`${embedded ? 'border-y border-gray-200 dark:border-slate-700' : 'mt-3'} divide-y divide-gray-200 dark:divide-slate-700`} data-testid="form-builtin-fields">
         <li className="flex items-center justify-between gap-3 py-3">
           <span className="font-medium text-gray-900 dark:text-white">Email</span>
           <span className="inline-flex items-center gap-1 text-xs text-gray-600 dark:text-slate-400">

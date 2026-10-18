@@ -22,7 +22,7 @@ import { PREVIEW_MESSAGE, draftPreviewForm, previewForm, type DraftForm } from '
 import { FORM_FLOWS, flowSteps, type FormFlowKey } from './formFlows';
 import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
-import { wizardProgress } from './steps';
+import { collectsMore, wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
 import StartFormStep, { OptInSettings, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import FloorMapStep from './steps/FloorMapStep';
@@ -72,7 +72,11 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const next = at < list.length - 1 ? list[at + 1] : null;
   // Spec 057: a registration event's flow sits inside its event wizard, between Image and Collect more.
   const inWizard = flow === 'registration';
-  const finish = () => (inWizard ? f.toEventStep('collect-more') : f.exit(true));
+  // Collect more only when the event can sell add-ons (a paid form); else straight to Review.
+  const finish = (current = form) =>
+    inWizard && event
+      ? f.toEventStep(collectsMore({ saved: event, fields: EMPTY_FIELDS, forms: current ? [current] : [] }) ? 'collect-more' : 'review')
+      : f.exit(true);
   const progress = inWizard && event
     ? wizardProgress({ saved: event, fields: EMPTY_FIELDS, zone: null, savedZone: null, forms: f.forms.forms }, null, at, list.length)
     : { index: at + 1, total: list.length };
@@ -109,7 +113,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     const steps = flowSteps(flow, updated, { maps });
     const after = steps[steps.findIndex((s) => s.key === step.key) + 1];
     if (after) f.go(after.key);
-    else finish();
+    else finish(updated);
   };
   const create = async (body: NewFormBody) => {
     const created = await api.createForm({ ...body, setup: true });
@@ -124,7 +128,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const settingsStep = canEdit && !!form && (step.key === 'details' || step.key === 'payment');
   const nextForm =
     step.key === 'start' && !form ? (canEdit ? START_FORM_ID : undefined) : settingsStep ? SETTINGS_FORM_ID : undefined;
-  const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : finish;
+  const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : () => finish();
   const nextLabel =
     step.key === 'start' && !form ? (busy ? 'Creating…' : 'Create form') : next || inWizard ? (busy ? 'Saving…' : 'Next') : busy ? 'Saving…' : 'Save and finish';
 
@@ -161,7 +165,8 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     body = (
       <div key={step.key} className="mx-auto w-full max-w-[640px] px-4 py-6 motion-safe:animate-fade-in sm:px-6 sm:py-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
-          {form ? form.name : FORM_FLOWS[flow].title}
+          {/* A registration form is named after its event, which the header already shows. */}
+          {form && !inWizard ? form.name : FORM_FLOWS[flow].title}
         </p>
         <h1 ref={headingRef} tabIndex={-1} className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 focus:outline-none dark:text-white">
           {step.title}
@@ -191,7 +196,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           {step.key === 'start' && form && (
             <>
               <p className={hintClass}>
-                {form.name} is set up. Continue to its details, or go back to the event to add another.
+                {form.kind === 'PAID' ? 'Registrants you approve pay for an option you set up.' : 'Registration is free.'} Its name and intro are on the next step.
               </p>
               <OptInSettings
                 value={{ offerAccount: form.offerAccount !== false, offerMarketing: form.offerMarketing !== false }}
@@ -232,6 +237,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onRemove={(id) => run('Question removed.', () => api.removeQuestion(form.id, id)).then(noop)}
               onReorder={(ids) => run('Order saved.', () => api.reorderQuestions(form.id, ids)).then(noop)}
               onToggleBuiltIn={(patch) => run('Fields saved.', async () => f.forms.upsert(await api.updateForm(form.id, patch))).then(noop)}
+              embedded
             />
           )}
         </div>

@@ -33,7 +33,7 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
   date: 'When it starts, and if you like, when it ends.',
   review: 'Check what buyers will see, then publish.',
   description: 'What buyers read before they decide. You can change it any time.',
-  image: 'The picture at the top of the event page.',
+  image: 'Shown at the top of the event page and on event cards. A wide image (16:9) works best.',
   tickets: 'Sell tickets in tiers, or take free RSVPs.',
   'collect-more': 'Extras buyers can add to their order, like parking or merch.',
 };
@@ -62,7 +62,7 @@ interface Props {
   onVenueCreated: (venue: CreatedVenue) => void;
   /** The server row; null before the date step creates it. */
   event: SavedEvent | null;
-  review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange'>;
+  review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange' | 'footerSlot'>;
   /** Steps 5–6 save on their own; null before the row exists. */
   row: Omit<SavedRowProps, 'orgId'> | null;
   /** Collect more saved an add-on: the new count (step state) and a preview refresh. */
@@ -117,7 +117,8 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           )}
           {!step.built && <PendingStep />}
         </fieldset>
-        {step.key === 'name' && !props.event && !registration && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
+        {/* First step, before anything is typed: copying a past live event skips the rest. */}
+        {step.key === 'type' && !props.event && !registration && props.orgId && <StartFromPastEvent orgId={props.orgId} />}
       </div>
     </div>
   );

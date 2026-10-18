@@ -44,7 +44,9 @@ describe('visible and counting', () => {
 
   test('a registration event swaps tickets for its form flow and has no Describe step (spec 057)', () => {
     const reg = { ...fields, type: 'REGISTRATION' as const };
-    expect(keys(ctx({ fields: reg }))).toEqual(['type', 'name', 'venue', 'date', 'image', 'registration', 'collect-more', 'review']);
+    // A free form (or none yet) sells no add-ons: no Collect more.
+    expect(keys(ctx({ fields: reg }))).toEqual(['type', 'name', 'venue', 'date', 'image', 'registration', 'review']);
+    expect(keys(ctx({ fields: reg, forms: [{ id: 'f', kind: 'PAID' }] }))).toEqual(['type', 'name', 'venue', 'date', 'image', 'registration', 'collect-more', 'review']);
     const saved = row({ type: 'REGISTRATION' });
     expect(keys(ctx({ saved }))).toContain('registration');
     expect(keys(ctx({ saved }))).not.toContain('tickets');
@@ -55,11 +57,14 @@ describe('visible and counting', () => {
     const free = ctx({ saved, forms: [{ id: 'f', kind: 'FREE' }] });
     const flow = registrationFlowSteps(free).map((s) => s.key);
     expect(flow).toEqual(['start', 'details', 'questions']);
-    // 5 event steps, 3 flow steps, Collect more, Review.
-    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 5, total: 10 });
-    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 6, total: 10 });
-    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 8, total: 10 });
-    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 10, total: 10 });
+    // 5 event steps, 3 flow steps, Review (a free form has no Collect more).
+    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 5, total: 9 });
+    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 6, total: 9 });
+    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 8, total: 9 });
+    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 9, total: 9 });
+    // Add-ons already on a free registration keep the step, so they stay editable.
+    const withAddOns = ctx({ saved: row({ type: 'REGISTRATION', addOnCount: 1 }), forms: [{ id: 'f', kind: 'FREE' }] });
+    expect(wizardProgress(withAddOns, 'review', 0, 3)).toEqual({ index: 10, total: 10 });
     expect(wizardProgress(ctx(), 'review')).toEqual({ index: 9, total: 9 });
   });
 
