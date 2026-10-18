@@ -147,29 +147,37 @@ export function ApplyFrame({
           organization={{ id: event.organizationId, name: event.organizationName, logoUrl: event.organizationLogoUrl, storefrontLogo: event.organizationStorefrontLogo }}
         />
       )}
-      {/* Hero: the event this application belongs to */}
-      <div id="apply-top" className="relative overflow-hidden bg-slate-900" data-testid="apply-hero">
+      {/* Hero: the event this application belongs to. Like EventHero: white ink on the
+          blurred poster, or (no image) the page surface with a faint brand wash and theme ink. */}
+      <div
+        id="apply-top"
+        data-plain={poster ? undefined : ''}
+        className={`event-hero relative overflow-hidden ${poster ? 'bg-slate-900' : 'event-hero-wash border-b border-gray-200 dark:border-slate-700'}`}
+        data-testid="apply-hero"
+      >
         {poster && (
-          <div
-            aria-hidden
-            className="absolute inset-0 bg-cover bg-center opacity-60"
-            style={{ backgroundImage: `url(${poster})`, filter: 'blur(32px) saturate(1.2)', transform: 'scale(1.2)' }}
-          />
+          <>
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-cover bg-center opacity-60"
+              style={{ backgroundImage: `url(${poster})`, filter: 'blur(32px) saturate(1.2)', transform: 'scale(1.2)' }}
+            />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/45" />
+            {/* A thin brand rule where the hero meets the page */}
+            <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-brand" />
+          </>
         )}
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/45" />
-        {/* A thin brand rule where the hero meets the page */}
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-brand" />
 
         <div className={`relative mx-auto ${container} px-4 pb-9 pt-6 sm:px-6 lg:px-8 sm:pb-12 sm:pt-8`}>
           {preview ? (
-            <span className="inline-flex items-center gap-1.5 py-1 pr-2 text-sm font-semibold text-gray-300">
+            <span className="inline-flex items-center gap-1.5 py-1 pr-2 text-sm font-semibold text-hero-soft">
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back to {event.name}
             </span>
           ) : (
             <Link
               href={`/events/${event.id}`}
-              className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex items-center gap-1.5 rounded-full py-1 pr-2 text-sm font-semibold text-hero-soft transition-colors hover:text-hero-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-ink"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back to {event.name}
@@ -177,14 +185,14 @@ export function ApplyFrame({
           )}
 
           <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm">
+            <span className="inline-block rounded-full bg-hero-ink/15 px-3 py-1 text-xs font-semibold text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm">
               {kicker}
             </span>
             {event.organizationName && (
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-300">{event.organizationName}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-hero-soft">{event.organizationName}</p>
             )}
           </div>
-          <h1 className="mt-3 text-balance text-3xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-[2.6rem]">
+          <h1 className="mt-3 text-balance text-3xl font-extrabold leading-[1.05] tracking-tight text-hero-ink sm:text-[2.6rem]">
             {title ?? `Get involved with ${event.name}`}
           </h1>
 
@@ -193,17 +201,17 @@ export function ApplyFrame({
               {tile ? (
                 <div
                   aria-hidden
-                  className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-white/10 py-1 text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm"
+                  className="flex w-12 shrink-0 flex-col items-center hero-tile rounded-xl bg-hero-ink/10 py-1 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
                 >
                   <span className="text-[9px] font-bold uppercase tracking-[0.16em] opacity-80">{tile.month}</span>
                   <span className="text-lg font-extrabold leading-none tabular-nums">{tile.day}</span>
                 </div>
               ) : (
-                <CalendarDays className="h-5 w-5 shrink-0 text-gray-200" aria-hidden />
+                <CalendarDays className="h-5 w-5 shrink-0 text-hero-soft" aria-hidden />
               )}
               <div className="leading-snug">
-                <p className="text-sm font-semibold text-white">{event.name}</p>
-                <p className="text-sm text-gray-300">
+                <p className="text-sm font-semibold text-hero-ink">{event.name}</p>
+                <p className="text-sm text-hero-soft">
                   {formatEventDate(event.date, zone)} · {formatEventTime(event.date, zone)}
                 </p>
               </div>
@@ -213,13 +221,13 @@ export function ApplyFrame({
               <div className="flex items-center gap-3">
                 <div
                   aria-hidden
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center hero-tile rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm"
                 >
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 leading-snug">
-                  <p className="text-sm font-semibold text-white">{event.venue.name}</p>
-                  {place && <p className="text-sm text-gray-300">{place}</p>}
+                  <p className="text-sm font-semibold text-hero-ink">{event.venue.name}</p>
+                  {place && <p className="text-sm text-hero-soft">{place}</p>}
                 </div>
               </div>
             )}

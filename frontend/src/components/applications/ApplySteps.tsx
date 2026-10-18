@@ -21,6 +21,8 @@ const input = storefrontInput;
 const textarea = storefrontTextarea;
 const label = storefrontLabel;
 const check = 'mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 accent-brand dark:border-slate-600';
+// Most fields are required, so the exceptions carry the mark.
+const optional = <span className="ml-1.5 text-xs font-normal text-gray-500 dark:text-slate-400">Optional</span>;
 const choice = 'flex items-start gap-3 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-800 transition-colors hover:border-gray-300 has-[:checked]:border-brand-link has-[:checked]:bg-gray-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:has-[:checked]:bg-slate-900/50 cursor-pointer';
 
 type Answers = Record<string, string | string[] | boolean>;
@@ -226,16 +228,13 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
   const next = () => ++step;
 
   return (
-    <div className="space-y-5">
+    // One surface, sections split by hairlines: the caller's page or panel is the card.
+    <div className="divide-y divide-gray-200 dark:divide-slate-700">
       {form.intro && (
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white py-5 pl-6 pr-5 motion-safe:animate-card-in dark:border-slate-700 dark:bg-slate-800">
-          <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-slate-400">From {orgName}</p>
-          <p className="mt-2 whitespace-pre-line leading-relaxed text-gray-700 dark:text-slate-300">{form.intro}</p>
-        </div>
+        <p className="max-w-prose whitespace-pre-line pb-8 text-base leading-relaxed text-gray-700 motion-safe:animate-card-in dark:text-slate-300">{form.intro}</p>
       )}
 
-      <Step n={next()} title="Your details" hint="Where the organizer sends their decision.">
+      <Step n={next()} id={id('step-details')} title="Your details" hint="Where the organizer sends their decision.">
         {form.collectName !== false && (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -264,30 +263,34 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
           )}
           {asks.includes('description') && (
           <div>
-            <label htmlFor={id('description')} className={label}>Tell us about it</label>
+            <label htmlFor={id('description')} className={label}>Tell us about it{optional}</label>
             <textarea id={id('description')} rows={4} className={textarea} value={profile.description} onChange={(e) => update({ profile: { ...profile, description: e.target.value } })} />
           </div>
           )}
           {asks.includes('website') && (
           <div>
-            <label htmlFor={id('website')} className={label}>Website</label>
+            <label htmlFor={id('website')} className={label}>Website{optional}</label>
             <input id={id('website')} className={input} placeholder="example.com" value={profile.website} onChange={(e) => update({ profile: { ...profile, website: e.target.value } })} />
           </div>
           )}
           {asks.includes('socials') && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <fieldset>
+            <legend className={label}>Social profiles{optional}</legend>
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
             {SOCIAL_FIELDS.map((s) => (
               <div key={s.key}>
-                <label htmlFor={id(`social-${s.key}`)} className={label}>{s.label}</label>
+                <label htmlFor={id(`social-${s.key}`)} className="mb-1 block text-xs font-medium text-gray-600 dark:text-slate-400">{s.label}</label>
                 <input id={id(`social-${s.key}`)} className={input} placeholder={s.placeholder} value={socials[s.key] || ''} onChange={(e) => update({ socials: { ...socials, [s.key]: e.target.value } })} />
               </div>
             ))}
-          </div>
+            </div>
+          </fieldset>
           )}
           {asks.includes('photos') && (
           <div>
             <p className={label} id={id('photos-label')}>
-              Photos of your work or products <span className="font-normal text-gray-500 dark:text-slate-400">· up to {MAX_PHOTOS}</span>
+              Photos of your work or products
+              <span className="ml-1.5 text-xs font-normal text-gray-500 dark:text-slate-400">Optional · up to {MAX_PHOTOS}</span>
             </p>
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4" data-testid={apply.photos.length > 0 ? 'apply-photos' : undefined}>
               {apply.photos.map((p, i) => (
@@ -325,6 +328,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
         <Step n={next()} id={id('step-questions')} title="A few questions" hint={`From ${orgName}.`}>
           {form.questions.map((q) => (
             <QuestionField
+              id={id(`q-${q.id}`)}
               key={q.id}
               question={q}
               value={answers[q.id]}
@@ -336,7 +340,7 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
         </Step>
       )}
 
-      <Step n={next()} title="Before you submit">
+      <Step n={next()} id={id('step-submit')} title="Before you submit">
         {/* Account + marketing opt-ins — independent; applied once the application is submitted (spec 024 phase 3) */}
         {form.offerAccount !== false && (
         <label className={choice}>
@@ -373,26 +377,26 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
   );
 }
 
-/** A numbered form step. The number rides in a brand disc beside the title. */
-function Step({ n, title, hint, id, children }: { n: number; title: string; hint?: string; id?: string; children: ReactNode }) {
+/** A numbered form step: a section of the one form surface, the number in a brand disc beside the title. */
+function Step({ n, title, hint, id, children }: { n: number; title: string; hint?: string; id: string; children: ReactNode }) {
+  const titleId = `${id}-title`;
   return (
     <section
       id={id}
-      className="rounded-2xl border border-gray-200 bg-white p-5 motion-safe:animate-card-in dark:border-slate-700 dark:bg-slate-800 sm:p-6"
+      aria-labelledby={titleId}
+      className="py-8 first:pt-0 last:pb-0 motion-safe:animate-card-in"
       style={{ animationDelay: `${Math.min(n, 5) * 50}ms` }}
     >
-      <h2>
-        <span className="flex items-start gap-3">
-          <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold tabular-nums text-brand-fg">
-            {n}
-          </span>
-          <span className="min-w-0 pt-0.5">
-            <span className="block text-lg font-bold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{title}</span>
-            {hint && <span className="mt-0.5 block text-sm font-normal text-gray-500 dark:text-slate-400">{hint}</span>}
-          </span>
+      <div className="flex items-start gap-3">
+        <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold tabular-nums text-brand-fg">
+          {n}
         </span>
-      </h2>
-      <div className="mt-5 space-y-4 sm:pl-10">{children}</div>
+        <div className="min-w-0 pt-0.5">
+          <h2 id={titleId} className="text-lg font-bold leading-snug tracking-tight text-gray-900 dark:text-slate-100">{title}</h2>
+          {hint && <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">{hint}</p>}
+        </div>
+      </div>
+      <div className="mt-6 space-y-5">{children}</div>
     </section>
   );
 }
@@ -421,20 +425,22 @@ function PhotoThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
 }
 
 function QuestionField({
+  id,
   question: q,
   value,
   onChange,
   file,
   onFile,
 }: {
+  /** The field's DOM id, prefixed like the rest of the form so two mounted copies never collide. */
+  id: string;
   question: Question;
   value: string | string[] | boolean | undefined;
   onChange: (v: string | string[] | boolean) => void;
   file?: File;
   onFile: (f: File | null) => void;
 }) {
-  const id = `q-${q.id}`;
-  const req = q.required ? <span className="text-red-600 dark:text-red-400"> *</span> : null;
+  const req = q.required ? null : optional;
   const help = q.helpText ? <p className="mt-1.5 text-xs text-gray-500 dark:text-slate-400">{q.helpText}</p> : null;
   switch (q.type) {
     case 'LONG_TEXT':

@@ -22,42 +22,47 @@ interface EventHeroProps {
 }
 
 const PILL =
-  'inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-inset ring-white/25 backdrop-blur-sm';
+  'inline-flex h-9 items-center gap-2 rounded-full bg-hero-ink/10 px-4 text-sm font-semibold text-hero-ink ring-1 ring-inset ring-hero-ink/25 backdrop-blur-sm';
 
 export default function EventHero({ event, org, preview = false, onShowDescription, onShowImage }: EventHeroProps) {
   // RSVP and registration pages (spec 057) show the description inline, so no Event Information button.
   const isRsvp = event.admissionMode === 'RSVP' || event.type === 'REGISTRATION';
 
   return (
-    <div id="event-hero" className="relative">
+    // With an image: the blurred poster behind white ink. Without one: a light
+    // (or dark) card surface with a faint brand-color wash; the ink follows.
+    <div id="event-hero" data-plain={event.logoUrl ? undefined : ''} className={`event-hero relative ${event.logoUrl ? '' : 'border-b border-gray-200 dark:border-slate-700'}`}>
       {/* Background layers - clipped */}
-      <div className="absolute inset-0 overflow-hidden bg-slate-900 sm:rounded-t-2xl">
+      <div className={`absolute inset-0 overflow-hidden sm:rounded-t-2xl ${event.logoUrl ? 'bg-slate-900' : 'event-hero-wash'}`}>
         {event.logoUrl && (
-          <div
-            className="absolute inset-0 bg-cover bg-center opacity-70"
-            style={{
-              backgroundImage: `url(${resolveAssetUrl(event.logoUrl)})`,
-              filter: 'blur(28px) saturate(1.2)',
-              transform: 'scale(1.15)',
-            }}
-          />
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-70"
+              style={{
+                backgroundImage: `url(${resolveAssetUrl(event.logoUrl)})`,
+                filter: 'blur(28px) saturate(1.2)',
+                transform: 'scale(1.15)',
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/40" />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/40 to-transparent" />
+          </>
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/40" />
-        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/40 to-transparent" />
       </div>
 
-      <div className="relative flex items-center justify-between gap-8 p-6 sm:p-10">
+      {/* The phone poster hangs half below the hero: the bottom padding keeps its top half clear of the text */}
+      <div className={`relative flex items-center justify-between gap-8 p-6 sm:p-10 ${event.logoUrl ? 'max-sm:pb-20' : ''}`}>
         <div className="min-w-0 flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             {event.category && (
-              <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm">
+              <span className="inline-block rounded-full bg-hero-ink/15 px-3 py-1 text-xs font-medium text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm">
                 {event.category}
               </span>
             )}
             {org.name && (
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-300">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-hero-soft">
                 {org.id ? (
-                  <Link href={`/organizations/${org.id}`} className="transition-colors hover:text-white hover:underline">
+                  <Link href={`/organizations/${org.id}`} className="transition-colors hover:text-hero-ink hover:underline">
                     {org.name}
                   </Link>
                 ) : (
@@ -66,28 +71,27 @@ export default function EventHero({ event, org, preview = false, onShowDescripti
               </p>
             )}
           </div>
-          <h1 className="text-balance text-3xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-[2.75rem]">
+          <h1 className={`text-balance text-3xl font-extrabold leading-[1.05] tracking-tight text-hero-ink ${event.type === 'REGISTRATION' ? 'sm:text-4xl' : 'sm:text-[2.75rem]'}`}>
             {event.name || (preview ? <Placeholder tone="hero">Add an event name</Placeholder> : null)}
           </h1>
 
           <EventHeroMeta event={event} preview={preview} />
 
-          {/* Actions row. The phone poster hangs over the hero's bottom-right corner: keep clear of it */}
-          <div className={`mt-6 flex flex-wrap items-center gap-2 empty:hidden ${event.logoUrl ? 'max-sm:pr-36' : ''}`}>
+          <div className="mt-6 flex flex-wrap items-center gap-2 empty:hidden">
             {/* RSVP pages show the description inline under "About"; so does preview mode */}
             {event.description && !isRsvp && onShowDescription && (
               <button
                 type="button"
                 onClick={onShowDescription}
-                className={`${PILL} transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white`}
+                className={`${PILL} transition-colors hover:bg-hero-ink/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-ink`}
               >
                 <Info className="h-4 w-4" aria-hidden />
                 <span>Event Information</span>
               </button>
             )}
             {preview && !event.logoUrl && (
-              <span id="event-hero-image" className={`${PILL} border border-dashed border-white/40 ring-0`}>
-                <ImagePlus className="h-4 w-4 text-gray-200" aria-hidden />
+              <span id="event-hero-image" className={`${PILL} border border-dashed border-hero-ink/40 ring-0`}>
+                <ImagePlus className="h-4 w-4 text-hero-soft" aria-hidden />
                 <Placeholder tone="hero">Add an image</Placeholder>
               </span>
             )}

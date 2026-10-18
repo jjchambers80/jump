@@ -63,10 +63,10 @@ export default function GetInvolved({
             {closed ? (
               <span
                 title={form.name}
-                className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-white/70 ring-1 ring-inset ring-white/15"
+                className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium text-hero-ink/70 ring-1 ring-inset ring-hero-ink/15"
               >
                 {label}
-                <span className="text-xs text-white/60">· {closed}</span>
+                <span className="text-xs text-hero-ink/60">· {closed}</span>
               </span>
             ) : (
               <Link
@@ -74,7 +74,7 @@ export default function GetInvolved({
                 href={form.eventId && form.eventId !== eventId ? `/events/${form.eventId}` : `/events/${eventId}/apply/${form.slug}`}
                 aria-label={label === form.name ? undefined : `${label}: ${form.name}`}
                 title={form.name}
-                className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm shadow-black/20 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/60"
+                className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-hero-ink px-4 text-sm font-semibold text-hero-paper shadow-sm shadow-black/20 transition-colors hover:bg-hero-ink/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-ink focus-visible:ring-offset-2 focus-visible:ring-offset-hero-paper"
               >
                 {label}
                 <ArrowUpRight

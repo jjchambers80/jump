@@ -261,7 +261,7 @@ test('press applicant fills the form and lands on the status page', async ({ pag
   await page.getByLabel('Business or outlet name').fill('Retro Weekly');
   await page.getByLabel('Website').fill('retroweekly.example');
   await page.getByLabel('Instagram').fill('@retroweekly');
-  await page.getByLabel('Outlet name *').fill('Retro Weekly');
+  await page.getByLabel('Outlet name', { exact: true }).fill('Retro Weekly');
   await page.getByRole('radio', { name: 'Video' }).check();
   await page.getByRole('checkbox', { name: 'Agree to media policy' }).check();
 

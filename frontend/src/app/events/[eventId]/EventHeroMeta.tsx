@@ -10,7 +10,7 @@ import { dateTile } from '@/lib/dateTile';
 import Placeholder from './Placeholder';
 import type { EventPageEvent } from './eventPage';
 
-const TILE = 'rounded-xl bg-white/10 text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm';
+const TILE = 'hero-tile rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm';
 
 export default function EventHeroMeta({ event, preview }: { event: EventPageEvent; preview: boolean }) {
   const zone = event.venue?.timezone;
@@ -26,12 +26,12 @@ export default function EventHeroMeta({ event, preview }: { event: EventPageEven
               <span className="text-[22px] font-extrabold leading-none tabular-nums">{tile.day}</span>
             </div>
           ) : (
-            <CalendarDays className="h-5 w-5 shrink-0 text-gray-200" aria-hidden />
+            <CalendarDays className="h-5 w-5 shrink-0 text-hero-soft" aria-hidden />
           )}
           {event.date ? (
             <div className="leading-snug">
-              <p className="font-semibold text-white">{formatEventDate(event.date, zone, { weekday: 'long', month: 'long' })}</p>
-              <p className="text-sm text-gray-300">{formatEventTimeRange(event.date, event.endDate, zone)}</p>
+              <p className="font-semibold text-hero-ink">{formatEventDate(event.date, zone, { weekday: 'long', month: 'long' })}</p>
+              <p className="text-sm text-hero-soft">{formatEventTimeRange(event.date, event.endDate, zone)}</p>
             </div>
           ) : (
             <p className="leading-snug">
@@ -49,14 +49,14 @@ export default function EventHeroMeta({ event, preview }: { event: EventPageEven
           {event.venue ? (
             <div className="min-w-0 leading-snug">
               {event.venue.isPublic ? (
-                <Link href={`/venues/${event.venue.id}`} className="font-semibold text-white hover:underline">
+                <Link href={`/venues/${event.venue.id}`} className="font-semibold text-hero-ink hover:underline">
                   {event.venue.name}
                 </Link>
               ) : (
-                <p className="font-semibold text-white">{event.venue.name}</p>
+                <p className="font-semibold text-hero-ink">{event.venue.name}</p>
               )}
               {/* An address-only location (Venues off) is named after its street. */}
-              {event.venue.address !== event.venue.name && <p className="text-sm text-gray-300">{event.venue.address}</p>}
+              {event.venue.address !== event.venue.name && <p className="text-sm text-hero-soft">{event.venue.address}</p>}
             </div>
           ) : (
             <p className="leading-snug">

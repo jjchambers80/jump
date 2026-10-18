@@ -105,7 +105,7 @@ Validation error for bad hex: `400 "Brand color must be a hex value like #1d4ed8
 - **Server validates format, not compliance.** Any valid hex is accepted; the badge is advisory. If a hard block is ever needed, port the ~30-line luminance function from `lib/color.ts` into the validator.
 - **Public venue response deliberately omits `organizationId`** (existing contract test). Only `brandColor` is exposed.
 - **`PATCH /organizations/:id` now requires org ownership.** Non-system admins can only edit their own org; tests must use a user with `organizationId` set (see `tests/contract/organizations.test.js`).
-- Event hero (white text on dark gradient) and the checkout page are not branded — follow-up work.
+- **Event hero** (`EventHero` and the apply page `ApplyShell`): with an event image, white text on the blurred poster. Without one, the hero is the card surface (white, or slate-800 in dark mode) with a faint wash of the brand colour (`.event-hero-wash`, `color-mix` at 13% / 6%, 20% / 9% in dark), and its text follows the theme. Hero components colour their text and pills with the `hero` Tailwind tokens (`text-hero-ink`, `text-hero-soft`, `bg-hero-ink/10`, `text-hero-paper`), RGB channels in `--hero-*` vars that `.event-hero[data-plain]` switches — never hardcode `text-white` inside either hero, or it vanishes on the light hero. The checkout page is not branded yet.
 - Frontend unit tests run with `npm run test:unit` (vitest); `npm test` remains Playwright.
 
 ## Related Features
