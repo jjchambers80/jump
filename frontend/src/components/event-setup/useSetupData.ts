@@ -75,7 +75,7 @@ export function useSetupData(orgId: string | null, orgLoading: boolean, eventId:
       .then(([venueList, overview]) => {
         if (cancelled) return;
         setVenues(venueList);
-        setSaved(overview ? { ...toSaved(overview.event, overview.addOns?.addOns?.length ?? 0), mapStatus: overview.map?.status ?? null, admissionLock: overview.admissionLock?.reason ?? null } : null);
+        setSaved(overview ? { ...toSaved(overview.event, overview.addOns?.addOns?.length ?? 0), mapStatus: overview.map?.status ?? null, admissionLock: overview.admissionLock?.reason ?? null, holders: overview.tickets?.issued ?? overview.rsvp?.going ?? 0 } : null);
         setLoad({ status: 'ready' });
       })
       .catch((err) => {

@@ -104,7 +104,11 @@ class VenueService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    return existing ?? this.createVenue(orgId, { ...fields, isPublic: false });
+    if (!existing) return this.createVenue(orgId, { ...fields, isPublic: false, timezone: data.timezone });
+    // A zone confirmed on the address step corrects the reused row too.
+    if (data.timezone && (existing.timezone !== data.timezone || existing.timezoneSource !== 'MANUAL'))
+      return this.updateVenue(orgId, existing.id, { timezone: data.timezone });
+    return existing;
   }
 
   /** Get venue by ID, scoped to organization. */

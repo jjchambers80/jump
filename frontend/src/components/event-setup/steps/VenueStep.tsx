@@ -32,10 +32,13 @@ export default function VenueStep({
   orgId,
   venues,
   onVenueCreated,
+  zoneNotice,
 }: StepFormProps & {
   orgId: string;
   venues: SetupVenue[];
   onVenueCreated: (venue: CreatedVenue) => void;
+  /** The hard warning when this venue moves the start time people already hold. */
+  zoneNotice: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const id = FIELD_IDS.venueId;
@@ -104,10 +107,16 @@ export default function VenueStep({
         )}
       </div>
 
-      {status === 'PUBLISHED' && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-          This event is live. A new venue keeps the start time as typed and moves it to the new venue&apos;s time zone.
+      {zoneNotice ? (
+        <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          {zoneNotice}
         </p>
+      ) : (
+        status === 'PUBLISHED' && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            This event is live. A new venue keeps the start time as typed and moves it to the new venue&apos;s time zone.
+          </p>
+        )
       )}
 
       <button type="button" onClick={() => setAdding(true)} className={secondaryButton}>

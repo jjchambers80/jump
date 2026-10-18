@@ -14,6 +14,7 @@ import VenueStep from './steps/VenueStep';
 import LocationStep from './steps/LocationStep';
 import { useCan } from '@/components/OrgContext';
 import DateStep from './steps/DateStep';
+import { zoneMoveNotice } from './steps/zoneChecks';
 import PendingStep from './steps/PendingStep';
 import DoneStep from './steps/DoneStep';
 import ReviewStep, { type ReviewStepProps } from './review/ReviewStep';
@@ -75,6 +76,8 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
   const form = { fields, onChange, errors: Object.fromEntries(props.inline.map((e) => [e.field, e.message])), status };
   const registration = eventTypeOf({ saved: props.event, fields }) === 'REGISTRATION';
   const intro = (registration && REGISTRATION_INTRO[step.key]) || INTRO[step.key];
+  const savedZone = props.event ? props.venues.find((v) => v.id === props.event?.venueId)?.timezone ?? null : null;
+  const zoneNotice = zoneMoveNotice(props.event, savedZone, props.zone);
   if (step.key === 'done' && props.event) return <DoneStep ref={headingRef} event={props.event} orgId={props.orgId} />;
 
   return (
@@ -103,8 +106,8 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
               <LinkedEventField {...form} orgId={props.orgId} hasRow={!!props.event} />
             </div>
           )}
-          {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} />}
-          {step.key === 'date' && <DateStep {...form} zone={props.zone} hasVenue={props.venues.some((v) => v.id === fields.venueId)} />}
+          {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />}
+          {step.key === 'date' && <DateStep {...form} zone={props.zone} orgId={props.orgId} venue={props.venues.find((v) => v.id === fields.venueId)} onVenueUpdated={props.onVenueCreated} />}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
           {step.key === 'description' && <DescribeStep {...form} />}
           {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}

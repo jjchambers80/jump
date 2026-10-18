@@ -2,15 +2,21 @@
 
 // Step 3, "When is it?": start (required) and an optional end, both typed in
 // the venue's wall clock through lib/eventTime.ts (gotcha 28), with the zone
-// always written out. In create mode, Next here creates the draft.
+// always written out next to the time. The zone itself comes from the address
+// without asking; it is only raised here when it was a guess (zoneNeedsCheck).
+// In create mode, Next here creates the draft.
 
-import { useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Plus } from 'lucide-react';
+import api from '@/services/api';
+import TimeZoneSelect from '@/components/TimeZoneSelect';
+import type { CreatedVenue } from '@/components/VenueFlyout';
 import { DEFAULT_ZONE, formatEventDateTime, zonedInputToInstant } from '@/lib/eventTime';
 import { FIELD_IDS } from '../steps';
-import { describedBy, errorText, hintClass, inputClass, labelClass, secondaryButton, textButton } from '../ui';
+import { describedBy, errorText, hintClass, inputClass, labelClass, primaryButton, secondaryButton, textButton } from '../ui';
 import { zoneText } from './VenueStep';
-import type { StepFormProps } from './types';
+import { browserZone, viewerTimeLine, zoneNeedsCheck } from './zoneChecks';
+import type { SetupVenue, StepFormProps } from './types';
 
 function TimeField({
   id,
@@ -28,6 +34,8 @@ function TimeField({
   onChange: (value: string) => void;
 }) {
   const instant = zonedInputToInstant(value, zone);
+  const viewer = useMemo(browserZone, []);
+  const yours = instant && zone ? viewerTimeLine(instant, zone, viewer) : null;
   return (
     <div>
       <label htmlFor={id} className={labelClass}>
@@ -43,7 +51,8 @@ function TimeField({
         className={inputClass}
       />
       <p id={`${id}-hint`} className={hintClass}>
-        {instant ? `${formatEventDateTime(instant, zone || DEFAULT_ZONE)} at the venue` : `In the venue's time zone: ${zoneText(zone)}`}
+        {instant ? `${formatEventDateTime(instant, zone || DEFAULT_ZONE)} at the venue.` : `In the venue's time zone: ${zoneText(zone)}`}
+        {yours && <span className="block">{yours}</span>}
       </p>
       {error && (
         <p id={`${id}-error`} className={errorText}>
@@ -54,22 +63,71 @@ function TimeField({
   );
 }
 
+/**
+ * Shown only when the venue's zone was guessed: the organizer confirms it or
+ * picks the right one (PUT …/venues/:id/time-zone, which makes it MANUAL).
+ * The typed times stay as typed and are saved in the confirmed zone on Next.
+ */
+function ZoneCheck({ orgId, venue, onVenueUpdated }: { orgId: string; venue: SetupVenue; onVenueUpdated: (venue: CreatedVenue) => void }) {
+  const [choice, setChoice] = useState(venue.timezone || DEFAULT_ZONE);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      onVenueUpdated(await api.put<CreatedVenue>(`/organizations/${orgId}/venues/${venue.id}/time-zone`, { timezone: choice }));
+    } catch (err) {
+      setError((err as Error).message || 'Could not save the time zone');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      role="group"
+      aria-labelledby="setup-zone-check-title"
+      className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+    >
+      <p id="setup-zone-check-title" className="flex items-start gap-2 font-medium">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        Check the time zone before you sell tickets
+      </p>
+      <p className="mt-1">
+        {venue.timezoneSource === 'DEFAULT'
+          ? "We couldn't work it out from the address, so times are in Eastern Time for now."
+          : 'This address is near a time zone line, so we may have guessed wrong.'}
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <div className="min-w-[14rem] flex-1">
+          <TimeZoneSelect id="setup-zone-check" value={choice} onChange={setChoice} label="Time zone at the venue" className={inputClass} labelClassName={labelClass} />
+        </div>
+        <button type="button" onClick={confirm} disabled={saving} className={primaryButton}>
+          {saving ? 'Saving…' : 'Use this time zone'}
+        </button>
+      </div>
+      {error && <p className={errorText}>{error}</p>}
+    </div>
+  );
+}
+
 export default function DateStep({
   fields,
   onChange,
   errors,
   zone,
-  hasVenue,
-}: StepFormProps & { zone: string | null; hasVenue: boolean }) {
+  orgId,
+  venue,
+  onVenueUpdated,
+}: StepFormProps & { zone: string | null; orgId: string; venue: SetupVenue | undefined; onVenueUpdated: (venue: CreatedVenue) => void }) {
   const [showEnd, setShowEnd] = useState(!!fields.endDate);
-  const start = zonedInputToInstant(fields.date, zone);
   const addEndRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="space-y-5">
-      <p className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-slate-800 dark:text-slate-300">
-        Time zone: <span className="font-medium text-gray-900 dark:text-white">{hasVenue ? zoneText(zone, start) : 'choose a venue first'}</span>
-      </p>
+      {venue && zoneNeedsCheck(venue) && <ZoneCheck key={venue.id} orgId={orgId} venue={venue} onVenueUpdated={onVenueUpdated} />}
 
       <TimeField
         id={FIELD_IDS.date}

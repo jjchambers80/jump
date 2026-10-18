@@ -36,6 +36,7 @@ export const mergeSaved = (prev: SavedEvent | null, next: SavedEvent): SavedEven
   ...next,
   admissionLock: next.admissionLock ?? prev?.admissionLock ?? null,
   tax: next.tax ?? prev?.tax,
+  holders: next.holders ?? prev?.holders,
 });
 const BUILT = EVENT_STEPS.filter((step) => step.built);
 

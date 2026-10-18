@@ -70,6 +70,18 @@ Where a ZIP prefix genuinely straddles a line there is deliberately **no overrid
 
 Split regions covered: Arizona (the Navajo Nation observes DST), Indiana, Kentucky, Tennessee, the Florida panhandle, Kansas, Nebraska, the Dakotas, Texas (El Paso / Hudspeth), Oregon (Malheur County), Idaho (the panhandle), Nevada (West Wendover), Alaska, Michigan.
 
+## In the event setup wizard
+
+Organizers never pick a zone up front: the address sets it. The wizard shows it only where it matters and asks only when it is a guess (research: [`docs/research/2026-10-18-automatic-event-time-zones.md`](../../research/2026-10-18-automatic-event-time-zones.md)).
+
+- **When is it?** (`steps/DateStep.tsx`) has no zone box. Under each time: "Sat, Oct 31, 2026 · 8:00 PM CDT at the venue.", plus "That's 9:00 PM EDT your time." when the organizer's browser clock reads differently (`viewerTimeLine`).
+- **A guessed zone is checked.** When the venue's zone is `DEFAULT`, or `DERIVED` from a resolution that is not confident (`zoneNeedsCheck` in `steps/zoneChecks.ts`, recomputed from the venue's state / ZIP), an amber "Check the time zone before you sell tickets" group sits above **Starts** with the picker and **Use this time zone**. That calls `PUT /organizations/:orgId/venues/:id/time-zone`, which makes the zone `MANUAL`. The typed times stay as typed and are saved in the confirmed zone on Next. The route takes any venue when the role has Venues, and only the private venues the address step creates when it does not.
+- **Where is it?, Venues off** (`steps/LocationStep.tsx`) asks for a state or ZIP (the backend refuses `from-address` without one: 400), shows `VenueTimeZoneField` like the venue forms, and sends the chosen zone. A zone chosen for an address that matches an existing private venue corrects that venue too (`VenueService.venueForAddress`).
+- **Moving a sold event.** When a venue or address change would move the real start of an event people already hold tickets or RSVPs for (`SavedEvent.holders`, from the overview), both Where steps show a red notice naming the count and the old and new times (`zoneMoveNotice`) in place of the soft "This event is live" note.
+- **Review and publish** shows "Starts Sat, Oct 31, 2026 · 8:00 PM CDT (Chicago (GMT-05:00))", the last check before publishing.
+
+Still open: non-US events (the resolver declines them and the wizard's address form is US-only), and online events (no venue zone).
+
 ## Provenance: `timezoneSource`
 
 | Value | Meaning | On an address edit |

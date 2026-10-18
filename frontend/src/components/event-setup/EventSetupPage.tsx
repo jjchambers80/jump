@@ -132,7 +132,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           flow.refreshPreview();
         }}
         onVenueCreated={(venue) => {
-          data.addVenue({ id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone, city: venue.city, state: venue.state });
+          data.addVenue(venue);
           setFields((f) => ({ ...f, venueId: venue.id }));
         }}
       />
