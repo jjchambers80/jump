@@ -338,7 +338,7 @@ function EventDetailsContent() {
         <aside className="min-w-0 space-y-6" aria-label="Event settings">
           <WhenWhereCard overview={overview} editHref={wizard.date} venueHref={wizard.venue} delay={60} />
           {registration ? (
-            <LinkedEventCard linkedEvent={overview.linkedEvent ?? null} zone={event.venue?.timezone} editHref={cancelled ? undefined : wizard.name} delay={100} />
+            <LinkedEventCard linkedEvent={overview.linkedEvent ?? null} zone={event.venue?.timezone} editHref={cancelled ? undefined : wizard.venue} delay={100} />
           ) : (
             <>
               <AdmissionCard overview={overview} editHref={wizard.tickets} delay={100} />

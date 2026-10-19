@@ -212,12 +212,12 @@ test.describe('desktop', () => {
     await expect(main(page).getByRole('alert')).toContainText('End time must be after the start time');
   });
 
-  test('a registration event: type, the live event it is for, then its form flow (spec 057)', async ({ page }) => {
+  test('a registration event: type, name, the live event it is for, then its form flow (spec 057)', async ({ page }) => {
     const registration = adminEvent({ type: 'REGISTRATION', linkedEventId: 'evt-live', name: 'Market Vendors' });
     const calls = await mockApi(page, registration);
     await page.route(`${API}/organizations/${ORG_ID}/events?*`, (route) =>
       route.fulfill(json({
-        events: [{ id: 'evt-live', name: 'Spring Market', date: '2031-06-01T20:00:00.000Z', status: 'PUBLISHED', venue: { id: 'v-hall', timezone: 'America/New_York' } }],
+        events: [{ id: 'evt-live', name: 'Spring Market', date: '2031-06-01T20:00:00.000Z', endDate: '2031-06-02T01:00:00.000Z', status: 'PUBLISHED', venue: { id: 'v-hall', name: 'Union Hall', address: '1 Main St', state: 'NC', timezone: 'America/New_York' } }],
         pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
       }))
     );
@@ -244,20 +244,29 @@ test.describe('desktop', () => {
     await expect(preview(page).getByRole('heading', { name: 'Market Vendors' })).toBeVisible();
     await main(page).getByTestId('setup-description').locator('[contenteditable="true"]').fill('Tables for local makers');
     await expect(preview(page).getByText('Tables for local makers')).toBeVisible();
-    // Choosing the live event fills an empty venue and date from it; unlinking
-    // takes its venue away again, so Where asks for one.
+    await expect(main(page).getByLabel(/Registering for/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    // Where is it? starts with the live event it is for: linking one takes its
+    // place and times; unlinking takes them away again, so Where asks for a venue.
+    await expect(heading(page, 'Where is it?')).toBeVisible();
     await main(page).getByLabel(/Registering for/).selectOption('evt-live');
+    const summary = main(page).getByTestId('linked-event-summary');
+    await expect(summary).toContainText('Union Hall');
+    await expect(summary).toContainText('Same place and times as Spring Market');
+    await expect(main(page).getByLabel('Venue')).toHaveCount(0);
     await main(page).getByLabel(/Registering for/).selectOption('');
-    await page.getByRole('button', { name: 'Next' }).click();
-    await expect(heading(page, 'Where is it?')).toBeVisible();
     await expect(main(page).getByLabel('Venue')).toHaveValue('');
-    await page.getByRole('button', { name: 'Back' }).click();
     await main(page).getByLabel(/Registering for/).selectOption('evt-live');
-    await page.getByRole('button', { name: 'Next' }).click();
-    await expect(heading(page, 'Where is it?')).toBeVisible();
-    await expect(main(page).getByLabel('Venue')).toHaveValue('v-hall');
+    await main(page).getByRole('button', { name: 'Use a different address' }).click();
+    await expect(main(page).getByLabel('Venue')).toHaveValue('');
+    await main(page).getByLabel('Venue').selectOption('v-hall');
+    await expect(summary).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(heading(page, 'When is it?')).toBeVisible();
+    // The event's own times came from the live event; the registration window did not.
+    await expect(main(page).getByLabel('Starts')).toHaveValue('2031-06-01T16:00');
+    await expect(main(page).getByLabel('Ends (optional)')).toHaveValue('2031-06-01T21:00');
     // The registration window sits beside the event's times; the form is created with the row.
     await main(page).getByLabel('Registration opens (optional)').fill('2031-05-01T09:00');
     await main(page).getByLabel('Registration closes (optional)').fill('2031-04-01T09:00');
@@ -268,7 +277,7 @@ test.describe('desktop', () => {
 
     // No Describe step: the Name step carries the description.
     await expect(heading(page, 'Add an image')).toBeVisible(COLD);
-    expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
+    expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z', endDate: '2031-06-02T01:00:00.000Z' });
     expect(formPosts.map((r) => r.postDataJSON())).toEqual([
       { name: 'Market Vendors', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true, opensAt: '2031-05-01T13:00:00.000Z', closesAt: '2031-05-30T21:00:00.000Z' },
     ]);
