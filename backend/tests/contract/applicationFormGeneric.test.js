@@ -118,6 +118,20 @@ describe('Generic application forms (spec 050 §6.2)', () => {
     await request(app).patch(`${forms()}/${blank.body.id}`).set(...auth()).send({ status: 'DRAFT' });
   });
 
+  it('free or paid changes until the first application; going free drops the options', async () => {
+    const created = await request(app).post(forms(draftEventId)).set(...auth()).send({ kind: 'PAID', name: 'Switcher', setup: true });
+    const url = `${forms(draftEventId)}/${created.body.id}`;
+    expect((await request(app).post(`${url}/tiers`).set(...auth()).send({ name: 'Booth', price: 50, quantityTotal: 10 })).status).toBe(201);
+    const free = await request(app).patch(url).set(...auth()).send({ kind: 'FREE' });
+    expect(free.status).toBe(200);
+    expect(free.body).toMatchObject({ kind: 'FREE', tiers: [] });
+    expect((await request(app).patch(url).set(...auth()).send({ kind: 'PAID' })).body.kind).toBe('PAID');
+    expect((await request(app).patch(url).set(...auth()).send({ kind: 'BARTER' })).status).toBe(400);
+    // The volunteer form has an application by now.
+    const locked = await request(app).patch(`${forms()}/${volunteer.id}`).set(...auth()).send({ kind: 'PAID' });
+    expect(locked.status).toBe(409);
+  });
+
   it('admin list and public forms carry the form, without a purpose', async () => {
     const admin = await request(app).get(forms()).set(...auth());
     expect(admin.status).toBe(200);

@@ -24,7 +24,7 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import { collectsMore, wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
-import StartFormStep, { OptInSettings, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
+import StartFormStep, { KindChoice, OptInSettings, PaidStagesHint, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, secondaryButton } from './ui';
@@ -140,6 +140,14 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
       : step.key === 'start' && draft && canEdit
         ? draftPreviewForm(draft, selectedOrg?.name)
         : null;
+  // A paid form has two screens for registrants: the form, then (once approved)
+  // the options to choose and pay for. The preview names the one it shows.
+  const paidPreview = !!previewing && (form ? form.kind === 'PAID' : draft?.kind === 'PAID');
+  const previewCaption = !paidPreview
+    ? undefined
+    : step.preview === 'space'
+      ? { stage: 'Step 2 of 2', text: 'After you approve them: choose an option and pay' }
+      : { stage: 'Step 1 of 2', text: 'The form people fill out to register' };
 
   let body: React.ReactNode;
   if (loadError)
@@ -195,9 +203,13 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
           )}
           {step.key === 'start' && form && (
             <>
-              <p className={hintClass}>
-                {form.kind === 'PAID' ? 'Registrants you approve pay for an option you set up.' : 'Registration is free.'} Its name and intro are on the next step.
-              </p>
+              <KindChoice
+                paid={form.kind === 'PAID'}
+                disabled={!canEdit || form.applicationCount > 0}
+                onChange={(paid) => run('Saved.', async () => f.forms.upsert(await api.updateForm(form.id, { kind: paid ? 'PAID' : 'FREE' }))).then(noop)}
+              />
+              {form.kind === 'PAID' && <PaidStagesHint />}
+              {form.applicationCount > 0 && <p className={hintClass}>Free or paid can&apos;t change once people have registered.</p>}
               <OptInSettings
                 value={{ offerAccount: form.offerAccount !== false, offerMarketing: form.offerMarketing !== false }}
                 disabled={!canEdit}
@@ -282,6 +294,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               ...(previewing && step.preview && { view: step.preview }),
             }}
             subject={previewing ? 'form' : 'event'}
+            caption={previewCaption}
             isDesktop={isDesktop}
             open={previewOpen}
             onClose={() => setPreviewOpen(false)}

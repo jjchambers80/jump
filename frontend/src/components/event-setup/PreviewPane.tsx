@@ -36,8 +36,11 @@ export default function PreviewPane({
   open,
   onClose,
   subject = 'event',
+  caption,
 }: {
   message: PreviewMessage;
+  /** Which screen the frame shows, when the subject has more than one (a paid form). */
+  caption?: { stage: string; text: string };
   /** What the frame shows: the event page, or an application form (spec 051). */
   subject?: 'event' | 'form';
   /** ≥ lg: inline pane. Below: a sheet shown while `open`. */
@@ -112,6 +115,11 @@ export default function PreviewPane({
           </button>
         )}
       </div>
+      {caption && (
+        <p className="relative mx-auto mt-3 max-w-[90%] rounded-full border border-gray-200 bg-white px-3 py-1.5 text-center text-xs text-gray-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <span className="font-semibold text-gray-900 dark:text-white">{caption.stage}</span> · {caption.text}
+        </p>
+      )}
       <div ref={stageRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         <PreviewDevice
           ref={frameRef}

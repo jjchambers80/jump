@@ -350,16 +350,31 @@ class ApplicationFormService {
 
   async updateForm(eventId, formId, organizationId, body) {
     const event = await this.requireEvent(eventId, organizationId);
-    const existing = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { tiers: true } });
+    const existing = await prisma.applicationForm.findFirst({ where: { id: formId, eventId }, include: { tiers: true, _count: { select: { applications: true } } } });
     if (!existing) throw new NotFoundError('Application form not found');
-    if (body.kind !== undefined && body.kind !== existing.kind) throw new ValidationError('kind cannot be changed after creation');
-    const data = this._validateFormFields(body, existing.kind, existing);
+    // Free or paid stays open until the first application: after that, money
+    // and review state depend on it.
+    const kindChange = body.kind !== undefined && body.kind !== existing.kind;
+    if (kindChange) {
+      if (!FORM_KINDS.has(body.kind)) throw new ValidationError('kind must be PAID or FREE');
+      if (existing._count.applications > 0) throw new ConflictError('Free or paid cannot change once the form has applications');
+    }
+    const kind = kindChange ? body.kind : existing.kind;
+    const data = this._validateFormFields(body, kind, existing);
+    if (kindChange) {
+      data.kind = kind;
+      // A free form has no options; with no applications nothing refers to them.
+      if (kind === 'FREE') {
+        data.tiers = { deleteMany: {} };
+        existing.tiers = [];
+      }
+    }
     if (body.slug !== undefined) data.slug = await this._uniqueSlug(eventId, body.slug, formId);
     if (data.spaceSelection !== undefined && data.spaceSelection !== existing.spaceSelection) {
       await this._assertSpaceSelectionChangeable(formId);
     }
-    const next = { ...existing, ...data };
-    if (data.status === 'OPEN') await this._assertCanOpen(next);
+    const next = { ...existing, ...data, tiers: existing.tiers };
+    if (data.status === 'OPEN' || (kindChange && next.status === 'OPEN')) await this._assertCanOpen(next);
     else if (next.status === 'OPEN' && data.spaceSelection === 'MAP') await this._assertMapReady(next);
     // Spec 037 phase 5: every PAID form sells its space after approval, so
     // `chargeTiming` is kept for legacy rows only and no longer gates anything.
