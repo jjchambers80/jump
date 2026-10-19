@@ -75,7 +75,7 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
 
 /**
  * The form being built, as the public apply page would get it (spec 051): the
- * saved form, with the unsaved name and intro typed on Form details on top.
+ * saved form, with any unsaved settings typed on the step on top.
  * Always shown as open, whatever its status or dates.
  */
 export function previewForm(form: AdminForm, overlay: { name?: string; intro?: string | null; buttonLabel?: string | null } = {}, organizationName?: string | null): PublicForm {

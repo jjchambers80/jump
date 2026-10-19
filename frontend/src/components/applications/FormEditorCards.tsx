@@ -65,7 +65,7 @@ export interface EditorForm {
  * it in the venue's zone (gotcha 28); a standing form has no venue, so it keeps
  * the browser's clock.
  */
-function toLocalInput(iso: string | null | undefined, zone?: string | null): string {
+export function toLocalInput(iso: string | null | undefined, zone?: string | null): string {
   if (zone) return instantToZonedInput(iso, zone);
   if (!iso) return '';
   const d = new Date(iso);
@@ -73,9 +73,47 @@ function toLocalInput(iso: string | null | undefined, zone?: string | null): str
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function fromLocalInput(local: string, zone?: string | null): string | null {
+export function fromLocalInput(local: string, zone?: string | null): string | null {
   if (!local) return null;
   return zone ? zonedInputToIso(local, zone) : new Date(local).toISOString();
+}
+
+/** Opens / closes in the venue's zone (gotcha 28). Start (before the form exists) and the settings card share it. */
+export function FormWindowFields({
+  opensAt,
+  closesAt,
+  timeZone,
+  disabled,
+  onChange,
+  className = 'grid gap-3 sm:grid-cols-2',
+  hintSpan = 'sm:col-span-2',
+}: {
+  opensAt: string;
+  closesAt: string;
+  timeZone?: string | null;
+  disabled?: boolean;
+  onChange: (patch: { opensAt?: string; closesAt?: string }) => void;
+  className?: string;
+  hintSpan?: string;
+}) {
+  return (
+    <div className={className}>
+      <div>
+        <label htmlFor="f-opens" className={labelClass}>Opens</label>
+        <input id="f-opens" type="datetime-local" aria-describedby={timeZone ? 'f-window-zone' : undefined} value={opensAt} disabled={disabled} onChange={(e) => onChange({ opensAt: e.target.value })} className={field} />
+      </div>
+      <div>
+        <label htmlFor="f-closes" className={labelClass}>Closes</label>
+        <input id="f-closes" type="datetime-local" aria-describedby={timeZone ? 'f-window-zone' : undefined} value={closesAt} disabled={disabled} onChange={(e) => onChange({ closesAt: e.target.value })} className={field} />
+      </div>
+      {/* Span only where the grid has two columns: a col-span-2 in one column adds a phantom track that overflows on phones. */}
+      {timeZone && (
+        <p id="f-window-zone" className={`${hintSpan} text-xs text-gray-600 dark:text-slate-400`}>
+          Times are the venue&apos;s clock: {timeZoneLabel(timeZone)}.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** A radio group as stacked choices with a title and one line each (spec 051): fieldset + legend, native radios. */
@@ -130,10 +168,11 @@ export function SettingsCard({
   onChange?: (settings: Record<string, unknown>) => void;
   /**
    * Spec 051 setup flows: one step's part of the card (details = name,
-   * intro and window; payment = how a PAID form sells; status). Absent = all.
+   * intro and window; window = opens / closes only, a registration event's
+   * Start step; payment = how a PAID form sells; status). Absent = all.
    * Every save still sends the whole card, unchanged parts included.
    */
-  section?: 'details' | 'payment' | 'status';
+  section?: 'details' | 'payment' | 'status' | 'window';
   /** id of the <form>, so a wizard footer button can submit it. */
   formId?: string;
   /** The wizard's Next saves it instead. */
@@ -214,7 +253,7 @@ export function SettingsCard({
   return (
     <form id={formId} onSubmit={submit} className={section ? undefined : card} data-testid="form-settings">
       <h2 className={section ? 'sr-only' : 'text-base font-semibold text-gray-900 dark:text-white'}>Settings</h2>
-      {paidBlocked && section !== 'details' && (
+      {paidBlocked && section !== 'details' && section !== 'window' && (
         <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
           Paid forms cannot open until application payments are enabled on this platform. You can set everything up now.
         </p>
@@ -243,23 +282,16 @@ export function SettingsCard({
           </select>
         </div>
         )}
-        {show('details') && (
-        <div className={section ? 'grid gap-3 sm:col-span-2 sm:grid-cols-2' : 'grid grid-cols-2 gap-3'}>
-          <div>
-            <label htmlFor="f-opens" className={labelClass}>Opens</label>
-            <input id="f-opens" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.opensAt} disabled={!canEdit} onChange={(e) => update({ opensAt: e.target.value })} className={field} />
-          </div>
-          <div>
-            <label htmlFor="f-closes" className={labelClass}>Closes</label>
-            <input id="f-closes" type="datetime-local" aria-describedby={form.timezone ? "f-window-zone" : undefined} value={state.closesAt} disabled={!canEdit} onChange={(e) => update({ closesAt: e.target.value })} className={field} />
-          </div>
-          {/* Span only where the grid has two columns: a col-span-2 in one column adds a phantom track that overflows on phones. */}
-          {form.timezone && (
-            <p id="f-window-zone" className={`${section ? 'sm:col-span-2' : 'col-span-2'} text-xs text-gray-600 dark:text-slate-400`}>
-              Times are the venue&apos;s clock: {timeZoneLabel(form.timezone)}.
-            </p>
-          )}
-        </div>
+        {(show('details') || section === 'window') && (
+          <FormWindowFields
+            opensAt={state.opensAt}
+            closesAt={state.closesAt}
+            timeZone={form.timezone}
+            disabled={!canEdit}
+            onChange={update}
+            className={section ? 'grid gap-3 sm:col-span-2 sm:grid-cols-2' : 'grid grid-cols-2 gap-3'}
+            hintSpan={section ? 'sm:col-span-2' : 'col-span-2'}
+          />
         )}
         </>
         {/* Event forms keep the generic "Register" button; only standing forms label page buttons. */}

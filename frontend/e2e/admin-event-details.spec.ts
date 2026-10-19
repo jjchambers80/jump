@@ -154,7 +154,7 @@ test('shows the event read-only, with an Edit link per section into the wizard',
   }
   // A form opens the registration flow (spec 057); the lineup opens its own.
   const flow = (path: string) => `/admin/events/${EVENT_ID}/setup/${path}`;
-  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', flow(`registration?step=details&form=form-1&org=${ORG_ID}`));
+  await expect(page.getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute('href', flow(`registration?step=start&form=form-1&org=${ORG_ID}`));
   await expect(page.getByRole('link', { name: 'Edit special guests' })).toHaveAttribute('href', flow(`special-guests?step=lineup&org=${ORG_ID}`));
   // No MAP form, so the floor map is edited from the Map tab.
   await expect(page.getByRole('link', { name: 'Edit floor map' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}/map`);
@@ -268,7 +268,7 @@ test('a registration event reads like an event, with its form and registrants (s
   await expect(page.getByRole('region', { name: 'Admission' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Registration form' }).getByRole('link', { name: 'Edit form Vendors' })).toHaveAttribute(
     'href',
-    `/admin/events/${REG_ID}/setup/registration?step=details&form=form-1&org=${ORG_ID}`
+    `/admin/events/${REG_ID}/setup/registration?step=start&form=form-1&org=${ORG_ID}`
   );
   const linked = page.getByRole('region', { name: 'Registering for' });
   await expect(linked.getByRole('link', { name: 'Game & Geek 2026' })).toHaveAttribute('href', `/admin/events/${EVENT_ID}`);

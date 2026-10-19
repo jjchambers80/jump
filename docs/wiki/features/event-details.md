@@ -42,7 +42,7 @@ Sections are `OverviewSection` cards (`components/events/EventOverviewSections.t
 | Event details, Listing | `step=description` |
 | Sales, Admission, RSVPs; one tier (click its name) | `step=tickets`; `&tier=<id>` opens that tier's dialog |
 | Add-ons (**Edit add-ons** on Sales and RSVPs) | `step=collect-more` |
-| An application form's **Edit form** | its flow at Form details, `setup/<flow>?step=details&form=<id>` (spec 051) |
+| An application form's **Edit form** | its registration flow at Start, `setup/registration?step=start&form=<id>` (spec 057) |
 | **Create registration event** (Registrations card, spec 057; replaced Add to this event) | `/admin/events/new?type=registration&linked=<id>` ([Registration events](registration-events.md)) |
 | Floor map | `step=floor-map` while a VENDOR MAP form exists, else the Map tab |
 | Special guests (**Edit special guests** / **Add a special guest**) | `step=special-guests` |

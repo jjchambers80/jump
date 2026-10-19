@@ -1,10 +1,12 @@
 'use client';
 
 // A registration event's page body (spec 057): its one form, inline, and a
-// Register button sticky at the bottom of the screen. The form's intro says
-// what the event is about. On success the registrant lands on their status
-// page, where an approved registrant of a paid form chooses and pays, as
-// before. Brand tokens only (gotcha 6).
+// Register button sticky at the bottom of the screen. The event description
+// above it (EventPageView) says what the event is about; a form intro from
+// before the description moved to the Name step shows only without one. On
+// success the registrant lands on their status page, where an approved
+// registrant of a paid form chooses and pays, as before. Brand tokens only
+// (gotcha 6).
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
@@ -70,7 +72,7 @@ export default function EventRegister({ event, preview = false }: { event: Event
 
   return (
     <form id="register" onSubmit={handleSubmit} noValidate aria-label={form.name} data-testid="apply-form" className="scroll-mt-6 space-y-6">
-      <ApplySteps form={form} apply={apply} />
+      <ApplySteps form={event.description ? { ...form, intro: null } : form} apply={apply} />
       {apply.error && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
           {apply.error}

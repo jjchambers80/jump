@@ -40,7 +40,7 @@ const INTRO: Partial<Record<EventStep['key'], string>> = {
 
 /** Spec 057: a registration event's steps speak to registrants, not buyers. */
 const REGISTRATION_INTRO: Partial<Record<EventStep['key'], string>> = {
-  name: 'The name registrants will see.',
+  name: 'The name and description registrants will see, above the form.',
   review: 'Check what registrants will see, then publish.',
   'collect-more': 'Extras registrants can add when they choose and pay, like power or a table.',
 };
@@ -104,6 +104,11 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'name' && registration && (
             <div className="mt-5">
               <LinkedEventField {...form} orgId={props.orgId} hasRow={!!props.event} />
+            </div>
+          )}
+          {step.key === 'name' && registration && (
+            <div className="mt-5">
+              <DescribeStep {...form} hint="Shown above the form on the event page: what it is, who it is for, what you look for." />
             </div>
           )}
           {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />}

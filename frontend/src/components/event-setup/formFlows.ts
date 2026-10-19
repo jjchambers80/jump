@@ -11,7 +11,7 @@
 export type FormFlowKey = 'special-guests' | 'registration';
 /** Flows from before forms lost their type: `/setup/<one>` redirects to `/setup/registration`. */
 export const LEGACY_FLOWS = new Set(['vendors', 'volunteers', 'other-applications']);
-export type FlowStepKey = 'lineup' | 'start' | 'details' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
+export type FlowStepKey = 'lineup' | 'start' | 'options' | 'payment' | 'floor-map' | 'questions' | 'review';
 
 /** What a flow's steps need to know about its form (null before it is created). */
 export interface FlowForm {
@@ -43,7 +43,6 @@ const s = (key: FlowStepKey, title: string, intro: string, rest: Partial<FlowSte
   key, title, intro, needsForm: key !== 'start' && key !== 'lineup', visible: always, anchor: 'get-involved', formAnchor: null, ...rest,
 });
 
-const details = s('details', 'Form details', 'What registrants see first, and when the form takes registrations.', { formAnchor: 'apply-top' });
 const questions = s('questions', 'Fields', 'Email is always asked. Add any other fields you need.', { formAnchor: 'step-questions' });
 
 export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] }> = {
@@ -56,8 +55,8 @@ export const FORM_FLOWS: Record<FormFlowKey, { title: string; steps: FlowStep[] 
   registration: {
     title: 'Registration form',
     steps: [
-      s('start', 'Free or paid?', 'Anyone can register: vendors, volunteers, members. Decide whether the people you approve pay.', { formAnchor: 'apply-top' }),
-      details,
+      // The form has no name or intro of its own: the event's Name step sets both (one page).
+      s('start', 'Free or paid?', 'Anyone can register: vendors, volunteers, members. Decide whether the people you approve pay, and when registration is open.', { formAnchor: 'apply-top' }),
       s('options', 'Options and pricing', 'The second step for registrants: once you approve them, they choose one of these options and pay. Set a price and a number of spots for each.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
       s('payment', 'How registrants choose and pay', 'Registration is free. Once you approve someone, they choose and pay.', { visible: paidForm, formAnchor: 'apply-summary', preview: 'space' }),
       s('floor-map', 'Floor map', 'Registrants pick their spot on the floor map of the event this is for.', { visible: onMap, anchor: 'floor-map' }),
@@ -89,9 +88,9 @@ export function formFlowHref(
   return `/admin/events/${encodeURIComponent(eventId)}/setup/${flow}${q ? `?${q}` : ''}`;
 }
 
-/** The flow that edits a form, at Form details: a registration event's `registration` flow (spec 057). */
+/** The flow that edits a form, at its Start: a registration event's `registration` flow (spec 057). */
 export const formEditHref = (eventId: string, form: { id: string }, org?: string | null) =>
-  formFlowHref(eventId, 'registration', { form: form.id, step: 'details', org });
+  formFlowHref(eventId, 'registration', { form: form.id, step: 'start', org });
 
 /**
  * The event wizard's old application step keys (spec 050), still in emails,
@@ -102,5 +101,5 @@ export const formEditHref = (eventId: string, form: { id: string }, org?: string
 export function legacyFlowHref(eventId: string, step: string | null, formId: string | null, org?: string | null): string | null {
   if (!step || !(step === 'floor-map' || isFormFlow(step) || LEGACY_FLOWS.has(step))) return null;
   if (step === 'special-guests' && !formId) return formFlowHref(eventId, 'special-guests', { step: 'lineup', org });
-  return formFlowHref(eventId, 'registration', { form: formId, step: formId ? (step === 'floor-map' ? 'floor-map' : 'details') : undefined, org });
+  return formFlowHref(eventId, 'registration', { form: formId, step: formId ? (step === 'floor-map' ? 'floor-map' : 'start') : undefined, org });
 }

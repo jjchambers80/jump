@@ -7,7 +7,7 @@
 // Pure module: no React, no api import. Saves take the client as an argument.
 
 import { zonedInputToIso, zonedInputToInstant } from '@/lib/eventTime';
-import { DESCRIBE_STEP, IMAGE_STEP, SALES_FIELD_IDS, TICKETS_STEP, type SalesFields, type SalesSaved } from './contentSteps';
+import { DESCRIBE_STEP, IMAGE_STEP, SALES_FIELD_IDS, TICKETS_STEP, descriptionPatch, type SalesFields, type SalesSaved } from './contentSteps';
 import type { EventType } from '@/lib/eventOverview';
 import { flowSteps } from './formFlows';
 
@@ -187,6 +187,8 @@ export const EVENT_STEPS: EventStep[] = [
       // Spec 057: a registration event's "Registering for" link.
       const linked = ctx.fields.linkedEventId || null;
       if (registration(ctx) && ctx.fields.linkedEventId !== undefined && linked !== (ctx.saved.linkedEventId ?? null)) body.linkedEventId = linked;
+      // A registration event has no Describe step: what registrants read is typed here.
+      if (registration(ctx)) Object.assign(body, descriptionPatch(ctx));
       return Object.keys(body).length ? body : null;
     },
     save: patchEvent,

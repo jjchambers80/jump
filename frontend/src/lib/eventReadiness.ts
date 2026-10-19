@@ -44,7 +44,7 @@ export function readinessHref(item: ReadinessItem, eventId: string, orgId: strin
   if (fix) return fix;
   // Spec 057: form items open the form's flow at the step that fixes them.
   if (item.step === 'registration' && item.formId) {
-    const at = item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : item.code === 'MAP_FORM_WITHOUT_PUBLISHED_MAP' ? 'floor-map' : 'details';
+    const at = item.code === 'PAID_FORM_NO_OPTIONS' ? 'options' : item.code === 'MAP_FORM_WITHOUT_PUBLISHED_MAP' ? 'floor-map' : 'start';
     return formFlowHref(eventId, 'registration', { form: item.formId, step: at, org: orgId });
   }
   const org = orgId ? `&org=${encodeURIComponent(orgId)}` : '';

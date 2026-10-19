@@ -97,6 +97,22 @@ describe('Registration events (spec 057)', () => {
     expect(second.body.code).toBe('FORM_EXISTS');
   });
 
+  it("renames its form with the event, and leaves a live event's forms alone", async () => {
+    const { body } = await createRegistration({ description: '<p>What we look for</p>' });
+    expect(body.description).toBe('<p>What we look for</p>');
+    const form = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: body.id, kind: 'FREE', name: 'Vendors', slug: `${TAG}-renamed` } });
+    const patch = (id, b) => request(app).patch(`${events()}/${id}`).set(...auth()).send(b);
+    expect((await patch(body.id, { name: 'Spring makers' })).status).toBe(200);
+    expect((await prisma.applicationForm.findUnique({ where: { id: form.id } })).name).toBe('Spring makers');
+    await patch(body.id, { name: 'X' });
+    expect((await prisma.applicationForm.findUnique({ where: { id: form.id } })).name).toBe('X registration');
+
+    const liveForm = await prisma.applicationForm.create({ data: { organizationId: org.id, eventId: liveId, kind: 'FREE', name: 'Old vendors', slug: `${TAG}-live-form` } });
+    expect((await patch(liveId, { name: `${TAG} Market renamed` })).status).toBe(200);
+    expect((await prisma.applicationForm.findUnique({ where: { id: liveForm.id } })).name).toBe('Old vendors');
+    await prisma.applicationForm.delete({ where: { id: liveForm.id } });
+  });
+
   it('publishes on its form, without ticket checks', async () => {
     const { body } = await createRegistration({ description: '<p>Bring a table.</p>' });
     const readiness = async () => (await request(app).get(`${events()}/${body.id}/readiness`).set(...auth())).body;

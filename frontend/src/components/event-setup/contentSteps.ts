@@ -79,20 +79,18 @@ function intField(value: string | undefined, min: number, max: number): number |
 
 export const modeOf = (ctx: StepCtx): AdmissionMode => ctx.fields.admissionMode ?? ctx.saved?.admissionMode ?? 'TICKETED';
 
+/** The description, when it changed. The editor sends '' when empty; the backend sanitises on write (gotcha 20). */
+export function descriptionPatch({ saved, fields }: StepCtx): Record<string, unknown> {
+  if (!saved || fields.description === undefined || (fields.description || null) === (saved.description || null)) return {};
+  return { description: fields.description || null };
+}
+
 export const DESCRIBE_STEP: EventStep = {
   key: 'description', title: 'Describe it', rule: 'S', anchor: 'about', built: true,
-  // A registration event's form has its own description (the flow's Form details step).
+  // A registration event's description is on its Name step: one page, asked once.
   visible: (ctx) => (ctx.saved?.type ?? ctx.fields.type ?? 'LIVE') !== 'REGISTRATION',
   complete: (ctx) => !!ctx.saved?.description,
-  payload: (ctx) => {
-    const { saved, fields } = ctx;
-    if (!saved) return null;
-    const body: Record<string, unknown> = {};
-    // The editor sends '' when empty; the backend sanitises on write (gotcha 20).
-    if (fields.description !== undefined && (fields.description || null) !== (saved.description || null))
-      body.description = fields.description || null;
-    return orNull(body);
-  },
+  payload: (ctx) => (ctx.saved ? orNull(descriptionPatch(ctx)) : null),
   save: patch,
 };
 

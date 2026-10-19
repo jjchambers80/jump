@@ -80,6 +80,12 @@ function assertEventType(type) {
   return type;
 }
 
+/** A form name is 2-80 characters; an event name may be 1-255. Mirrors the wizard's `formNameFor`. */
+export function registrationFormName(eventName) {
+  const name = String(eventName).trim();
+  return (name.length >= 2 ? name : `${name} registration`.trim()).slice(0, 80);
+}
+
 class EventService {
   /**
    * Create a new event in DRAFT status with price tiers
@@ -417,6 +423,10 @@ class EventService {
         throw new ValidationError('Event name must be between 1 and 255 characters');
       }
       updateData.name = updates.name;
+      // Spec 057: a registration event's one form has no name of its own; it follows the event.
+      if (existing.type === 'REGISTRATION' && updates.name !== existing.name) {
+        updateData.applicationForms = { updateMany: { where: {}, data: { name: registrationFormName(updates.name) } } };
+      }
     }
 
     // Only a draft's URL follows its name: once published, links are out there,
