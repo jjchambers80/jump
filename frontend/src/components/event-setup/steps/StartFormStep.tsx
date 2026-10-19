@@ -1,19 +1,20 @@
 'use client';
 
-// Start of the registration flow (spec 057): whether it charges, when it takes
-// registrations, and which opt-ins the form offers (create an account, email
-// subscribe; both off for a new form). The form has no name or intro of its
-// own: it follows the event's name, and the event description is its intro
-// (both on the Name step), so the registration event is one page.
+// Start of the registration flow (spec 057): whether it charges, and which
+// opt-ins the form offers (create an account, email subscribe; both off for a
+// new form). The registration event is one page: the form has no name or intro
+// of its own (the Name step's event name and description), and its window is
+// on "When is it?", where the event's row and form are created together. This
+// create step is only for an event whose form is missing (an older draft).
 // Every form starts blank: it asks for an email only, the rest is added on the
 // Fields step. The wizard footer's Next submits this form (`START_FORM_ID`);
 // the flow then moves to the next step.
 
-import { FormEvent, useEffect, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { BadgeDollarSign, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import type { DraftForm } from '../previewMessages';
 import type { FormKind } from '@/lib/applications';
-import { FormWindowFields, fromLocalInput } from '@/components/applications/FormEditorCards';
+import { formNameFor } from '../steps';
 import { hintClass, labelClass } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
@@ -23,8 +24,6 @@ export interface NewFormBody {
   kind: FormKind;
   offerAccount: boolean;
   offerMarketing: boolean;
-  opensAt: string | null;
-  closesAt: string | null;
 }
 
 export type OptInOffers = {
@@ -57,8 +56,6 @@ interface Props {
   /** Every change to name or kind: the live preview shows the form as it is set up. */
   onDraftChange: (draft: DraftForm) => void;
   eventName: string;
-  /** The venue's zone: the window is its wall clock (gotcha 28). */
-  timeZone: string | null;
   onCreate: (body: NewFormBody) => Promise<void>;
 }
 
@@ -99,17 +96,6 @@ export function KindChoice({ paid, onChange, disabled }: { paid: boolean; onChan
   );
 }
 
-/** When the form takes registrations; blank = open from publish, no end. */
-export function RegistrationWindow({ children }: { children: ReactNode }) {
-  return (
-    <fieldset className="space-y-1">
-      <legend className={labelClass}>When registration is open</legend>
-      <p className={hintClass}>Leave both blank to take registrations as soon as the event is published, with no closing time.</p>
-      {children}
-    </fieldset>
-  );
-}
-
 /** A paid form has two screens for registrants; say so where the choice is made. */
 export function PaidStagesHint() {
   return (
@@ -119,14 +105,10 @@ export function PaidStagesHint() {
   );
 }
 
-/** A form name needs 2 characters; an event name may be shorter. Mirrors the backend's `registrationFormName`. */
-const formNameFor = (eventName: string) => (eventName.trim().length >= 2 ? eventName.trim() : `${eventName.trim()} registration`.trim()).slice(0, 80);
-
-export default function StartFormStep({ onBusyChange, onDraftChange, eventName, timeZone, onCreate }: Props) {
+export default function StartFormStep({ onBusyChange, onDraftChange, eventName, onCreate }: Props) {
   const name = formNameFor(eventName);
   const [paid, setPaid] = useState(false);
   const [offers, setOffers] = useState<OptInOffers>({ offerAccount: false, offerMarketing: false });
-  const [openWindow, setOpenWindow] = useState({ opensAt: '', closesAt: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const kind: FormKind = paid ? 'PAID' : 'FREE';
@@ -138,16 +120,8 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
     setBusy(true);
     onBusyChange(true);
     setError(null);
-    const opensAt = fromLocalInput(openWindow.opensAt, timeZone);
-    const closesAt = fromLocalInput(openWindow.closesAt, timeZone);
-    if (opensAt && closesAt && closesAt <= opensAt) {
-      setError('Closes must be after Opens');
-      setBusy(false);
-      onBusyChange(false);
-      return;
-    }
     try {
-      await onCreate({ name, kind, ...offers, opensAt, closesAt });
+      await onCreate({ name, kind, ...offers });
     } catch (err) {
       setError((err as Error)?.message || "Couldn't create the form");
       setBusy(false);
@@ -164,9 +138,6 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
       )}
       <KindChoice paid={paid} onChange={setPaid} />
       {paid && <PaidStagesHint />}
-      <RegistrationWindow>
-        <FormWindowFields {...openWindow} timeZone={timeZone} onChange={(patch) => setOpenWindow((w) => ({ ...w, ...patch }))} />
-      </RegistrationWindow>
       <OptInSettings value={offers} onChange={setOffers} />
     </form>
   );

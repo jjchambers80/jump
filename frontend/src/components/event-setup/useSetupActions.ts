@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '@/services/api';
 import { clearSessionDraft, ensureRequestKey } from './sessionDraft';
-import { FIELD_IDS, eventTypeOf, registrationFlowSteps, sameInstant, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
+import { FIELD_IDS, eventTypeOf, formNameFor, formWindowOf, registrationFlowSteps, sameInstant, stepByKey, visibleSteps, type FieldError, type StepKey } from './steps';
 import { formFlowHref } from './formFlows';
 import { LINKED_EVENT_FIELD } from './steps/LinkedEventField';
 import { useCan } from '@/components/OrgContext';
@@ -130,6 +130,16 @@ export function useSetupActions(flow: SetupFlow) {
         { headers: { 'Idempotency-Key': requestKey } }
       );
       await reconcileReplay(orgId, created, sent);
+      // Spec 057: a registration event's one form comes with the row, so its
+      // window can be set here beside the event's times. A replay already has
+      // it (409 FORM_EXISTS); any other failure leaves Start to create it.
+      if (type === 'REGISTRATION') {
+        await api
+          .post(`/admin/events/${encodeURIComponent(created.id)}/application-forms`, {
+            name: formNameFor(sent.name), kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true, ...formWindowOf(ctx),
+          })
+          .catch(() => undefined);
+      }
       clearSessionDraft(orgId);
       focusAfterStepChange();
       router.replace(`/admin/events/${created.id}/setup?step=${next?.key ?? 'review'}`);

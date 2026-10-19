@@ -221,7 +221,11 @@ test.describe('desktop', () => {
         pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
       }))
     );
-    await page.route(`${API}/admin/events/${EVENT_ID}/application-forms`, (route) => route.fulfill(json({ data: [] })));
+    const formPosts: Request[] = [];
+    await page.route(`${API}/admin/events/${EVENT_ID}/application-forms`, (route) => {
+      if (route.request().method() === 'POST') formPosts.push(route.request());
+      return route.fulfill(json({ data: [] }));
+    });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/admin/events/new');
     await expect(heading(page, 'What do you want to create?')).toBeVisible(COLD);
@@ -250,11 +254,20 @@ test.describe('desktop', () => {
     await expect(main(page).getByLabel('Venue')).toHaveValue('v-hall');
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(heading(page, 'When is it?')).toBeVisible();
+    // The registration window sits beside the event's times; the form is created with the row.
+    await main(page).getByLabel('Registration opens (optional)').fill('2031-05-01T09:00');
+    await main(page).getByLabel('Registration closes (optional)').fill('2031-04-01T09:00');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(main(page).locator('#setup-closes-error')).toHaveText('Registration must close after it opens');
+    await main(page).getByLabel('Registration closes (optional)').fill('2031-05-30T17:00');
     await page.getByRole('button', { name: 'Next' }).click();
 
     // No Describe step: the Name step carries the description.
     await expect(heading(page, 'Add an image')).toBeVisible(COLD);
     expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
+    expect(formPosts.map((r) => r.postDataJSON())).toEqual([
+      { name: 'Market Vendors', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true, opensAt: '2031-05-01T13:00:00.000Z', closesAt: '2031-05-30T21:00:00.000Z' },
+    ]);
     // One count across the event steps and the form flow: 5 + Start, Fields + Review (free: no Collect more).
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 8');
 

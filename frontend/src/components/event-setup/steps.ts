@@ -29,6 +29,9 @@ export interface SetupFields extends SalesFields {
   type?: EventType;
   /** Spec 057: the live event a registration event is for ('' = none). */
   linkedEventId?: string;
+  /** A registration event's window: when its form opens and closes (venue wall clock, '' = none). */
+  opensAt?: string;
+  closesAt?: string;
 }
 
 /** The server row as last saved (ISO instants), or null before step 3 creates it. */
@@ -64,7 +67,7 @@ export interface StepCtx {
   zone: string | null;
   savedZone: string | null;
   /** Forms on the event: old application step links resolve to their flow (spec 051). */
-  forms?: { id: string; kind?: string; spaceSelection?: 'TIERS' | 'MAP' | null }[];
+  forms?: { id: string; kind?: string; spaceSelection?: 'TIERS' | 'MAP' | null; opensAt?: string | null; closesAt?: string | null }[];
   donationsEligible?: boolean;
   now?: Date;
 }
@@ -105,6 +108,8 @@ export const FIELD_IDS = {
   venueId: 'setup-venue',
   date: 'setup-date',
   endDate: 'setup-end-date',
+  opensAt: 'setup-opens',
+  closesAt: 'setup-closes',
 } as const;
 
 const always = () => true;
@@ -155,7 +160,33 @@ export function validateDates(ctx: StepCtx): FieldError[] {
     errors.push({ field: FIELD_IDS.date, message: 'Choose a start time in the future' });
   if (ctx.fields.endDate && !end) errors.push({ field: FIELD_IDS.endDate, message: 'Enter a valid end time, or remove it' });
   else if (start && end && end <= start) errors.push({ field: FIELD_IDS.endDate, message: 'End time must be after the start time' });
+  if (registration(ctx)) {
+    const opens = zonedInputToInstant(ctx.fields.opensAt ?? '', ctx.zone);
+    const closes = zonedInputToInstant(ctx.fields.closesAt ?? '', ctx.zone);
+    if (opens && closes && closes <= opens) errors.push({ field: FIELD_IDS.closesAt, message: 'Registration must close after it opens' });
+  }
   return errors;
+}
+
+/**
+ * A registration event's window as its form stores it (ISO, null = none). The
+ * form is created with the row, so the window is set where the event's own
+ * times are; `formWindow` in a step body is saved to the form, not the event.
+ */
+/** A form name needs 2-80 characters; an event name may be 1-255. Mirrors the backend's `registrationFormName`. */
+export const formNameFor = (eventName: string) => (eventName.trim().length >= 2 ? eventName.trim() : `${eventName.trim()} registration`.trim()).slice(0, 80);
+
+export const formWindowOf = (ctx: Pick<StepCtx, 'fields' | 'zone'>) => ({
+  opensAt: zonedInputToIso(ctx.fields.opensAt ?? '', ctx.zone),
+  closesAt: zonedInputToIso(ctx.fields.closesAt ?? '', ctx.zone),
+});
+
+function windowPayload(ctx: StepCtx): Record<string, unknown> | null {
+  const form = ctx.forms?.[0];
+  if (!registration(ctx) || !form || ctx.fields.opensAt === undefined) return null;
+  const next = formWindowOf(ctx);
+  if (sameInstant(next.opensAt, form.opensAt ?? null) && sameInstant(next.closesAt, form.closesAt ?? null)) return null;
+  return { formWindow: { formId: form.id, ...next } };
 }
 
 export const EVENT_STEPS: EventStep[] = [
@@ -209,7 +240,10 @@ export const EVENT_STEPS: EventStep[] = [
     key: 'date', title: 'When is it?', rule: 'R', anchor: 'event-date', built: true, visible: always,
     complete: (ctx) => !!ctx.fields.date,
     validate: validateDates,
-    payload: datePayload,
+    payload: (ctx) => {
+      const body = { ...datePayload(ctx), ...windowPayload(ctx) };
+      return Object.keys(body).length ? body : null;
+    },
     save: patchEvent,
   },
   DESCRIBE_STEP,
