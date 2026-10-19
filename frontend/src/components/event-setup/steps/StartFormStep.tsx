@@ -1,8 +1,6 @@
 'use client';
 
-// Start of the registration flow (spec 057): whether it charges, and which
-// opt-ins the form offers (create an account, email subscribe; both off for a
-// new form). The registration event is one page: the form has no name or intro
+// Start of the registration flow (spec 057): whether it charges. The registration event is one page: the form has no name or intro
 // of its own (the Name step's event name and description), and its window is
 // on "When is it?", where the event's row and form are created together. This
 // create step is only for an event whose form is missing (an older draft).
@@ -15,39 +13,13 @@ import { BadgeDollarSign, ClipboardCheck, type LucideIcon } from 'lucide-react';
 import type { DraftForm } from '../previewMessages';
 import type { FormKind } from '@/lib/applications';
 import { formNameFor } from '../steps';
-import { hintClass, labelClass } from '../ui';
+import { hintClass } from '../ui';
 
 export const START_FORM_ID = 'flow-start-form';
 
 export interface NewFormBody {
   name: string;
   kind: FormKind;
-  offerAccount: boolean;
-  offerMarketing: boolean;
-}
-
-export type OptInOffers = {
-  offerAccount: boolean;
-  offerMarketing: boolean;
-};
-
-/** The opt-ins a form offers applicants. Start uses it before the form exists, and again once it does. */
-export function OptInSettings({ value, onChange, disabled }: { value: OptInOffers; onChange: (next: OptInOffers) => void; disabled?: boolean }) {
-  const row = 'flex min-h-11 items-center gap-2 text-sm font-medium text-gray-800 dark:text-slate-200';
-  return (
-    <fieldset className="space-y-1" disabled={disabled}>
-      <legend className={labelClass}>Also offer registrants</legend>
-      <p className={hintClass}>Everyone gives their email and agrees to the privacy terms. These add an optional checkbox each.</p>
-      <label className={row}>
-        <input type="checkbox" checked={value.offerAccount} onChange={(e) => onChange({ ...value, offerAccount: e.target.checked })} className="h-5 w-5 accent-accent-600" data-testid="offer-account" />
-        An account, to follow their registration
-      </label>
-      <label className={row}>
-        <input type="checkbox" checked={value.offerMarketing} onChange={(e) => onChange({ ...value, offerMarketing: e.target.checked })} className="h-5 w-5 accent-accent-600" data-testid="offer-marketing" />
-        A subscription to your emails
-      </label>
-    </fieldset>
-  );
 }
 
 interface Props {
@@ -108,11 +80,10 @@ export function PaidStagesHint() {
 export default function StartFormStep({ onBusyChange, onDraftChange, eventName, onCreate }: Props) {
   const name = formNameFor(eventName);
   const [paid, setPaid] = useState(false);
-  const [offers, setOffers] = useState<OptInOffers>({ offerAccount: false, offerMarketing: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const kind: FormKind = paid ? 'PAID' : 'FREE';
-  useEffect(() => onDraftChange({ name, kind, ...offers }), [name, kind, offers, onDraftChange]);
+  useEffect(() => onDraftChange({ name, kind }), [name, kind, onDraftChange]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -121,7 +92,7 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
     onBusyChange(true);
     setError(null);
     try {
-      await onCreate({ name, kind, ...offers });
+      await onCreate({ name, kind });
     } catch (err) {
       setError((err as Error)?.message || "Couldn't create the form");
       setBusy(false);
@@ -138,7 +109,6 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
       )}
       <KindChoice paid={paid} onChange={setPaid} />
       {paid && <PaidStagesHint />}
-      <OptInSettings value={offers} onChange={setOffers} />
     </form>
   );
 }

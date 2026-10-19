@@ -30,7 +30,8 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const list = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
-  const fallback = list[0];
+  // The first step this form can open: Fields, or Start while the form does not exist yet.
+  const fallback = list.find(reachable) ?? list[0];
   const step = requested && reachable(requested) ? requested : fallback;
   const at = list.indexOf(step);
   const ready = data.load.status === 'ready' && forms.load.status === 'ready';
@@ -47,8 +48,8 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
         ? formFlowHref(eventId, 'registration', { form: form?.id, org })
         : `/admin/events/${encodeURIComponent(eventId)}`
       : registration && form && !params.get('form')
-        ? // The registration's one form exists: its Start is done (Create lands here too), so the step asked for or the next one.
-          href(step.key === 'start' ? list[1]?.key ?? 'start' : step.key)
+        ? // The registration's one form exists: its Start is done (Create lands here too), so the step asked for or the flow from the top.
+          href(step.key === 'start' ? list[0].key : step.key)
         : step !== requested || (formId && !form)
           ? href(step.key)
           : null;

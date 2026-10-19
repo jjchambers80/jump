@@ -158,8 +158,8 @@ const LINKS: [string, string, string][] = [
 ];
 // A form opens the registration flow (spec 057); a live event's old form goes back to the event.
 const FORM_LINKS: [string, string][] = [
-  ['Edit form Vendor booths', '/registration?step=start&form=f-vendors'],
-  ['Edit form Volunteer crew', '/registration?step=start&form=f-volunteers'],
+  ['Edit form Vendor booths', '/registration?step=questions&form=f-vendors'],
+  ['Edit form Volunteer crew', '/registration?step=questions&form=f-volunteers'],
   ['Edit floor map', '/registration?step=floor-map&form=f-vendors'],
 ];
 const linkHref = (path: string) => `/admin/events/${EVENT_ID}/setup${path}${ORG_Q}`;
