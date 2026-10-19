@@ -25,6 +25,7 @@ import TicketsStep from './steps/TicketsStep';
 import CollectMoreStep from './steps/CollectMoreStep';
 import { eventTypeOf, type EventStep, type FieldError, type SavedEvent, type SetupFields } from './steps';
 import type { SavedRowProps, SetupVenue } from './steps/types';
+import type { EventVenue } from '@/app/events/[eventId]/eventPage';
 
 const INTRO: Partial<Record<EventStep['key'], string>> = {
   type: 'Pick what people do: come to it, or register for it. You set up the rest next.',
@@ -60,6 +61,8 @@ interface Props {
   zone: string | null;
   readOnly: boolean;
   onVenueCreated: (venue: CreatedVenue) => void;
+  /** Location step: the address as typed, for the live preview (undefined = none). */
+  onVenueDraft: (venue: EventVenue | null | undefined) => void;
   /** The server row; null before the date step creates it. */
   event: SavedEvent | null;
   review: Pick<ReviewStepProps, 'createMode' | 'flush' | 'onFinished' | 'onBusyChange' | 'footerSlot'>;
@@ -72,7 +75,7 @@ interface Props {
 const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(props, headingRef) {
   const { step, fields, onChange, summary, summaryRef, onOpenStep, status, readOnly } = props;
   // Venues off or hidden for the role (System › Roles): a plain address instead.
-  const VenueForm = useCan('venues') ? VenueStep : LocationStep;
+  const venuesOn = useCan('venues');
   const form = { fields, onChange, errors: Object.fromEntries(props.inline.map((e) => [e.field, e.message])), status };
   const registration = eventTypeOf({ saved: props.event, fields }) === 'REGISTRATION';
   const intro = (registration && REGISTRATION_INTRO[step.key]) || INTRO[step.key];
@@ -111,7 +114,12 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
               <DescribeStep {...form} hint="Shown above the form on the event page: what it is, who it is for, what you look for." />
             </div>
           )}
-          {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />}
+          {step.key === 'venue' &&
+            (venuesOn ? (
+              <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />
+            ) : (
+              <LocationStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} onDraft={props.onVenueDraft} zoneNotice={zoneNotice} />
+            ))}
           {step.key === 'date' && (
             <DateStep
               {...form}
