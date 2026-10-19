@@ -162,6 +162,14 @@ describe('validation and payloads', () => {
       date: '2030-06-01T21:00:00.000Z',
     });
   });
+
+  test("a registration event's link to its live event saves with Where is it?", () => {
+    const saved = row({ type: 'REGISTRATION', linkedEventId: null });
+    const linked = { ...fields, name: 'Fair', venueId: 'v1', date: '2030-06-01T16:00', type: 'REGISTRATION' as const, linkedEventId: 'live' };
+    expect(stepByKey('venue')!.payload!(ctx({ saved, fields: linked }))).toEqual({ linkedEventId: 'live' });
+    expect(stepByKey('venue')!.payload!(ctx({ saved: { ...saved, linkedEventId: 'live' }, fields: { ...linked, linkedEventId: '' } }))).toEqual({ linkedEventId: null });
+    expect(stepByKey('name')!.payload!(ctx({ saved, fields: linked }))).toBeNull();
+  });
 });
 
 describe('complete (Skip for now shows only on an empty optional step)', () => {

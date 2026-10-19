@@ -215,9 +215,6 @@ export const EVENT_STEPS: EventStep[] = [
       if (name && name !== ctx.saved.name) body.name = name;
       if (ctx.fields.slug && ctx.fields.slug !== ctx.saved.slug) body.slug = ctx.fields.slug;
       if (ctx.fields.category !== undefined && ctx.fields.category.trim() !== (ctx.saved.category ?? '')) body.category = ctx.fields.category.trim() || null;
-      // Spec 057: a registration event's "Registering for" link.
-      const linked = ctx.fields.linkedEventId || null;
-      if (registration(ctx) && ctx.fields.linkedEventId !== undefined && linked !== (ctx.saved.linkedEventId ?? null)) body.linkedEventId = linked;
       // A registration event has no Describe step: what registrants read is typed here.
       if (registration(ctx)) Object.assign(body, descriptionPatch(ctx));
       return Object.keys(body).length ? body : null;
@@ -229,10 +226,14 @@ export const EVENT_STEPS: EventStep[] = [
     complete: (ctx) => !!ctx.fields.venueId,
     validate: (ctx) => (ctx.fields.venueId ? [] : [{ field: FIELD_IDS.venueId, message: 'Add where the event happens' }]),
     payload: (ctx) => {
-      if (!ctx.saved || !ctx.fields.venueId || ctx.fields.venueId === ctx.saved.venueId) return null;
+      if (!ctx.saved) return null;
+      const body: Record<string, unknown> = {};
+      // Spec 057: a registration event's "Registering for" link sits on this step.
+      const linked = ctx.fields.linkedEventId || null;
+      if (registration(ctx) && ctx.fields.linkedEventId !== undefined && linked !== (ctx.saved.linkedEventId ?? null)) body.linkedEventId = linked;
       // The typed wall-clock time stays and moves to the new venue's zone (spec 033).
-      const dates = datePayload(ctx);
-      return { venueId: ctx.fields.venueId, ...dates };
+      if (ctx.fields.venueId && ctx.fields.venueId !== ctx.saved.venueId) Object.assign(body, { venueId: ctx.fields.venueId }, datePayload(ctx));
+      return Object.keys(body).length ? body : null;
     },
     save: patchEvent,
   },

@@ -81,6 +81,11 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
   const intro = (registration && REGISTRATION_INTRO[step.key]) || INTRO[step.key];
   const savedZone = props.event ? props.venues.find((v) => v.id === props.event?.venueId)?.timezone ?? null : null;
   const zoneNotice = zoneMoveNotice(props.event, savedZone, props.zone);
+  const venueEditor = venuesOn ? (
+    <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />
+  ) : (
+    <LocationStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} onDraft={props.onVenueDraft} zoneNotice={zoneNotice} />
+  );
   if (step.key === 'done' && props.event) return <DoneStep ref={headingRef} event={props.event} orgId={props.orgId} />;
 
   return (
@@ -106,20 +111,16 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
           {step.key === 'name' && <NameStep {...form} />}
           {step.key === 'name' && registration && (
             <div className="mt-5">
-              <LinkedEventField {...form} orgId={props.orgId} hasRow={!!props.event} />
-            </div>
-          )}
-          {step.key === 'name' && registration && (
-            <div className="mt-5">
               <DescribeStep {...form} hint="Shown above the form on the event page: what it is, who it is for, what you look for." />
             </div>
           )}
-          {step.key === 'venue' &&
-            (venuesOn ? (
-              <VenueStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />
-            ) : (
-              <LocationStep {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} onDraft={props.onVenueDraft} zoneNotice={zoneNotice} />
-            ))}
+          {step.key === 'venue' && registration ? (
+            <LinkedEventField {...form} orgId={props.orgId}>
+              {venueEditor}
+            </LinkedEventField>
+          ) : (
+            step.key === 'venue' && venueEditor
+          )}
           {step.key === 'date' && (
             <DateStep
               {...form}
