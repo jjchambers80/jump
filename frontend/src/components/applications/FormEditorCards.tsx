@@ -222,7 +222,7 @@ export function SettingsCard({
       <div className={`${section ? '' : 'mt-3 '}grid gap-4 sm:grid-cols-2`}>
         {show('details') && (
         <>
-        <div>
+        <div className="sm:col-span-2">
           <label htmlFor="f-name" className={labelClass}>Name</label>
           <input id="f-name" value={state.name} disabled={!canEdit} onChange={(e) => update({ name: e.target.value })} className={field} />
         </div>
