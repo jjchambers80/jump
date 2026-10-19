@@ -112,7 +112,17 @@ const StepContent = forwardRef<HTMLHeadingElement, Props>(function StepContent(p
             </div>
           )}
           {step.key === 'venue' && <VenueForm {...form} orgId={props.orgId} venues={props.venues} onVenueCreated={props.onVenueCreated} zoneNotice={zoneNotice} />}
-          {step.key === 'date' && <DateStep {...form} zone={props.zone} orgId={props.orgId} venue={props.venues.find((v) => v.id === fields.venueId)} onVenueUpdated={props.onVenueCreated} />}
+          {step.key === 'date' && (
+            <DateStep
+              {...form}
+              zone={props.zone}
+              orgId={props.orgId}
+              venue={props.venues.find((v) => v.id === fields.venueId)}
+              onVenueUpdated={props.onVenueCreated}
+              // The window is the form's: before the row (both are created on Next) or once the form exists.
+              registrationWindow={registration && (!props.event || fields.opensAt !== undefined)}
+            />
+          )}
           {step.key === 'review' && props.event && <ReviewStep orgId={props.orgId} saved={props.event} {...props.review} />}
           {step.key === 'description' && <DescribeStep {...form} />}
           {step.key === 'image' && props.row && <ImageStep orgId={props.orgId} {...props.row} />}

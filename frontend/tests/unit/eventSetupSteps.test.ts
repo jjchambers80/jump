@@ -190,3 +190,25 @@ describe('preview messages', () => {
     expect(isPreviewMessage({ ...ok, ...patch })).toBe(false);
   });
 });
+
+describe('registration window on "When is it?"', () => {
+  const date = stepByKey('date')!;
+  const saved = row({ type: 'REGISTRATION', date: '2030-06-01T20:00:00.000Z' });
+  const at = (opensAt: string, closesAt: string, forms: StepCtx['forms']) =>
+    ctx({ saved, forms, fields: { ...fields, venueId: 'v1', date: '2030-06-01T16:00', opensAt, closesAt } });
+  const form = { id: 'f1', kind: 'FREE', opensAt: '2030-05-01T13:00:00.000Z', closesAt: null };
+
+  test('saves a changed window to the form, not the event', () => {
+    expect(date.payload!(at('2030-05-01T09:00', '', [form]))).toBeNull();
+    expect(date.payload!(at('2030-05-01T09:00', '2030-05-30T17:00', [form]))).toEqual({
+      formWindow: { formId: 'f1', opensAt: '2030-05-01T13:00:00.000Z', closesAt: '2030-05-30T21:00:00.000Z' },
+    });
+    // No form yet (an older draft): nothing to save it to.
+    expect(date.payload!(at('2030-05-01T09:00', '', []))).toBeNull();
+  });
+
+  test('closes must come after opens', () => {
+    expect(date.validate!(at('2030-05-30T09:00', '2030-05-01T09:00', [form]))).toEqual([{ field: FIELD_IDS.closesAt, message: 'Registration must close after it opens' }]);
+    expect(date.validate!(at('', '2030-05-01T09:00', [form]))).toEqual([]);
+  });
+});

@@ -134,7 +134,7 @@ test.beforeEach(async ({ page, baseURL }) => {
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('a paid registration, step by step: free or paid and its window, spaces, fields, then the event wizard', async ({ page }) => {
+  test('a paid registration, step by step: free or paid, spaces, fields, then the event wizard', async ({ page }) => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
     await expect(heading(page, 'Free or paid?')).toBeFocused(COLD);
@@ -144,8 +144,8 @@ test.describe('desktop', () => {
     // One page: the form has no name or intro of its own (the event's Name step sets both).
     await expect(main(page).getByLabel('Name')).toHaveCount(0);
     await expect(main(page).getByLabel('Intro shown to applicants')).toHaveCount(0);
-    await expect(main(page).getByLabel('Opens')).toBeVisible();
-    await expect(main(page).getByLabel('Closes')).toBeVisible();
+    // The window is on "When is it?", beside the event's own times.
+    await expect(main(page).getByLabel(/opens/i)).toHaveCount(0);
     await expect(main(page).getByLabel('What is this form for?')).toHaveCount(0);
     // A registration starts free; charging adds the options and payment steps.
     await expect(main(page).getByRole('radio', { name: /Free/ })).toBeChecked();
@@ -156,7 +156,7 @@ test.describe('desktop', () => {
 
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', offerAccount: false, offerMarketing: false, opensAt: null, closesAt: null, setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'PAID', offerAccount: false, offerMarketing: false, setup: true });
     await expect(page).toHaveURL(/\/setup\/registration\?step=options&form=form-/);
     await expect(heading(page, 'Options and pricing')).toBeFocused();
     await expect(page.locator('[aria-live="polite"]')).toHaveText('Step 7 of 11, Options and pricing');
@@ -284,11 +284,9 @@ test.describe('desktop', () => {
     const calls = await mockApi(page);
     await page.goto(flowUrl('registration'));
     await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
-    await main(page).getByLabel('Opens').fill('2026-11-01T09:00');
-    await main(page).getByLabel('Closes').fill('2026-11-20T17:00');
     await next(page, 'Create form').click();
     await expect.poll(() => calls.create.length).toBe(1);
-    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'FREE', offerAccount: false, offerMarketing: false, opensAt: expect.any(String), closesAt: expect.any(String), setup: true });
+    expect(calls.create[0].postDataJSON()).toEqual({ name: 'Spring Fair', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true });
     // Free: straight from Start to Fields.
     await expect(heading(page, 'Fields')).toBeVisible();
     const questions = main(page).getByTestId('form-questions');

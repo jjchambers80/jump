@@ -4,7 +4,9 @@
 // the venue's wall clock through lib/eventTime.ts (gotcha 28), with the zone
 // always written out next to the time. The zone itself comes from the address
 // without asking; it is only raised here when it was a guess (zoneNeedsCheck).
-// In create mode, Next here creates the draft.
+// In create mode, Next here creates the draft. A registration event also sets
+// when registration opens and closes here: its form is created with the row.
+// The window is optional; blank = open from publish with no closing time.
 
 import { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Plus } from 'lucide-react';
@@ -122,7 +124,8 @@ export default function DateStep({
   orgId,
   venue,
   onVenueUpdated,
-}: StepFormProps & { zone: string | null; orgId: string; venue: SetupVenue | undefined; onVenueUpdated: (venue: CreatedVenue) => void }) {
+  registrationWindow = false,
+}: StepFormProps & { zone: string | null; orgId: string; venue: SetupVenue | undefined; onVenueUpdated: (venue: CreatedVenue) => void; registrationWindow?: boolean }) {
   const [showEnd, setShowEnd] = useState(!!fields.endDate);
   const addEndRef = useRef<HTMLButtonElement>(null);
 
@@ -174,6 +177,30 @@ export default function DateStep({
           <Plus className="h-4 w-4" aria-hidden />
           Add end time
         </button>
+      )}
+      {registrationWindow && (
+        <div role="group" aria-labelledby="setup-window-title" aria-describedby="setup-window-hint" className="space-y-4 border-t border-gray-200 pt-5 dark:border-slate-700">
+          <div>
+            <p id="setup-window-title" className={labelClass}>When registration is open</p>
+            <p id="setup-window-hint" className={hintClass}>Leave blank to take registrations as soon as the event is published, until you close the form.</p>
+          </div>
+          <TimeField
+            id={FIELD_IDS.opensAt}
+            label="Registration opens (optional)"
+            value={fields.opensAt ?? ''}
+            zone={zone}
+            error={errors[FIELD_IDS.opensAt]}
+            onChange={(opensAt) => onChange({ opensAt })}
+          />
+          <TimeField
+            id={FIELD_IDS.closesAt}
+            label="Registration closes (optional)"
+            value={fields.closesAt ?? ''}
+            zone={zone}
+            error={errors[FIELD_IDS.closesAt]}
+            onChange={(closesAt) => onChange({ closesAt })}
+          />
+        </div>
       )}
     </div>
   );

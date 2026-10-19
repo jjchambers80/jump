@@ -26,6 +26,7 @@ import { useHistoryGuard, useLinkGuard } from './useHistoryGuard';
 import { clearSetupFinished, setupJustFinished } from './doneMarker';
 import { useDonationsEligible } from './useDonationsEligible';
 import type { OverviewEvent } from '@/lib/eventOverview';
+import type { AdminForm } from '@/lib/applications';
 import { salesFieldsFromSaved } from './contentSteps';
 import { formFlowHref, legacyFlowHref } from './formFlows';
 
@@ -73,7 +74,13 @@ export function useSetupFlow(eventId: string | null) {
   useEffect(() => {
     // Wait for the forms too: an old application step link needs them to find its flow.
     if (initialised || data.load.status !== 'ready' || !orgId || (eventId && forms.load.status === 'loading')) return;
-    if (saved) setFields(fieldsFromSaved(saved, zoneOf(saved.venueId)));
+    if (saved) {
+      const zone = zoneOf(saved.venueId);
+      const form = saved.type === 'REGISTRATION' ? forms.forms[0] : undefined;
+      // A registration event's window lives on its form (created with the row).
+      const formTimes = form ? { opensAt: instantToZonedInput(form.opensAt, zone), closesAt: instantToZonedInput(form.closesAt, zone) } : {};
+      setFields({ ...fieldsFromSaved(saved, zone), ...formTimes });
+    }
     else {
       const draft = readSessionDraft(orgId);
       const preset = params.get('venueId') ?? '';
@@ -145,9 +152,16 @@ export function useSetupFlow(eventId: string | null) {
     invalidCount,
     save: async (patch) => {
       if (!orgId || !saved) return;
+      // A registration event's window is its form's (steps.ts `formWindowOf`).
+      const { formWindow, ...eventPatch } = patch as { formWindow?: { formId: string; opensAt: string | null; closesAt: string | null } };
+      if (formWindow) {
+        const { formId, ...times } = formWindow;
+        forms.upsert(await api.patch<AdminForm>(`/admin/events/${encodeURIComponent(saved.id)}/application-forms/${encodeURIComponent(formId)}`, times));
+        if (!Object.keys(eventPatch).length) return setRevision((r) => r + 1);
+      }
       let updated: unknown;
       try {
-        updated = await patchEvent(api, { orgId, eventId: saved.id }, patch);
+        updated = await patchEvent(api, { orgId, eventId: saved.id }, eventPatch);
       } catch (err) {
         // Orders or RSVPs arrived since the page loaded: show the server's reason
         // on the Tickets step and go back to the saved mode (nothing left to retry).
