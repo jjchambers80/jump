@@ -133,6 +133,7 @@ export default function EventSetupPage({ eventId = null }: { eventId?: string | 
           flow.setAddOnCount(count);
           flow.refreshPreview();
         }}
+        onVenueDraft={flow.setDraftVenue}
         onVenueCreated={(venue) => {
           data.addVenue(venue);
           setFields((f) => ({ ...f, venueId: venue.id }));

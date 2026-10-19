@@ -12,6 +12,7 @@ import EventPageView from '@/app/events/[eventId]/EventPageView';
 import { orgFromEvent, type EventPageEvent } from '@/app/events/[eventId]/eventPage';
 import { useOrg } from '@/components/OrgContext';
 import SpacePreview from './SpacePreview';
+import { sanitizePreviewHtml } from './previewHtml';
 import {
   PREVIEW_READY,
   applyOverlay,
@@ -104,7 +105,10 @@ export default function PreviewFrame() {
     organizationSignInLinks: false,
   };
   const stale = !!saved && saved.revision < message.revision;
-  const event = applyOverlay(base, stale ? { ...carried, ...message.overlay } : message.overlay);
+  const overlay = stale ? { ...carried, ...message.overlay } : { ...message.overlay };
+  // Typed but not saved yet: cleaned here, never trusted as sent (gotcha 20).
+  if (overlay.description) overlay.description = sanitizePreviewHtml(overlay.description) || null;
+  const event = applyOverlay(base, overlay);
 
   // Spec 051: an application flow previews the form being built.
   if (message.form && message.view === 'space') return <SpacePreview event={event} form={message.form} />;

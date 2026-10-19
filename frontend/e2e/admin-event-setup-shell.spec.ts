@@ -240,6 +240,10 @@ test.describe('desktop', () => {
     await main(page).getByLabel('Event name').fill('Market Vendors');
     // One page: the description registrants read above the form is asked here, not on the form.
     await expect(main(page).getByTestId('setup-description')).toBeVisible(COLD);
+    // The preview shows the name and description as they are typed, before any save.
+    await expect(preview(page).getByRole('heading', { name: 'Market Vendors' })).toBeVisible();
+    await main(page).getByTestId('setup-description').locator('[contenteditable="true"]').fill('Tables for local makers');
+    await expect(preview(page).getByText('Tables for local makers')).toBeVisible();
     // Choosing the live event fills an empty venue and date from it; unlinking
     // takes its venue away again, so Where asks for one.
     await main(page).getByLabel(/Registering for/).selectOption('evt-live');
@@ -439,6 +443,8 @@ test.describe('venues turned off', () => {
     await expect(main(page).getByLabel('Venue')).toHaveCount(0);
 
     await main(page).getByLabel('Street address').fill('500 Fayetteville St');
+    // The preview shows the address as it is typed.
+    await expect(preview(page).getByText('500 Fayetteville St')).toBeVisible();
     await main(page).getByLabel('City').fill('Raleigh');
     // Without a state or ZIP the zone would silently be Eastern.
     await main(page).getByRole('button', { name: 'Use this address' }).click();

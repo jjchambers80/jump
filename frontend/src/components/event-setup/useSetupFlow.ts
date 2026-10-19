@@ -19,6 +19,7 @@ import {
   type SavedEvent, type SetupFields, type StepCtx, type StepKey,
 } from './steps';
 import { PREVIEW_MESSAGE, type PreviewMessage, type PreviewOverlay } from './previewMessages';
+import type { EventVenue } from '@/app/events/[eventId]/eventPage';
 import { toSaved, useSetupData } from './useSetupData';
 import { useStepSave } from './useStepSave';
 import { useSetupForms } from './useSetupForms';
@@ -65,6 +66,8 @@ export function useSetupFlow(eventId: string | null) {
   const [draftStep, setDraftStep] = useState<StepKey | null>(null);
   const [initialised, setInitialised] = useState(false);
   const [revision, setRevision] = useState(0);
+  /** Location step (Venues off): the address as typed, before "Use this address" saves it. */
+  const [draftVenue, setDraftVenue] = useState<EventVenue | null | undefined>(undefined);
 
   const zoneOf = (venueId: string) => venues.find((v) => v.id === venueId)?.timezone ?? null;
   const zone = zoneOf(fields.venueId);
@@ -194,12 +197,13 @@ export function useSetupFlow(eventId: string | null) {
   const iso = { date: zonedInputToIso(fields.date, zone), endDate: zonedInputToIso(fields.endDate, zone) };
   const overlay: PreviewOverlay = {};
   if (!saved || fields.name.trim() !== saved.name) overlay.name = fields.name;
-  if (!saved || fields.venueId !== saved.venueId)
+  if (draftVenue !== undefined) overlay.venue = draftVenue;
+  else if (!saved || fields.venueId !== saved.venueId)
     overlay.venue = venue ? { id: venue.id, name: venue.name, address: venue.address, timezone: venue.timezone ?? undefined } : null;
   if (!saved || !sameInstant(iso.date, saved.date)) overlay.date = iso.date;
   if (!saved || !sameInstant(iso.endDate, saved.endDate)) overlay.endDate = iso.endDate;
-  // No description overlay: ContentHtml renders only server-sanitised HTML
-  // (gotcha 20), so the preview shows it after the save, from preview-payload.
+  // Live as typed; the frame sanitises it (previewHtml.ts) until the save reloads the server's copy.
+  if ((fields.description ?? '') !== (saved?.description ?? '')) overlay.description = fields.description || null;
   if (saved && fields.admissionMode && fields.admissionMode !== saved.admissionMode) overlay.admissionMode = fields.admissionMode;
   if (!saved && fields.type) overlay.type = fields.type;
   const preview: PreviewMessage = {
@@ -213,6 +217,7 @@ export function useSetupFlow(eventId: string | null) {
     redirecting: !!redirect,
     /** After a dialog or upload saved on its own: the frame reloads the event. */
     refreshPreview: () => setRevision((r) => r + 1),
+    setDraftVenue,
     setAddOnCount: data.setAddOnCount,
     setMapStatus: data.setMapStatus,
   };

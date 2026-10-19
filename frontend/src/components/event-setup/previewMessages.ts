@@ -12,6 +12,8 @@ export const PREVIEW_READY = 'jump:event-preview-ready';
 /** Unsaved form values the preview shows before they reach the server. */
 export interface PreviewOverlay {
   name?: string;
+  /** Unsaved description HTML; the frame sanitises it before rendering (previewHtml.ts). */
+  description?: string | null;
   date?: string | null;
   endDate?: string | null;
   venue?: EventVenue | null;
@@ -175,7 +177,7 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
   if (typeof m.anchor !== 'string' || !ANCHOR.test(m.anchor)) return false;
   const o = m.overlay as Record<string, unknown> | null;
   if (!o || typeof o !== 'object') return false;
-  if (!optionalString(o.name) || !optionalString(o.date) || !optionalString(o.endDate)) return false;
+  if (!optionalString(o.name) || !optionalString(o.description) || !optionalString(o.date) || !optionalString(o.endDate)) return false;
   if (o.admissionMode !== undefined && o.admissionMode !== 'TICKETED' && o.admissionMode !== 'RSVP') return false;
   if (o.type !== undefined && o.type !== 'LIVE' && o.type !== 'REGISTRATION') return false;
   const venue = o.venue as Record<string, unknown> | null | undefined;

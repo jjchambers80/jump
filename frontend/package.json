@@ -28,6 +28,7 @@
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "dnd-kit-sortable-tree": "^0.1.73",
+    "dompurify": "^3.4.16",
     "html5-qrcode": "^2.3.8",
     "jose": "^6.2.12",
     "jsonc-parser": "^3.3.1",

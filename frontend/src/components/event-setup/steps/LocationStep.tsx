@@ -5,7 +5,7 @@
 // private venue behind it (POST …/venues/from-address), so the event keeps a
 // venue for its time zone, tax region and organization like every other event.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import { StateSelect } from '@/components/StateSelect';
 import VenueTimeZoneField from '@/components/VenueTimeZoneField';
@@ -13,6 +13,7 @@ import type { CreatedVenue } from '@/components/VenueFlyout';
 import { FIELD_IDS } from '../steps';
 import { describedBy, errorText, hintClass, inputClass, labelClass, primaryButton, secondaryButton } from '../ui';
 import type { SetupVenue, StepFormProps } from './types';
+import type { EventVenue } from '@/app/events/[eventId]/eventPage';
 import { zoneText } from './VenueStep';
 
 export default function LocationStep({
@@ -22,8 +23,16 @@ export default function LocationStep({
   orgId,
   venues,
   onVenueCreated,
+  onDraft,
   zoneNotice,
-}: StepFormProps & { orgId: string; venues: SetupVenue[]; onVenueCreated: (venue: CreatedVenue) => void; zoneNotice: string | null }) {
+}: StepFormProps & {
+  orgId: string;
+  venues: SetupVenue[];
+  onVenueCreated: (venue: CreatedVenue) => void;
+  /** The address as typed, for the live preview; undefined once saved or left. */
+  onDraft?: (venue: EventVenue | null | undefined) => void;
+  zoneNotice: string | null;
+}) {
   const current = venues.find((v) => v.id === fields.venueId);
   const [editing, setEditing] = useState(!current);
   const [form, setForm] = useState(() => ({
@@ -40,6 +49,15 @@ export default function LocationStep({
   const [saveError, setSaveError] = useState<string | null>(null);
   const id = FIELD_IDS.venueId;
   const error = saveError ?? errors[id];
+  // Shown in the preview as typed, named like the saved one (a blank place name = the street).
+  const street = form.address.trim();
+  const placeName = form.name.trim() || street;
+  useEffect(() => {
+    if (!editing) return onDraft?.(undefined);
+    onDraft?.(placeName ? { id: 'draft', name: placeName, address: street } : null);
+  }, [editing, placeName, street, onDraft]);
+  useEffect(() => () => onDraft?.(undefined), [onDraft]);
+
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 
   const save = async () => {
