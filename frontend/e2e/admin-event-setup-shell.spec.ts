@@ -279,15 +279,16 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Add an image')).toBeVisible(COLD);
     expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z', endDate: '2031-06-02T01:00:00.000Z' });
     expect(formPosts.map((r) => r.postDataJSON())).toEqual([
-      { name: 'Market Vendors', kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true, opensAt: '2031-05-01T13:00:00.000Z', closesAt: '2031-05-30T21:00:00.000Z' },
+      { name: 'Market Vendors', kind: 'FREE', setup: true, opensAt: '2031-05-01T13:00:00.000Z', closesAt: '2031-05-30T21:00:00.000Z' },
     ]);
-    // One count across the event steps and the form flow: 5 + Start, Fields + Review (free: no Collect more).
+    // One count across the event steps and the form flow: 5 + Fields, Start + Review (free: no Collect more).
     await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 8');
 
     await page.getByRole('button', { name: /Next|Skip/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration`), COLD);
+    // No form came back here, so the flow opens at Start (Fields, its first step, needs the form).
     await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 8');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 7 of 8');
   });
 
   test('refresh resumes from the session draft, then from setupStep', async ({ page }) => {

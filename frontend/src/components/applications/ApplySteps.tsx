@@ -173,8 +173,8 @@ export function useApplyForm(form: PublicForm | null, { submitUrl, draftKey }: {
         contact: draft.contact,
         ...(asks.length > 0 && { profile }),
         answers: draft.answers,
-        optInAccount: form.offerAccount !== false && draft.optInAccount,
-        optInMarketing: form.offerMarketing !== false && draft.optInMarketing,
+        optInAccount: draft.optInAccount,
+        optInMarketing: draft.optInMarketing,
         acceptances: acceptancesFor(versions),
       };
       const body = new FormData();
@@ -342,7 +342,6 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
 
       <Step n={next()} id={id('step-submit')} title="Before you submit">
         {/* Account + marketing opt-ins — independent; applied once the application is submitted (spec 024 phase 3) */}
-        {form.offerAccount !== false && (
         <label className={choice}>
           <input type="checkbox" checked={apply.optInAccount} onChange={(e) => update({ optInAccount: e.target.checked })} className={check} data-testid="apply-opt-in-account" />
           <span>
@@ -350,13 +349,10 @@ export function ApplySteps({ form, apply, idPrefix = '' }: { form: PublicForm; a
             <span className="block text-gray-500 dark:text-slate-400">No password. We&apos;ll email you a sign-in link.</span>
           </span>
         </label>
-        )}
-        {form.offerMarketing !== false && (
         <label className={choice}>
           <input type="checkbox" checked={apply.optInMarketing} onChange={(e) => update({ optInMarketing: e.target.checked })} className={check} data-testid="apply-opt-in-marketing" />
           <span>Email me about future events from {form.organizationName || 'this organizer'}</span>
         </label>
-        )}
         <label className={choice}>
           <input type="checkbox" required checked={apply.consent} onChange={(e) => apply.setConsent(e.target.checked)} className={check} data-testid="apply-consent" />
           <span>

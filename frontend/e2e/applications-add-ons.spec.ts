@@ -494,7 +494,7 @@ test('vendor flow Options and pricing: tier rows show offered add-ons; ADMIN att
   await mockWizard(page);
   // The old form editor URL opens the form in the registration flow (spec 057).
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
-  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=start&form=${FORM_ID}`), { timeout: 60000 });
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=questions&form=${FORM_ID}`), { timeout: 60000 });
   await page.goto(`/admin/events/${EVENT_ID}/setup/registration?step=options&form=${FORM_ID}`);
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs', { timeout: 30000 });
   await page.getByTestId(`tier-row-${cornerTier.id}`).getByRole('button', { name: 'Edit' }).click();
@@ -518,6 +518,7 @@ test('vendor flow How vendors choose and pay: no floor-map choice; the form keep
   await expect(settings.getByText('How vendors choose their space')).toHaveCount(0);
   await expect(page.getByTestId('form-space-map')).toHaveCount(0);
   await page.locator('footer').getByRole('button', { name: 'Next' }).click();
-  await expect(page.locator('main').getByRole('heading', { level: 1, name: 'Fields' })).toBeVisible({ timeout: 30000 });
+  // Payment is the flow's last step (Fields comes first): Next hands back to Collect more.
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup\\?step=collect-more`), { timeout: 30000 });
   expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toMatchObject({ spaceSelection: 'TIERS' });
 });

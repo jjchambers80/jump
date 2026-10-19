@@ -258,20 +258,6 @@ describe('Apply-form opt-ins and legal acceptances (spec 024 phase 3)', () => {
     expect(rows.find((r) => r.document === 'TERMS').version).toBe(LEGAL_VERSIONS.terms);
   });
 
-  it('an opt-in the form does not offer is never recorded', async () => {
-    await prisma.applicationForm.update({ where: { id: freeForm.id }, data: { offerAccount: false, offerMarketing: false } });
-    try {
-      const res = await submit(freeForm.slug, undefined, `not-offered@${TAG}.test`, { optInAccount: true, optInMarketing: true });
-      expect(res.status).toBe(201);
-      const application = await prisma.application.findUnique({ where: { id: res.body.applicationId } });
-      expect(application).toMatchObject({ optInAccount: false, optInMarketing: false });
-      const contact = await contactOf(`not-offered@${TAG}.test`);
-      expect(contact).toMatchObject({ accountCreatedAt: null, emailSubscribed: false });
-    } finally {
-      await prisma.applicationForm.update({ where: { id: freeForm.id }, data: { offerAccount: true, offerMarketing: true } });
-    }
-  });
-
   it('an existing account is untouched: no second welcome link, marketing stays as it was', async () => {
     const email = `free@${TAG}.test`;
     const before = await contactOf(email);

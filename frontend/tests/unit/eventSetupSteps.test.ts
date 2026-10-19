@@ -56,7 +56,7 @@ describe('visible and counting', () => {
     const saved = row({ type: 'REGISTRATION' });
     const free = ctx({ saved, forms: [{ id: 'f', kind: 'FREE' }] });
     const flow = registrationFlowSteps(free).map((s) => s.key);
-    expect(flow).toEqual(['start', 'questions']);
+    expect(flow).toEqual(['questions', 'start']);
     // 5 event steps, 2 flow steps, Review (a free form has no Collect more).
     expect(wizardProgress(free, 'image', 0, 2)).toEqual({ index: 5, total: 8 });
     expect(wizardProgress(free, null, 0, 2)).toEqual({ index: 6, total: 8 });

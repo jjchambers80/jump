@@ -49,8 +49,6 @@ export interface PreviewMessage {
 export interface DraftForm {
   name: string;
   kind: PublicForm['kind'];
-  offerAccount?: boolean;
-  offerMarketing?: boolean;
 }
 
 export function draftPreviewForm(draft: DraftForm, organizationName?: string | null): PublicForm {
@@ -70,8 +68,6 @@ export function draftPreviewForm(draft: DraftForm, organizationName?: string | n
     collectBusiness: false,
     businessFields: [],
     collectName: false,
-    offerAccount: draft.offerAccount ?? false,
-    offerMarketing: draft.offerMarketing ?? false,
   };
 }
 
@@ -98,8 +94,6 @@ export function previewForm(form: AdminForm, overlay: { name?: string; intro?: s
     collectBusiness: form.collectBusiness,
     businessFields: form.businessFields,
     collectName: form.collectName,
-    offerAccount: form.offerAccount,
-    offerMarketing: form.offerMarketing,
     timezone: form.timezone,
   };
 }

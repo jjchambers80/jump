@@ -24,7 +24,7 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import { collectsMore, wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
-import StartFormStep, { KindChoice, OptInSettings, PaidStagesHint, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
+import StartFormStep, { KindChoice, PaidStagesHint, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, secondaryButton } from './ui';
@@ -119,11 +119,8 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     const created = await api.createForm({ ...body, setup: true });
     f.forms.upsert(created);
     saved();
-    // From the created form: a paid one has Options and pricing next, a free one Fields.
-    const steps = flowSteps(flow, created, { maps });
-    const after = steps[steps.findIndex((s) => s.key === 'start') + 1];
-    if (after) f.go(after.key, created.id);
-    else finish(created);
+    // From the created form: its flow from the top (Fields, then back through Start's choice).
+    f.go(flowSteps(flow, created, { maps })[0].key, created.id);
   };
 
   const loadError = f.data.load.status === 'error' ? f.data.load : f.forms.load.status === 'error' ? f.forms.load : null;
@@ -214,11 +211,6 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               />
               {form.kind === 'PAID' && <PaidStagesHint />}
               {form.applicationCount > 0 && <p className={hintClass}>Free or paid can&apos;t change once people have registered.</p>}
-              <OptInSettings
-                value={{ offerAccount: form.offerAccount !== false, offerMarketing: form.offerMarketing !== false }}
-                disabled={!canEdit}
-                onChange={(patch) => run('Saved.', async () => f.forms.upsert(await api.updateForm(form.id, patch))).then(noop)}
-              />
             </>
           )}
           {form && step.key === 'payment' && (

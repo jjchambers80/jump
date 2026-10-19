@@ -374,9 +374,8 @@ class ApplicationService {
 
     // Spec 024 phase 3: the consent trail. Terms and privacy; no card is saved
     // at submission any more, so there is no card-on-file authorization.
-    // An opt-in the form does not offer is never recorded.
-    const optInAccount = form.offerAccount !== false && body.optInAccount === true;
-    const optInMarketing = form.offerMarketing !== false && body.optInMarketing === true;
+    const optInAccount = body.optInAccount === true;
+    const optInMarketing = body.optInMarketing === true;
     const acceptances = legalAcceptanceService.assertCurrent(body.acceptances, ['TERMS', 'PRIVACY']);
     const organizationName = organization.name;
     const presentedText = { PRIVACY: applyConsentText({ organizationName }) };

@@ -5,9 +5,9 @@ const keys = (flow: Parameters<typeof flowSteps>[0], form: FlowForm | null) => f
 
 describe('setup flows (spec 051, 057)', () => {
   it('walks a registration form: options and payment only when it charges, the floor map only on MAP', () => {
-    expect(keys('registration', null)).toEqual(['start', 'questions']);
-    expect(keys('registration', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['start', 'options', 'payment', 'questions']);
-    expect(keys('registration', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['start', 'options', 'payment', 'floor-map', 'questions']);
+    expect(keys('registration', null)).toEqual(['questions', 'start']);
+    expect(keys('registration', { kind: 'PAID', spaceSelection: 'TIERS' })).toEqual(['questions', 'start', 'options', 'payment']);
+    expect(keys('registration', { kind: 'PAID', spaceSelection: 'MAP' })).toEqual(['questions', 'start', 'options', 'payment', 'floor-map']);
     // Maps off or hidden for the role, or no linked live event: no floor-map step even on a MAP form.
     expect(flowSteps('registration', { kind: 'PAID', spaceSelection: 'MAP' }, { maps: false }).map((s) => s.key)).not.toContain('floor-map');
     expect(flowSteps('registration', { kind: 'PAID', spaceSelection: 'MAP' }, { mapEvent: false }).map((s) => s.key)).not.toContain('floor-map');
@@ -20,16 +20,16 @@ describe('setup flows (spec 051, 057)', () => {
   it('builds flow links; a form is edited in the registration flow', () => {
     expect(formFlowHref('e 1', 'registration')).toBe('/admin/events/e%201/setup/registration');
     expect(formFlowHref('e1', 'registration', { step: 'questions', form: 'f1', org: 'o1' })).toBe('/admin/events/e1/setup/registration?step=questions&form=f1&org=o1');
-    expect(formEditHref('e1', { id: 'f1' })).toBe('/admin/events/e1/setup/registration?step=start&form=f1');
+    expect(formEditHref('e1', { id: 'f1' })).toBe('/admin/events/e1/setup/registration?step=questions&form=f1');
   });
 });
 
 describe('legacyFlowHref', () => {
   it('sends the old application step links to the registration flow, special guests to the lineup', () => {
-    expect(legacyFlowHref('e1', 'vendors', 'f1', 'o1')).toBe('/admin/events/e1/setup/registration?step=start&form=f1&org=o1');
+    expect(legacyFlowHref('e1', 'vendors', 'f1', 'o1')).toBe('/admin/events/e1/setup/registration?step=questions&form=f1&org=o1');
     expect(legacyFlowHref('e1', 'volunteers', null)).toBe('/admin/events/e1/setup/registration');
     expect(legacyFlowHref('e1', 'special-guests', null)).toBe('/admin/events/e1/setup/special-guests?step=lineup');
-    expect(legacyFlowHref('e1', 'special-guests', 'g1')).toBe('/admin/events/e1/setup/registration?step=start&form=g1');
+    expect(legacyFlowHref('e1', 'special-guests', 'g1')).toBe('/admin/events/e1/setup/registration?step=questions&form=g1');
     expect(legacyFlowHref('e1', 'floor-map', 'v1')).toBe('/admin/events/e1/setup/registration?step=floor-map&form=v1');
   });
   it('leaves event steps alone', () => {

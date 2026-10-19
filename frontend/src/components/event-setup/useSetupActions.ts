@@ -136,7 +136,7 @@ export function useSetupActions(flow: SetupFlow) {
       if (type === 'REGISTRATION') {
         await api
           .post(`/admin/events/${encodeURIComponent(created.id)}/application-forms`, {
-            name: formNameFor(sent.name), kind: 'FREE', offerAccount: false, offerMarketing: false, setup: true, ...formWindowOf(ctx),
+            name: formNameFor(sent.name), kind: 'FREE', setup: true, ...formWindowOf(ctx),
           })
           .catch(() => undefined);
       }
