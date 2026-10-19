@@ -30,7 +30,7 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
   const list = flowSteps(flow, form, { maps, mapEvent: flow !== 'registration' || !!event?.linkedEventId });
   const reachable = (step: FlowStep) => !step.needsForm || !!form;
   const requested = list.find((step) => step.key === params.get('step'));
-  const fallback = (form && list.find((step) => step.key === 'details')) || list[0];
+  const fallback = list[0];
   const step = requested && reachable(requested) ? requested : fallback;
   const at = list.indexOf(step);
   const ready = data.load.status === 'ready' && forms.load.status === 'ready';
@@ -44,11 +44,11 @@ export function useFormFlow(eventId: string, flow: FormFlowKey) {
     ? null
     : wrongFlow
       ? registration
-        ? formFlowHref(eventId, 'registration', { form: form?.id, step: form ? 'details' : undefined, org })
+        ? formFlowHref(eventId, 'registration', { form: form?.id, org })
         : `/admin/events/${encodeURIComponent(eventId)}`
       : registration && form && !params.get('form')
-        ? // The registration's one form exists: its Start is done, so open the step asked for or Details.
-          href(step.key === 'start' ? 'details' : step.key)
+        ? // The registration's one form exists: its Start is done (Create lands here too), so the step asked for or the next one.
+          href(step.key === 'start' ? list[1]?.key ?? 'start' : step.key)
         : step !== requested || (formId && !form)
           ? href(step.key)
           : null;

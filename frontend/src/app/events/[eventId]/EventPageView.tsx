@@ -23,6 +23,7 @@ import EventAbout from './EventAbout';
 import EventTickets from './EventTickets';
 import EventRsvp from './EventRsvp';
 import EventRegister from './EventRegister';
+import ContentHtml from '@/components/storefront/ContentHtml';
 import EventCart from './EventCart';
 import EventMobileBar from './EventMobileBar';
 import EventGuests from './EventGuests';
@@ -109,7 +110,11 @@ export default function EventPageView({
             {cancelled ? (
               <EventCancelledNotice event={event} org={org} />
             ) : isRegistration ? (
-              <EventRegister event={event} preview={preview} />
+              <>
+                {/* What registrants read before the form (sanitised on write, gotcha 20); no About heading */}
+                {event.description && <ContentHtml html={event.description} className="mb-8 border-b border-gray-200 pb-8 text-base dark:border-slate-700" />}
+                <EventRegister event={event} preview={preview} />
+              </>
             ) : isRsvp ? (
               <EventRsvp
                 event={event}

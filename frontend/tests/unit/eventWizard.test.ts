@@ -25,9 +25,9 @@ describe('edit-mode links (050-O)', () => {
       map: null, guests: '/admin/events/e1/setup/special-guests?step=lineup',
     });
     expect(links.tier('t 1')).toBe(at('step=tickets&tier=t+1'));
-    // A form opens the registration flow at Form details; the lineup opens its step.
+    // A form opens the registration flow at Start; the lineup opens its step.
     const flow = (path: string) => `/admin/events/e1/setup/${path}`;
-    expect(links.form({ id: 'f-g' })).toBe(flow('registration?step=details&form=f-g'));
+    expect(links.form({ id: 'f-g' })).toBe(flow('registration?step=start&form=f-g'));
     expect(links.guests).toBe(flow('special-guests?step=lineup'));
   });
 

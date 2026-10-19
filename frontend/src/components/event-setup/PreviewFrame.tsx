@@ -11,7 +11,6 @@ import api from '@/services/api';
 import EventPageView from '@/app/events/[eventId]/EventPageView';
 import { orgFromEvent, type EventPageEvent } from '@/app/events/[eventId]/eventPage';
 import { useOrg } from '@/components/OrgContext';
-import ApplyFormPreview from './ApplyFormPreview';
 import SpacePreview from './SpacePreview';
 import {
   PREVIEW_READY,
@@ -109,6 +108,7 @@ export default function PreviewFrame() {
 
   // Spec 051: an application flow previews the form being built.
   if (message.form && message.view === 'space') return <SpacePreview event={event} form={message.form} />;
-  if (message.form) return <ApplyFormPreview event={event} form={message.form} />;
+  // Spec 057: a registration event is one page, the form inline under its name and description.
+  if (message.form) return <EventPageView event={{ ...event, type: 'REGISTRATION', previewForms: [message.form] }} org={orgFromEvent(event)} preview />;
   return <EventPageView event={event} org={orgFromEvent(event)} preview />;
 }

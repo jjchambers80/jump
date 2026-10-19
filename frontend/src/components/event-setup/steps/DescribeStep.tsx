@@ -9,7 +9,7 @@ import RichTextEditorField from '@/components/editor/RichTextEditorField';
 import { hintClass, labelClass } from '../ui';
 import type { StepFormProps } from './types';
 
-export default function DescribeStep({ fields, onChange }: StepFormProps) {
+export default function DescribeStep({ fields, onChange, hint }: StepFormProps & { hint?: string }) {
   return (
     <div>
       <p id="setup-description-label" className={labelClass}>
@@ -23,7 +23,7 @@ export default function DescribeStep({ fields, onChange }: StepFormProps) {
         aria-labelledby="setup-description-label"
         testId="setup-description"
       />
-      <p className={hintClass}>Shown under &ldquo;About this event&rdquo;. Headings, lists and links are kept.</p>
+      <p className={hintClass}>{hint ?? <>Shown under &ldquo;About this event&rdquo;.</>} Headings, lists and links are kept.</p>
     </div>
   );
 }

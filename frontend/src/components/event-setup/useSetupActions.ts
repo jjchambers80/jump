@@ -122,6 +122,8 @@ export function useSetupActions(flow: SetupFlow) {
           setup: true, name: sent.name, slug: fields.slug || undefined, venueId: sent.venueId,
           date: sent.date, ...(sent.endDate ? { endDate: sent.endDate } : {}), admissionMode: 'TICKETED',
           ...(fields.category?.trim() ? { category: fields.category.trim() } : {}),
+          // A registration event's description is typed on the Name step, before the row.
+          ...(type === 'REGISTRATION' && fields.description ? { description: fields.description } : {}),
           // Spec 057: the type chosen on step 1, and a registration's live event.
           type, ...(type === 'REGISTRATION' && fields.linkedEventId ? { linkedEventId: fields.linkedEventId } : {}),
         },

@@ -56,15 +56,15 @@ describe('visible and counting', () => {
     const saved = row({ type: 'REGISTRATION' });
     const free = ctx({ saved, forms: [{ id: 'f', kind: 'FREE' }] });
     const flow = registrationFlowSteps(free).map((s) => s.key);
-    expect(flow).toEqual(['start', 'details', 'questions']);
-    // 5 event steps, 3 flow steps, Review (a free form has no Collect more).
-    expect(wizardProgress(free, 'image', 0, 3)).toEqual({ index: 5, total: 9 });
-    expect(wizardProgress(free, null, 0, 3)).toEqual({ index: 6, total: 9 });
-    expect(wizardProgress(free, null, 2, 3)).toEqual({ index: 8, total: 9 });
-    expect(wizardProgress(free, 'review', 0, 3)).toEqual({ index: 9, total: 9 });
+    expect(flow).toEqual(['start', 'questions']);
+    // 5 event steps, 2 flow steps, Review (a free form has no Collect more).
+    expect(wizardProgress(free, 'image', 0, 2)).toEqual({ index: 5, total: 8 });
+    expect(wizardProgress(free, null, 0, 2)).toEqual({ index: 6, total: 8 });
+    expect(wizardProgress(free, null, 1, 2)).toEqual({ index: 7, total: 8 });
+    expect(wizardProgress(free, 'review', 0, 2)).toEqual({ index: 8, total: 8 });
     // Add-ons already on a free registration keep the step, so they stay editable.
     const withAddOns = ctx({ saved: row({ type: 'REGISTRATION', addOnCount: 1 }), forms: [{ id: 'f', kind: 'FREE' }] });
-    expect(wizardProgress(withAddOns, 'review', 0, 3)).toEqual({ index: 10, total: 10 });
+    expect(wizardProgress(withAddOns, 'review', 0, 2)).toEqual({ index: 9, total: 9 });
     expect(wizardProgress(ctx(), 'review')).toEqual({ index: 9, total: 9 });
   });
 

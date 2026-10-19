@@ -31,7 +31,7 @@ Registry: `frontend/src/components/event-setup/steps.ts` (`EVENT_STEPS`, `WIZARD
 | `name` | Name your event | R | always (also after the row exists, so N never shifts) | name set | `#event-hero` | create body / `PATCH {name, slug, category}`. Listing category (optional) lives here. "Edit URL" = `SlugField`; live-URL warning when a PUBLISHED slug changes |
 | `venue` | Where is it? | R | always | venue chosen | `#event-venue` | `PATCH {venueId, date, endDate}`: the typed wall clock stays and moves to the new venue's zone. Zone shown read-only as text (not `VenueTimeZoneField`, which edits the venue). "New venue" = `VenueFlyout`; `?venueId=` preselects. With Venues off or hidden for the role (`useCan('venues')`), `LocationStep` asks for an address instead and resolves it with `POST …/venues/from-address` to a private venue (see [rbac](rbac.md)) |
 | `date` | When is it? | R | always | start set | `#event-date` | create: `POST …/events {setup:true}` (carries `category` from the Name step), then opens the next visible step (Describe for a live event, Image for a registration event); edit: `PATCH {date, endDate}` via `zonedInputToIso`. No zone box: the zone is written next to each time, and a guessed venue zone is checked here (see [venue time zones](venue-time-zones.md#in-the-event-setup-wizard)) |
-| `description` | Describe it | S | live events only (a registration event's form has its own description on Form details) | description saved | `#about` | `PATCH {description}` (`RichTextEditorField`) |
+| `description` | Describe it | S | live events only (a registration event edits its description on the Name step) | description saved | `#about` | `PATCH {description}` (`RichTextEditorField`) |
 | `image` | Add an image | S | always | image saved | `#event-hero-image` | `EventMediaCard` → `POST/DELETE …/logo`, saves on its own |
 | `tickets` | Tickets or RSVP | R | always | see `contentSteps.ts` | `#tickets` | `PATCH {admissionMode, capacity, rsvpLimit, rsvpMaxPartySize}`; tier dialogs save on their own (`…/price-tiers`, incl. the new `DELETE`); `&tier=<id>` opens that tier's dialog |
 | `attendee-questions` | — | reserved | never | — | — | — |
@@ -118,7 +118,7 @@ Every Details Edit links into the wizard (`detailsEditLinks` in `lib/eventWizard
 | Event details (description), Listing | `step=description` |
 | Sales, Admission, RSVPs | `step=tickets`; a tier `&tier=<id>` |
 | Add-ons ("Edit add-ons" on Sales and RSVPs) | `step=collect-more` |
-| An application form | its flow at Form details: `setup/<flow>?step=details&form=<id>` (`formEditHref`) |
+| An application form | its registration flow at Start: `setup/registration?step=start&form=<id>` (`formEditHref`) |
 | **Create registration event** (Registrations card, spec 057) | `/admin/events/new?type=registration&linked=<id>` |
 | Floor map | the vendor flow's `step=floor-map&form=<id>` while a VENDOR MAP form exists, else the Map tab |
 | Special guests (lineup card: count, first four names, hidden ones marked) | `setup/special-guests?step=lineup` |

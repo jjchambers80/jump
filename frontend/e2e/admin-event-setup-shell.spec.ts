@@ -234,6 +234,8 @@ test.describe('desktop', () => {
 
     await expect(heading(page, 'Name your event')).toBeVisible();
     await main(page).getByLabel('Event name').fill('Market Vendors');
+    // One page: the description registrants read above the form is asked here, not on the form.
+    await expect(main(page).getByTestId('setup-description')).toBeVisible(COLD);
     // Choosing the live event fills an empty venue and date from it; unlinking
     // takes its venue away again, so Where asks for one.
     await main(page).getByLabel(/Registering for/).selectOption('evt-live');
@@ -250,16 +252,16 @@ test.describe('desktop', () => {
     await expect(heading(page, 'When is it?')).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();
 
-    // No Describe step: the form's own Form details step carries the description.
+    // No Describe step: the Name step carries the description.
     await expect(heading(page, 'Add an image')).toBeVisible(COLD);
     expect(calls.create[0].postDataJSON()).toMatchObject({ setup: true, type: 'REGISTRATION', linkedEventId: 'evt-live', venueId: 'v-hall', date: '2031-06-01T20:00:00.000Z' });
-    // One count across the event steps and the form flow: 5 + Start, Details, Fields + Review (free: no Collect more).
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 9');
+    // One count across the event steps and the form flow: 5 + Start, Fields + Review (free: no Collect more).
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 5 of 8');
 
     await page.getByRole('button', { name: /Next|Skip/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration`), COLD);
     await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
-    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 9');
+    await expect(page.getByRole('progressbar', { name: 'Setup progress' })).toHaveAttribute('aria-valuetext', 'Step 6 of 8');
   });
 
   test('refresh resumes from the session draft, then from setupStep', async ({ page }) => {

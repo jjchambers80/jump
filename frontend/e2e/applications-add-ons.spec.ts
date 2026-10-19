@@ -494,7 +494,7 @@ test('vendor flow Options and pricing: tier rows show offered add-ons; ADMIN att
   await mockWizard(page);
   // The old form editor URL opens the form in the registration flow (spec 057).
   await page.goto(`/admin/events/${EVENT_ID}/applications/forms/${FORM_ID}`);
-  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=details&form=${FORM_ID}`), { timeout: 60000 });
+  await expect(page).toHaveURL(new RegExp(`/admin/events/${EVENT_ID}/setup/registration\\?step=start&form=${FORM_ID}`), { timeout: 60000 });
   await page.goto(`/admin/events/${EVENT_ID}/setup/registration?step=options&form=${FORM_ID}`);
   await expect(page.getByTestId(`tier-add-ons-summary-${cornerTier.id}`)).toContainText('Booth power, Table & chairs', { timeout: 30000 });
   await page.getByTestId(`tier-row-${cornerTier.id}`).getByRole('button', { name: 'Edit' }).click();

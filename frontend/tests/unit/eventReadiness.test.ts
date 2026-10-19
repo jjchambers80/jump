@@ -26,7 +26,7 @@ describe('readinessHref', () => {
 
   // Spec 057: form items open the form's registration flow at the step that fixes them.
   it.each([
-    ['PAID_FORMS_DISABLED', 'registration', 'f2', `${base}/registration?step=details&form=f2&org=o1`],
+    ['PAID_FORMS_DISABLED', 'registration', 'f2', `${base}/registration?step=start&form=f2&org=o1`],
     ['PAID_FORM_NO_OPTIONS', 'registration', 'f1', `${base}/registration?step=options&form=f1&org=o1`],
     ['MAP_FORM_WITHOUT_PUBLISHED_MAP', 'registration', 'f1', `${base}/registration?step=floor-map&form=f1&org=o1`],
   ])('%s on %s opens the form flow', (code, step, formId, href) => {

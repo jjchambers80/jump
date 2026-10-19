@@ -24,7 +24,7 @@ import { useFormFlow } from './useFormFlow';
 import { useIsDesktop } from './EventSetupPage';
 import { collectsMore, wizardProgress } from './steps';
 import { EMPTY_FIELDS } from './useSetupFlow';
-import StartFormStep, { KindChoice, OptInSettings, PaidStagesHint, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
+import StartFormStep, { KindChoice, OptInSettings, PaidStagesHint, RegistrationWindow, START_FORM_ID, type NewFormBody } from './steps/StartFormStep';
 import FloorMapStep from './steps/FloorMapStep';
 import GuestLineupEditor from './lineup/GuestLineupEditor';
 import { hintClass, secondaryButton } from './ui';
@@ -47,7 +47,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
   const [announcement, setAnnouncement] = useState('');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const { selectedOrg } = useOrg();
-  // Unsaved name and intro from Form details: the preview shows them as they are typed.
+  // Unsaved settings typed on a step (How registrants choose and pay): the preview shows them as typed.
   const [typed, setTyped] = useState<{ name?: string; intro?: string | null; buttonLabel?: string | null }>({});
   // Start, before the form exists: what is being set up (name, paid).
   const [draft, setDraft] = useState<DraftForm | null>(null);
@@ -119,13 +119,17 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
     const created = await api.createForm({ ...body, setup: true });
     f.forms.upsert(created);
     saved();
-    f.go('details', created.id);
+    // From the created form: a paid one has Options and pricing next, a free one Fields.
+    const steps = flowSteps(flow, created, { maps });
+    const after = steps[steps.findIndex((s) => s.key === 'start') + 1];
+    if (after) f.go(after.key, created.id);
+    else finish(created);
   };
 
   const loadError = f.data.load.status === 'error' ? f.data.load : f.forms.load.status === 'error' ? f.forms.load : null;
 
   // Next: submit the step's own form when it has one, else just move on.
-  const settingsStep = canEdit && !!form && (step.key === 'details' || step.key === 'payment');
+  const settingsStep = canEdit && !!form && (step.key === 'start' || step.key === 'payment');
   const nextForm =
     step.key === 'start' && !form ? (canEdit ? START_FORM_ID : undefined) : settingsStep ? SETTINGS_FORM_ID : undefined;
   const onNext = nextForm ? undefined : step.key === 'start' && !form ? undefined : next ? () => f.go(next.key) : () => finish();
@@ -198,6 +202,7 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               onBusyChange={setBusy}
               onDraftChange={setDraft}
               eventName={event.name}
+              timeZone={f.data.venues.find((v) => v.id === event.venueId)?.timezone ?? null}
               onCreate={create}
             />
           )}
@@ -210,6 +215,9 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               />
               {form.kind === 'PAID' && <PaidStagesHint />}
               {form.applicationCount > 0 && <p className={hintClass}>Free or paid can&apos;t change once people have registered.</p>}
+              <RegistrationWindow>
+                <SettingsCard form={form} canEdit={canEdit} section="window" formId={SETTINGS_FORM_ID} hideSubmit onSave={saveAndContinue} />
+              </RegistrationWindow>
               <OptInSettings
                 value={{ offerAccount: form.offerAccount !== false, offerMarketing: form.offerMarketing !== false }}
                 disabled={!canEdit}
@@ -217,11 +225,11 @@ export default function FormFlowPage({ eventId, flow }: { eventId: string; flow:
               />
             </>
           )}
-          {form && (step.key === 'details' || step.key === 'payment') && (
+          {form && step.key === 'payment' && (
             <SettingsCard
               form={form}
               canEdit={canEdit}
-              section={step.key}
+              section="payment"
               formId={SETTINGS_FORM_ID}
               hideSubmit
               onSave={saveAndContinue}
