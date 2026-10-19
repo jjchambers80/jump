@@ -61,6 +61,47 @@ const KINDS: { paid: boolean; title: string; detail: string; icon: LucideIcon }[
   { paid: true, title: 'Charge a fee', detail: 'Registering is free. People you approve choose an option and pay.', icon: BadgeDollarSign },
 ];
 
+/**
+ * Free or paid. Start uses it before the form exists; once it does, the
+ * choice stays editable until the first application (the backend's 409 then).
+ */
+export function KindChoice({ paid, onChange, disabled }: { paid: boolean; onChange: (paid: boolean) => void; disabled?: boolean }) {
+  return (
+    <fieldset disabled={disabled} className="space-y-3">
+      <legend className="sr-only">Free or paid</legend>
+      {KINDS.map(({ paid: value, title, detail, icon: Icon }) => (
+        <label
+          key={title}
+          className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-300 bg-white p-4 hover:border-gray-400 has-[:checked]:border-accent-600 has-[:checked]:bg-accent-50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 has-[:focus-visible]:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-slate-500 dark:has-[:checked]:border-accent-400 dark:has-[:checked]:bg-slate-700 dark:has-[:focus-visible]:ring-offset-slate-900"
+        >
+          <Icon className="mt-0.5 h-5 w-5 shrink-0 text-gray-700 dark:text-slate-300" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
+            <span className="mt-0.5 block text-sm text-gray-600 dark:text-slate-300">{detail}</span>
+          </span>
+          <input
+            type="radio"
+            name="add-form-kind"
+            checked={paid === value}
+            onChange={() => onChange(value)}
+            className="mt-1 h-5 w-5 shrink-0 accent-accent-600"
+            data-testid={value ? 'add-form-paid' : 'add-form-free'}
+          />
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** A paid form has two screens for registrants; say so where the choice is made. */
+export function PaidStagesHint() {
+  return (
+    <p className={hintClass}>
+      Registrants then see two screens: first the form, which they submit for free. Once you approve them, a second screen lists the options you set up, to choose one and pay. The preview shows each screen on the step that sets it up.
+    </p>
+  );
+}
+
 /** A form name needs 2 characters; an event name may be shorter. */
 const formNameFor = (eventName: string) => (eventName.trim().length >= 2 ? eventName.trim() : `${eventName.trim()} registration`.trim());
 
@@ -95,28 +136,8 @@ export default function StartFormStep({ onBusyChange, onDraftChange, eventName, 
           {error}
         </p>
       )}
-      <div role="radiogroup" aria-label="Free or paid" className="space-y-3">
-        {KINDS.map(({ paid: value, title, detail, icon: Icon }) => (
-          <label
-            key={title}
-            className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-300 bg-white p-4 hover:border-gray-400 has-[:checked]:border-accent-600 has-[:checked]:bg-accent-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500 has-[:focus-visible]:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-slate-500 dark:has-[:checked]:border-accent-400 dark:has-[:checked]:bg-slate-700 dark:has-[:focus-visible]:ring-offset-slate-900"
-          >
-            <Icon className="mt-0.5 h-5 w-5 shrink-0 text-gray-700 dark:text-slate-300" aria-hidden />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
-              <span className="mt-0.5 block text-sm text-gray-600 dark:text-slate-300">{detail}</span>
-            </span>
-            <input
-              type="radio"
-              name="add-form-kind"
-              checked={paid === value}
-              onChange={() => setPaid(value)}
-              className="mt-1 h-5 w-5 shrink-0 accent-accent-600"
-              data-testid={value ? 'add-form-paid' : 'add-form-free'}
-            />
-          </label>
-        ))}
-      </div>
+      <KindChoice paid={paid} onChange={setPaid} />
+      {paid && <PaidStagesHint />}
       <OptInSettings value={offers} onChange={setOffers} />
     </form>
   );

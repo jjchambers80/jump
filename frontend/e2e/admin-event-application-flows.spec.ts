@@ -197,6 +197,35 @@ test.describe('desktop', () => {
     await expect(heading(page, 'Collect more')).toBeVisible(COLD);
   });
 
+  test('Back on Start, free or paid can still change until someone registers', async ({ page }) => {
+    const calls = await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths' })]);
+    await page.goto(flowUrl('registration', 'step=start&form=form-paid'));
+    await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
+    await expect(main(page).getByRole('radio', { name: /Charge a fee/ })).toBeChecked();
+    // A paid form has two registrant screens; the preview names the one it shows.
+    const pane = page.getByRole('region', { name: 'Live preview of the application form' });
+    await expect(pane.getByText('Step 1 of 2')).toBeVisible(COLD);
+    await main(page).getByRole('radio', { name: /^Free/ }).click();
+    await expect(main(page).getByRole('radio', { name: /^Free/ })).toBeChecked();
+    await expect(pane.getByText('Step 1 of 2')).toHaveCount(0);
+    await expect.poll(() => calls.patch.map((r) => r.postDataJSON())).toEqual([{ kind: 'FREE' }]);
+  });
+
+  test('the options step previews the second registrant screen', async ({ page }) => {
+    await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths' })]);
+    await page.goto(flowUrl('registration', 'step=options&form=form-paid'));
+    await expect(heading(page, 'Options and pricing')).toBeVisible(COLD);
+    await expect(page.getByRole('region', { name: 'Live preview of the application form' }).getByText('Step 2 of 2')).toBeVisible(COLD);
+  });
+
+  test('Start locks free or paid once the form has registrations', async ({ page }) => {
+    await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths', applicationCount: 2 })]);
+    await page.goto(flowUrl('registration', 'step=start&form=form-paid'));
+    await expect(heading(page, 'Free or paid?')).toBeVisible(COLD);
+    await expect(main(page).getByRole('radio', { name: /^Free/ })).toBeDisabled();
+    await expect(main(page).getByText("Free or paid can't change once people have registered.")).toBeVisible();
+  });
+
   test('the preview shows the form and follows what is typed; the device switch keeps it', async ({ page }) => {
     const calls = await mockApi(page, [form({ id: 'form-paid', kind: 'PAID', name: 'Vendor booths', intro: 'Bring a table.' })]);
     await page.goto(flowUrl('registration', 'step=details&form=form-paid'));
