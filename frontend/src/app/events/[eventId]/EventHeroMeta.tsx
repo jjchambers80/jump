@@ -10,6 +10,8 @@ import { dateTile } from '@/lib/dateTile';
 import Placeholder from './Placeholder';
 import type { EventPageEvent } from './eventPage';
 
+// Tiles from sm; on phones the icons sit plain beside the text.
+const ICON = 'h-5 w-5 shrink-0 text-hero-soft';
 const TILE = 'hero-tile rounded-xl bg-hero-ink/10 text-hero-ink ring-1 ring-inset ring-hero-ink/20 backdrop-blur-sm';
 
 export default function EventHeroMeta({ event, preview }: { event: EventPageEvent; preview: boolean }) {
@@ -20,13 +22,12 @@ export default function EventHeroMeta({ event, preview }: { event: EventPageEven
     <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-8">
       {(event.date || preview) && (
         <div id="event-date" className="flex items-center gap-3">
-          {tile ? (
-            <div aria-hidden className={`flex w-14 shrink-0 flex-col items-center py-1.5 ${TILE}`}>
+          <CalendarDays className={`${ICON} ${tile ? 'sm:hidden' : ''}`} aria-hidden />
+          {tile && (
+            <div aria-hidden className={`hidden w-14 shrink-0 flex-col items-center py-1.5 sm:flex ${TILE}`}>
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] opacity-80">{tile.month}</span>
               <span className="text-[22px] font-extrabold leading-none tabular-nums">{tile.day}</span>
             </div>
-          ) : (
-            <CalendarDays className="h-5 w-5 shrink-0 text-hero-soft" aria-hidden />
           )}
           {event.date ? (
             <div className="leading-snug">
@@ -43,7 +44,8 @@ export default function EventHeroMeta({ event, preview }: { event: EventPageEven
 
       {(event.venue || preview) && (
         <div id="event-venue" className="flex items-center gap-3">
-          <div aria-hidden className={`flex h-14 w-14 shrink-0 items-center justify-center ${TILE}`}>
+          <MapPin className={`${ICON} sm:hidden`} aria-hidden />
+          <div aria-hidden className={`hidden h-14 w-14 shrink-0 items-center justify-center sm:flex ${TILE}`}>
             <MapPin className="h-5 w-5" />
           </div>
           {event.venue ? (
