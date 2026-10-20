@@ -88,6 +88,7 @@ Generated and maintained by running `/doc-feature` after completing feature work
 - [User Management](features/user-management.md) — Role assignment, account listing
 
 ### Frontend
+- [Eventimus Homepage](features/eventimus-homepage.md) — Platform-root `/` product page (platform hosts only): eight dark Shopify-style bands for conference, convention and market organizers; every claim must be a shipped feature
 - [Theme System](features/theme-system.md) — Light/dark/auto modes, localStorage persistence
 - [Storefront Theme Sections](features/theme-sections.md) — Section registry, Hero carousel and FAQ (spec 041), how to add a section
 - [Theme Code Editor](features/theme-code-editor.md) — Online Store › Edit code: the CLI's theme files in Monaco, server checks in the browser, same save path

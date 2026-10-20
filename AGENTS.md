@@ -20,10 +20,20 @@ npm run db:studio           # Prisma Studio GUI
 npx jump --help             # Jump CLI (spec 043): login, theme pull/check/push/dev/preview/publish
 ```
 
+Dev servers on a given port (worktrees, `/factory` jobs) — never 3000/3001, those belong to the primary checkout:
+
+```bash
+cd backend && PORT=<port+5000> node src/api/server.js                                         # backend, only when the change touches it
+cd frontend && NEXT_PUBLIC_API_URL=http://localhost:<port+5000> npx next dev -p <port>          # frontend on <port> against that backend
+cd frontend && npx next dev -p <port>                                                         # frontend only: talks to the primary backend on 3000
+```
+
+Lint and type-check only what you changed: `cd backend && npx eslint <files>`, `cd frontend && npx next lint --file <files>`, `cd frontend && npx tsc --noEmit -p .` (never `next build` while a dev server runs, Gotcha 14).
+
 ## Testing
 
 ```bash
-./scripts/bootstrap-worktree.sh     # In a fresh worktree (.worktrees/<id>): copies the gitignored env files from the primary checkout, installs, generates Prisma
+./scripts/bootstrap-worktree.sh     # In any fresh worktree (.worktrees/<id>, ../jump-factory/<job>): copies the gitignored env files from the primary checkout, installs, generates Prisma
 cd backend && npm test              # All backend tests (creates + migrates jump_test on your Postgres automatically)
 cd backend && npm run test:unit     # Unit tests only
 cd backend && npm run test:contract # Contract tests
