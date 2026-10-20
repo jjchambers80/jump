@@ -66,7 +66,8 @@ graphify-out/
 .worktrees/
 
 # Locally installed agent skills (ui-ux-pro-max etc.)
-.claude/skills/
+.claude/skills/*
+!.claude/skills/factory/
 skills-lock.json
 
 # npm rename staging dirs left by interrupted installs
@@ -75,3 +76,6 @@ skills-lock.json
 
 # Strix security scan output
 strix_runs/
+
+# Software factory job state (runtime, see .claude/skills/factory)
+/factory/jobs/
