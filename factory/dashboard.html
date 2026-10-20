@@ -270,7 +270,7 @@ const STAGES = [
   { key: 'build', label: 'Build', who: 'builder · opus' },
   { key: 'review', label: 'Review', who: 'sec · ux · ui · code' },
   { key: 'approve', label: 'Approve', who: 'approver · opus' },
-  { key: 'merged', label: 'Merged', who: 'main', cls: 'merged-col' },
+  { key: 'pr', label: 'PR open', who: 'CI · you merge', cls: 'merged-col' },
   { key: 'needs-human', label: 'Needs human', who: 'approve · rework', cls: 'human' },
 ]
 const LIVE = new Set(['spec', 'build', 'review', 'approve'])
@@ -343,7 +343,7 @@ function card(job, past) {
   if (job.round > 0) rows.push(chips(job.round, job.reviews, job.stage === 'review'))
   const [num, ...slug] = job.id.split('-')
   return `
-    <button class="card ${live ? 'live' : ''} ${human ? 'human' : ''} ${job.stage === 'merged' ? 'merged' : ''}"
+    <button class="card ${live ? 'live' : ''} ${human ? 'human' : ''} ${job.stage === 'pr' ? 'merged' : ''}"
             data-job="${esc(job.id)}">
       <div class="card-top">
         ${live ? '<span class="pulse" aria-label="running"></span>' : ''}

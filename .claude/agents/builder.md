@@ -40,6 +40,37 @@ other jobs.
   defaults or extras the spec doesn't ask for.
 - Use the toolchain versions and commands AGENTS.md gives.
 
+## Databases (Jump)
+
+`bootstrap-worktree.sh` copies `backend/.env` from the main checkout, so its
+`DATABASE_URL` is the user's shared dev database (`jump_tickets`). Never run a
+command that writes to it: no `npm run db:migrate`, `db:reset`, `db:seed`,
+`prisma migrate dev|reset`, `prisma db push` or `db:backfill:*` without an
+explicit job URL. It belongs to the user and every other job.
+
+Use job databases instead, named from your job id with `-` replaced by `_`
+(`003-rate-limiting` → `003_rate_limiting`). Build each URL from the
+`DATABASE_URL` in `backend/.env` with only the database name changed:
+
+- Tests: `TEST_DATABASE_URL=<url with jump_test_<id>> npm test`. The suite
+  creates and migrates that database itself, so parallel jobs never share
+  `jump_test`.
+- Backend dev server: `jump_factory_<id>`. Before starting it, run
+  `npx prisma migrate deploy` and `npm run seed` in `packages/db` with
+  `DATABASE_URL=<that url>`, then start the server with the same variable.
+- Schema change: edit `schema.prisma`, then generate the migration with
+  `npx prisma migrate diff --from-migrations prisma/migrations
+  --to-schema-datamodel prisma/schema.prisma
+  --shadow-database-url <url with jump_shadow_<id>> --script` in `packages/db`,
+  save it as `prisma/migrations/<timestamp>_<name>/migration.sql`, and run
+  `npm run db:generate`. A shadow database is wiped on every run.
+
+Before every Prisma command, check the database name in the URL you pass. If it
+is `jump_tickets` or plain `jump_test`, stop.
+
+On a page, don't submit checkout, payment or sign-up forms: the dev server
+holds the user's Stripe test keys and Resend key.
+
 ## Test against the acceptance criteria
 
 Verify every acceptance criterion and record the evidence in build.md: the
@@ -55,12 +86,13 @@ command you ran and its result, or what the page showed.
   `--session <job-id>-builder` on every `agent-browser` call, so other jobs
   never drive your browser. Close it with
   `agent-browser --session <job-id>-builder close` and stop the dev server when
-  you're done.
+  you're done. Leave your job databases in place: the orchestrator drops them.
 
 ## Commit
 
-- Commit on the job branch with short one-line messages in the style of
-  `git log --oneline`. One commit per distinct piece of work.
+- Commit on the job branch with Conventional Commits (`feat:`, `fix:`, …),
+  subject ≤ 50 characters in the imperative, body explaining why. One commit
+  per distinct piece of work.
 - Stage explicit paths, never `git add -A`. Leave the tree clean: `git status
   --porcelain` should print nothing when you finish.
 

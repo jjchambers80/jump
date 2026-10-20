@@ -17,7 +17,7 @@ feature → spec-writer → builder → [security, ux, ui, code] → WAIT FOR AL
                            ▲                                      │
                            └──── any CHANGES: resume builder ◄────┤
                                                                   ▼ all PASS
-                                     merge to main ◄─ APPROVE ─ approver ─ ESCALATE → needs-human
+                                       open PR ◄─ APPROVE ─ approver ─ ESCALATE → needs-human
 ```
 
 | Step         | Agent (`subagent_type`) | Writes                                      |
@@ -35,7 +35,9 @@ run has at most 3 review rounds. To change the factory, edit this file and the
 agent files in `.claude/agents/`.
 
 Every agent reads `AGENTS.md` (or `CLAUDE.md`) for the repo's setup, dev server,
-validation commands and conventions. Nothing repo-specific lives in these files.
+validation commands and conventions. The only Jump-specific rules here are the
+job databases (`builder`), the security hot spots (`reviewer-security`), the
+escalation list (`approver`) and opening a PR instead of merging (**Merge**).
 
 ## Parallel jobs
 
@@ -46,7 +48,7 @@ started or was handed.
 
 - Your session stays in the main checkout. Agents work in the job's worktree.
   The main checkout is the user's, and it may be dirty or on another branch.
-  Only **Merge** touches it.
+  Nothing but `factory/` files in it is ever touched.
 - Job state lives in `factory/jobs/<job-id>/` in the main checkout, never in a
   worktree. Each job has its own `job.json`, so sessions never write the same
   file.
@@ -80,8 +82,9 @@ state that never lands in a commit.
   "reviews": { "security": "CHANGES", "ux": "PASS", "ui": "pending", "code": "PASS" } }
 ```
 
-- `stage` is one of `spec`, `build`, `review`, `approve`, `merged`,
-  `needs-human`. Worktree setup counts as `spec`.
+- `stage` is one of `spec`, `build`, `review`, `approve`, `pr`,
+  `needs-human`. A job in `pr` also has `"pr": "<PR URL>"`. Worktree setup
+  counts as `spec`.
 - `round` is the current review round (0 until the first round starts).
 - `reviews` holds the current round only. Each value is `pending`, `PASS` or
   `CHANGES`. Earlier rounds live in their `round-<N>/` folders, which the
@@ -163,24 +166,32 @@ When it finishes, read the first line of `decision.md`:
 
 ### Merge
 
-The merge happens in the main checkout, so it must be clean and on `main`:
-`git status --porcelain -- . ':!factory/backlog.md'` prints nothing and
-`git branch --show-current` prints `main`. `factory/backlog.md` is exempt: every
-`/factory next` edits it, and job branches never touch it, so a dirty backlog
-cannot conflict with the merge. If not, set `stage: "needs-human"` and tell the
-user the job is approved but the main checkout is busy; they run
-`/factory approve <job-id>` once it is clean. Otherwise:
+Jump's completion gate is CI on a pull request (AGENTS.md), so the factory never
+merges into `main` itself. It pushes the job branch and opens a PR; the user
+merges it once the required checks are green. The main checkout never changes
+branch or code.
 
-```bash
-git merge --no-ff factory/<job-id> -m "Merge factory/<job-id>"
-git worktree remove <worktree>
-git branch -d factory/<job-id>
-```
+1. Push and open the PR from the worktree. The title is a Conventional Commit
+   subject (≤ 50 characters) for the whole change. The body, written with the
+   `pr` skill, summarises `spec.md` and `build.md`, names the job id, and
+   includes `decision.md`'s Why:
+   ```bash
+   cd <worktree> && git push -u origin factory/<job-id>
+   cd <worktree> && gh pr create --base main --head factory/<job-id> --title "<title>" --body-file <body file>
+   ```
+2. Drop the job's databases, which the builder created as `jump_test_<id>`,
+   `jump_factory_<id>` and `jump_shadow_<id>` (job id with `-` → `_`), using
+   the host, port and user from `backend/.env`:
+   ```bash
+   dropdb --if-exists -h <host> -p <port> -U <user> <name>
+   ```
+   Never drop a database whose name doesn't contain the job id.
+3. `git worktree remove <worktree>`. Keep the branch: the PR needs it.
 
-Set `stage: "merged"`. If the merge fails, run `git merge --abort` (when a merge
-is in progress), set `stage: "needs-human"` and tell the user why. If removing the
-worktree fails, the job is still merged: tell the user what `git worktree remove`
-printed. Never push.
+Write `"pr": "<PR URL>"` into `job.json` and set `stage: "pr"`. If the push or
+`gh pr create` fails, set `stage: "needs-human"` and tell the user what it
+printed. If removing the worktree or dropping a database fails, the PR still
+stands: tell the user what failed. Never merge, and never push to `main`.
 
 ### Needs human
 
@@ -200,7 +211,7 @@ on its backlog line with the job id.
 
 ## /factory approve <job-id>
 
-The job must be in `needs-human`. Run **Merge** with that job id.
+The job must be in `needs-human`. Run **Merge** with that job id: it opens the PR.
 
 ## /factory rework <job-id> <note>
 
@@ -218,4 +229,4 @@ The job must be in `needs-human`.
 
 Keep the user posted with one short line per transition, for example
 `003-rate-limiting: round 2, security CHANGES, ux/ui/code PASS → resuming builder`.
-When the job ends, say whether it merged or needs a human, and why.
+When the job ends, give the PR URL, or say it needs a human and why.
