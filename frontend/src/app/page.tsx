@@ -168,13 +168,24 @@ export default function Home() {
                   className="mx-auto mt-8 h-auto w-2/3 max-w-[240px] rounded-[1.75rem] ring-4 ring-zinc-800"
                 />
               </article>
-              <Feature
-                icon={Ticket}
-                title="Tickets, RSVPs and registrations"
-                body="Paid ticket tiers, free RSVPs and add-ons, or a registration form for speakers, sponsors and press."
-                className="bg-accent-300 text-gray-900 lg:col-span-2"
-                muted="text-gray-800"
-              />
+              <article className="grid gap-6 rounded-xl bg-accent-300 p-6 text-gray-900 sm:grid-cols-2 sm:p-8 lg:col-span-2">
+                <div>
+                  <Ticket className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+                  <h3 className="mt-3 text-lg font-semibold">Tickets, RSVPs and registrations</h3>
+                  <p className="mt-1 leading-relaxed text-gray-800">
+                    Paid ticket tiers, free RSVPs and add-ons, or a registration form for speakers, sponsors and press.
+                  </p>
+                </div>
+                {/* What a buyer can pick, drawn in markup. */}
+                <ul className="space-y-2 self-end" aria-hidden="true">
+                  {['General admission', 'Free RSVP', 'Speaker registration'].map((label) => (
+                    <li key={label} className="flex items-center justify-between rounded-lg bg-gray-900/90 px-4 py-3 text-sm font-medium text-white">
+                      {label}
+                      <span className="h-2 w-2 rounded-full bg-accent-300" />
+                    </li>
+                  ))}
+                </ul>
+              </article>
               <Feature
                 icon={LayoutDashboard}
                 title="One admin for everything"
