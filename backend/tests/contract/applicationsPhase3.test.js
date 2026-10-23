@@ -260,8 +260,10 @@ describe('Applications contract (spec 011 phase 3)', () => {
       await paidApplication();
       await paidApplication();
       const now = new Date();
-      const first = await applicationDigestService.sendDue(now);
-      expect(first.sent).toBeGreaterThanOrEqual(1);
+      // Scoped to our organization: sending spends the window, so an unscoped
+      // sweep here would claim the digest of every other suite on jump_test.
+      const first = await applicationDigestService.sendDue(now, { organizationId: org.id });
+      expect(first).toEqual({ organizations: 1, sent: 1 });
       const ours = sentEmails.filter((m) => m.subject.includes(`${TAG} Gaming Geek`));
       expect(ours.map((m) => m.to[0]).sort()).toEqual([emails[0], emails[1]].sort());
       expect(ours[0].text).toContain(`${TAG} Expo 2027`);
@@ -274,12 +276,12 @@ describe('Applications contract (spec 011 phase 3)', () => {
 
       // Same hour again: window claimed, nothing sent.
       sentEmails.length = 0;
-      await applicationDigestService.sendDue(new Date(now.getTime() + 60 * 1000));
+      await applicationDigestService.sendDue(new Date(now.getTime() + 60 * 1000), { organizationId: org.id });
       expect(sentEmails.filter((m) => m.subject.includes(`${TAG} Gaming Geek`))).toHaveLength(0);
 
       // A day later with no new submissions: window advances, nothing sent.
       const later = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      await applicationDigestService.sendDue(later);
+      await applicationDigestService.sendDue(later, { organizationId: org.id });
       expect(sentEmails.filter((m) => m.subject.includes(`${TAG} Gaming Geek`))).toHaveLength(0);
       const orgRow = await prisma.organization.findUnique({ where: { id: org.id } });
       expect(orgRow.applicationDigestAt.getTime()).toBe(later.getTime());
@@ -300,7 +302,7 @@ describe('Applications contract (spec 011 phase 3)', () => {
 
       await prisma.organization.update({ where: { id: org.id }, data: { applicationDigestAt: null } });
       await paidApplication();
-      await applicationDigestService.sendDue(new Date());
+      expect(await applicationDigestService.sendDue(new Date(), { organizationId: org.id })).toEqual({ organizations: 0, sent: 0 });
       expect(sentEmails.filter((m) => m.subject.includes(`${TAG} Gaming Geek`))).toHaveLength(0);
       await request(app).patch('/admin/settings/application-digest').set(...auth(adminToken)).send({ enabled: true });
     });
