@@ -23,7 +23,8 @@ env:
 jobs:
   playwright:
     name: playwright (${{ matrix.shard }}/3)
-    runs-on: ubuntu-latest
+    # Playwright cannot install Chromium on ubuntu-latest (now 26.04); pin until it supports it
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
